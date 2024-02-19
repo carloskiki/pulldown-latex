@@ -1,0 +1,14 @@
+[package]
+name = "pulldown-latexmml"
+version = "0.1.0"
+authors = ["Charles Edward Gagnon <charlesedgagnon@gmail.com>"]
+edition = "2021"
+description = "Pull parser to convert LaTeX equations to MathML"
+repository = "https://github.com/Carlosted/pulldown-latexmml"
+readme = "README.md"
+license = "MIT"
+keywords = ["latex", "mathml"]
+categories = ["science"]
+
+[dependencies]
+thiserror = "1.0.56"
