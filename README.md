@@ -2,8 +2,8 @@
 
 A pull parser for `latex` parsing and `mathml` rendering.
 
-This project is inspired `Katex`, `Temml`, `MathJax`, etc.
-This project is in its very early stages of development, and does not "work" yet for most practical use cases.
+This project is inspired `Katex`, `Temml`, `MathJax`, etc. It is in its very early
+stages of development, and does not "work" yet for most practical use cases.
 
 ## Goals
 
