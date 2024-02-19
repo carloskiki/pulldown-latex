@@ -31,9 +31,10 @@ these versions specifically.
 
 ## TODOs
 
-- [ ] Write comprehensive tests for the Lexer.
-- [ ] Have a correct & basic plain TeX implementation
 - [ ] Bring in Either?
+- [ ] Have a correct implementation of all `amsmath` and `latex2e` math primitives.
+- [ ] Write comprehensive tests for the Parser.
+- [ ] Add support for structured math environments.
 
 ## Unsupported Plain-TeX & LaTeX behavior
 
