@@ -13,7 +13,7 @@ _mostly_ is used here to refer to the mathematical commands exposed by these pac
 is out of scope for this crate. Another consequence of this goal is that some plain-TeX commands that
 are deprecated (e.g., `\atop`, `\over`, etc.) are not supported by this crate.
 
-__Closely resembling regular typesetting:__
+__Closely resembling conventional LaTeX:__
 It is a goal for this crate to make efforts in generating aestethic equations. This means that
 the `mathml` output may be tweaked to make it resemble what `pdflatex`, `Katex` or `MathJax` outputs.
 
