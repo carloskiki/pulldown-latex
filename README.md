@@ -28,6 +28,7 @@ these versions specifically.
 - [Unicode-math symbol list](https://mirror.its.dal.ca/ctan/macros/unicodetex/latex/unicode-math/unimath-symbols.pdf)
 - [Unicode-math package page](https://ctan.org/pkg/unicode-math)
 - [Font tester](https://fred-wang.github.io/MathFonts/)
+- [Math Variant Selection](https://milde.users.sourceforge.net/LUCR/Math/math-font-selection.xhtml#math-styles)
 
 ## TODOs
 

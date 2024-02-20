@@ -3,13 +3,14 @@ use crate::parse::Dimension;
 #[derive(Debug, PartialEq)]
 pub enum Event<'a> {
     Content(Content<'a>),
-    Begin(Grouping),
+    BeginGroup,
     EndGroup,
     /// This type of event is used to signal a connection between the previous and next event.
     ///
     /// For example, a `Fraction` event signals that the next event is the denominator of a
     /// fraction where the previous event is the numerator.
     Infix(Infix),
+    Visuals(Visual)
 }
 
 /// Base events that produce `mathml` nodes
@@ -39,21 +40,18 @@ pub enum Identifier<'a> {
     },
 }
 
-/// Grouping events
-#[derive(Debug, PartialEq, Eq)]
-pub enum Grouping {
-    Group, // `mrow`
-    SquareRoot,
-    Padded,
-}
-
 /// Events that affect the previous and next event
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum Infix {
-    Root,
-    Fraction(Option<Dimension>),
     Subscript,
     Superscript,
     Underscript,
     Overscript,
+}
+
+/// Event that affect the following 2 events visually
+#[derive(Debug, PartialEq)]
+pub enum Visual {
+    Root,
+    Fraction(Option<Dimension>, /* TODO: style */),
 }

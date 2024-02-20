@@ -2,7 +2,7 @@
 //! includes every primitive macro and active character.
 
 use crate::{
-    ast::{Content, Event, Grouping, Identifier, Infix},
+    ast::{Content, Event, Identifier, Infix},
     attribute::{tex_to_css_units, DimensionUnit},
     parse::{Parser, Result}, Argument, Token,
 };
@@ -178,7 +178,7 @@ impl<'a> Parser<'a> {
                     Argument::Group(substr) => {
                         self.instruction_stack.push(Instruction::Event(Event::EndGroup));
                         self.instruction_stack.push(Instruction::Substring(substr));
-                        Event::Begin(Grouping::Group)
+                        Event::BeginGroup
                     }
                 }
             }

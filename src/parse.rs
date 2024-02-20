@@ -499,7 +499,7 @@ impl<'a> Parser<'a> {
     /// This function specially treats numbers as `mi`.
     fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
         Ok(match token {
-            '{' => Event::Begin(Grouping::Group),
+            '{' => Event::BeginGroup,
             '}' => Event::EndGroup,
             '_' => Event::Infix(Infix::Subscript),
             '^' => Event::Infix(Infix::Superscript),
