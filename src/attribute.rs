@@ -1,7 +1,7 @@
 use crate::parse::Dimension;
 
 /// Fonts
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Font {
     BoldScript,
     BoldItalic,
@@ -16,13 +16,11 @@ pub enum Font {
     SansSerifBoldItalic,
     SansSerifItalic,
     BoldSansSerif,
+    UpRight,
 }
 
 impl Font {
     /// Map a character to its mathvariant equivalent.
-    ///
-    /// Currently, italic characters are not mapped to themselves, since they will be italicized by
-    /// default in `mi` tags.
     pub fn map_char(self, c: char) -> char {
         char::from_u32(match (self, c) {
             // Bold Script mappings
@@ -110,6 +108,22 @@ impl Font {
             (Font::DoubleStruck, 'a'..='z') => c as u32 + 0x1D4F1,
             (Font::DoubleStruck, '0'..='9') => c as u32 + 0x1D7A8,
 
+            // Italic mappings
+            (Font::Italic, 'A'..='Z') => c as u32 + 0x1D3F3,
+            (Font::Italic, 'a'..='g' | 'i'..='z') => c as u32 + 0x1D3ED,
+            (Font::Italic, 'h') => c as u32 + 0x20A6,
+            (Font::Italic, '\u{0391}'..='\u{03A1}' | '\u{03A3}'..='\u{03A9}') => c as u32 + 0x1D351,
+            (Font::Italic, '\u{03F4}') => c as u32 + 0x1D2FF,
+            (Font::Italic, '\u{2207}') => c as u32 + 0x1B4F4,
+            (Font::Italic, '\u{03B1}'..='\u{03C9}') => c as u32 + 0x1D34B,
+            (Font::Italic, '\u{2202}') => c as u32 + 0x1B513,
+            (Font::Italic, '\u{03F5}') => c as u32 + 0x1D321,
+            (Font::Italic, '\u{03D1}') => c as u32 + 0x1D346,
+            (Font::Italic, '\u{03F0}') => c as u32 + 0x1D328,
+            (Font::Italic, '\u{03D5}') => c as u32 + 0x1D344,
+            (Font::Italic, '\u{03F1}') => c as u32 + 0x1D329,
+            (Font::Italic, '\u{03D6}') => c as u32 + 0x1D345,
+
             // Bold Fraktur mappings
             (Font::BoldFraktur, 'A'..='Z') => c as u32 + 0x1D52B,
             (Font::BoldFraktur, 'a'..='z') => c as u32 + 0x1D525,
@@ -153,12 +167,13 @@ impl Font {
             (Font::BoldSansSerif, '\u{03D6}') => c as u32 + 0x1D3B9,
             (Font::BoldSansSerif, '0'..='9') => c as u32 + 0x1D7BC,
 
-            // Others & Italic
+            // Upright mappings (map to themselves) and unknown mappings
             (_, _) => c as u32,
         })
         .expect("character not in Unicode (developer error)")
     }
 }
+
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DimensionUnit {

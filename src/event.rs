@@ -1,4 +1,4 @@
-use crate::parse::Dimension;
+use crate::{parse::Dimension, attribute::Font};
 
 #[derive(Debug, PartialEq)]
 pub enum Event<'a> {
@@ -17,18 +17,25 @@ pub enum Event<'a> {
 #[derive(Debug, PartialEq)]
 pub enum Content<'a> {
     Text(&'a str),
-    Number(&'a str), // done
-    Identifier(Identifier<'a>),
-    Operator {
-        content: char,
-        stretchy: Option<bool>,
-        moveable_limits: Option<bool>,
-        left_space: Option<Dimension>,
-        right_space: Option<Dimension>,
+    Number{
+        content: &'a str,
+        variant: Option<Font>,
     },
+    Identifier(Identifier<'a>),
+    Operator(Operator),
     StringLiteral(&'a str),
     Error(String),
     Space,
+}
+
+#[derive(Debug, Default, PartialEq)]
+pub struct Operator {
+    pub content: char,
+    pub stretchy: Option<bool>,
+    pub moveable_limits: Option<bool>,
+    pub left_space: Option<Dimension>,
+    pub right_space: Option<Dimension>,
+    pub size: Option<Dimension>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -36,7 +43,7 @@ pub enum Identifier<'a> {
     Str(&'a str),
     Char{ 
         content: char,
-        is_normal: bool,
+        variant: Option<Font>,
     },
 }
 

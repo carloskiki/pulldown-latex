@@ -134,12 +134,15 @@ impl<'a> MacroContext<'a> {
                             ));
                         };
 
-                        replacement_tokens.last_mut().map(|t| match t {
-                            ReplacementToken::String(s) => {
-                                *s = &s[..s.len() - 1];
+                        if let Some(t) = replacement_tokens.last_mut() {
+                            match t {
+                                ReplacementToken::String(s) => {
+                                    *s = &s[..s.len() - 1];
+                                }
+                                _ => unreachable!(),
                             }
-                            _ => unreachable!(),
-                        });
+                        }
+                        
                         if replacement_tokens
                             .last()
                             .is_some_and(|t| matches!(t, ReplacementToken::String("")))
@@ -219,7 +222,9 @@ enum MacroContextError {
     BracesInParamText,
     #[error("macro definition found parameter #{0} but expected #{1}")]
     IncorrectMacroParams(u8, u8),
-    #[error("macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]")]
+    #[error(
+        "macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]"
+    )]
     IncorrectReplacementParams(u8, u8),
     #[error("macro definition contains a standalone '#'")]
     StandaloneHashSign,
@@ -305,7 +310,7 @@ mod tests {
                 ReplacementToken::Parameter(1),
                 ReplacementToken::String(r"}"),
                 ReplacementToken::Parameter(1),
-                ReplacementToken::String(r" c#"), 
+                ReplacementToken::String(r" c#"),
                 ReplacementToken::String(r"\"),
                 ReplacementToken::String("x "),
                 ReplacementToken::Parameter(2),

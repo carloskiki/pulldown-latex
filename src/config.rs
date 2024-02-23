@@ -1,35 +1,82 @@
 use crate::DisplayMode;
 
+/// Configuration for the parser.
+///
+///
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct ParserConfig {
-    /// If [`DisplayMode::Block`], the math will be rendered in display/block mode,
-    /// which will put the math in display style (so \int and \sum are large, for example),
-    /// and will center the math on the page on its own line.
-    /// If false the math will be rendered in inline mode. (default: [`DisplayMode::Inline`])
+    /// See [`DisplayMode`].
     pub display_mode: DisplayMode,
-    /// If true, Temml will include an <annotation> element that contains the input TeX string. (default: false)
+    /// If true, the `mathml` generated includes an `<annotation>` element that contains the input
+    /// TeX string.
     pub annotate: bool,
     /// A RGB color. This option determines the color that unsupported commands and invalid LaTeX are rendered in.
-    /// (default: (178, 34, 34))
     pub error_color: (u8, u8, u8),
-    /// If true, Temml will write a namespace into the <math> element.
+    /// If true, a namespace will be written into the <math> element.
     /// That namespace is xmlns="http://www.w3.org/1998/Math/MathML".
     /// Such a namespace is unnecessary for modern browsers but can be helpful for other user agents,
-    /// such as Microsoft Word. (default: false)
+    /// such as Microsoft Word.
     pub xml: bool,
-    /// If false (similar to MathJax), allow features that make writing LaTeX convenient
-    /// but are not actually supported by LaTeX. If true (LaTeX faithfulness mode), throws
-    /// an error for any such transgressions. (default: false)
-    pub strict: bool,
+    /// See [`MathStyle`].
+    pub math_style: MathStyle,
 }
 
 impl Default for ParserConfig {
+    /// # Default Value
+    /// ```rust
+    /// # use pulldown_latexmml::{config::ParserConfig, DisplayMode};
+    /// const DEFAULT: ParserConfig = ParserConfig {
+    ///     display_mode: DisplayMode::Inline,
+    ///     annotate: false,
+    ///     error_color: (178, 34, 34),
+    ///     xml: false,
+    ///     math_style: MathStyle::TeX,
+    /// };
+    /// assert_eq!(ParserConfig::default(), DEFAULT);
+    /// ```
     fn default() -> Self {
         Self {
             display_mode: DisplayMode::Inline,
             annotate: false,
             error_color: (178, 34, 34),
             xml: false,
-            strict: false,
+            math_style: MathStyle::TeX,
         }
     }
+}
+
+/// The way in which math variables are displayed.
+///
+/// This is used to determine how single-letter variables are displayed. This affects lowercase and
+/// uppercase latin letters (__a-z__ and __A-Z__), and the uppercase and lowercase greek letters
+/// (__α-ω__ and __Α-Ω__). Here is a table of the different styles:
+///
+/// ## Math Styles
+/// 
+/// | Style     | Low. Latin | Upp. Latin | Low. Greek | Upp. Greek |
+/// | -----     | ---------- | ---------- | ---------- | ---------- |
+/// | `TeX`     | _italic_   | _italic_   | _italic_   | upright    |
+/// | `ISO`     | _italic_   | _italic_   | _italic_   | _italic_    |
+/// | `French`  | _italic_   | upright    | upright    | upright    |
+/// | `Upright` | upright    | upright    | upright    | upright    |
+/// 
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
+pub enum MathStyle {
+    /// The default style used in TeX.
+    /// 
+    /// Makes everything italic except for uppercase greek letters.
+    /// 
+    /// __This is the default value.__
+    #[default]
+    TeX,
+    /// The style used in ISO 80000-2:2019.
+    ///
+    /// Makes everything italic.
+    ISO,
+    /// The style used in French typography.
+    ///
+    /// Makes everything upright except for lowercase latin letters.
+    French,
+    /// Makes everything upright.
+    Upright,
 }
