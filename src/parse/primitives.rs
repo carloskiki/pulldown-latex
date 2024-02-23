@@ -335,7 +335,6 @@ impl<'a> Parser<'a> {
             ///////////////////
             // Big Operators //
             ///////////////////
-            //∑ \sum	∏ \prod	⨂ \bigotimes	⋁ \bigvee ∫ \int	∐ \coprod	⨁ \bigoplus	⋀ \bigwedge ∬ \iint	∫ \intop	⨀ \bigodot	⋂ \bigcap ∭ \iiint	∫ \smallint	⨄ \biguplus	⋃ \bigcup ⨌ \iiiint	⨙ \intcap	⨚ \intcup	⨆ \bigsqcup ∮ \oint	∲ \varointclockwise	∱ \intclockwise	⨅ \bigsqcap ∯ \oiint	⨕ \pointint	⨒ \rppolint	⨓ \scpolint ∰ \oiiint	⨗ \intlarhk	⨖ \sqint	⨘ \intx ⨍ \intbar	⨎ \intBar	⨏ \fint	⨉ \bigtimes
             "sum" => op!('∑'),
             "prod" => op!('∏'),
             "coprod" => op!('∐'),
