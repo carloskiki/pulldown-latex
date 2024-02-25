@@ -3,7 +3,7 @@
 
 use crate::{
     attribute::{tex_to_css_units, DimensionUnit, Font},
-    event::{Content, Event, Identifier, Operator},
+    event::{Content, Event, Identifier, Infix, Operator},
     parse::{lex, GroupNesting, GroupType, ParseError, Parser, Result},
     Argument, Token,
 };
@@ -37,7 +37,7 @@ macro_rules! op {
     ($content:expr, {$($field:ident: $value:expr),*}) => {
         Event::Content(Content::Operator(Operator {
             content: $content,
-            $($field: $value),*,
+            $($field: $value,)*
             ..Default::default()
         }))
     };
@@ -61,9 +61,7 @@ macro_rules! sized_delim {
 /// Override the `font_state` to the given font variant.
 macro_rules! font_override {
     ($font:ident, $self_:ident) => {{
-        $self_.group_stack.last_mut().map(|group| {
-            group.font_state = Some(Font::$font);
-        });
+        $self_.current_group_mut().font_state = Some(Font::$font);
         $self_.next_unwrap()?
     }};
 }
@@ -108,7 +106,54 @@ macro_rules! font_group {
     }};
 }
 
+/// Accent commands. parse the argument, and overset the accent.
+macro_rules! accent {
+    ($accent:literal, $self_:ident) => {{
+        accent!($accent, $self_, {})
+    }};
+    ($accent:literal, $self_:ident, $opts:tt) => {{
+        let argument = lex::argument($self_.current_string()?)?;
+        $self_.instruction_stack.extend([
+            Instruction::Event(op!($accent, $opts)),
+            Instruction::Event(Event::Infix(Infix::Overscript)),
+        ]);
+        match argument {
+            Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
+            Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
+            Argument::Group(substr) => {
+                $self_.instruction_stack
+                    .push(Instruction::Event(Event::EndGroup));
+                $self_.instruction_stack.push(Instruction::Substring {
+                    content: substr,
+                    pop_internal_group: false,
+                });
+                Event::BeginGroup
+            }
+        }
+    }};
+}
+
 impl<'a> Parser<'a> {
+    /// Handle a character token, returning a corresponding event.
+    ///
+    /// This function specially treats numbers as `mi`.
+    ///
+    /// ## Panics
+    /// - This function will panic if the `\` character is given
+    pub fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
+        Ok(match token {
+            '\\' => panic!("this function does not handle control sequences"),
+            '{' => Event::BeginGroup,
+            '}' => Event::EndGroup,
+            '_' => Event::Infix(Infix::Subscript),
+            '^' => Event::Infix(Infix::Superscript),
+            '\'' => op!('′'),
+
+            // TODO: handle every character correctly.
+            _ => todo!(),
+        })
+    }
+
     /// Handle a control sequence, returning a corresponding event.
     ///
     /// 1. If the control sequence is user defined, apply the corresponding definition.
@@ -260,27 +305,9 @@ impl<'a> Parser<'a> {
             "And" => op!('&'),
 
             "backepsilon" => ident!('϶'),
-            "backprime" => ident!('‵'),
             "backsim" => op!('∽'),
             "backsimeq" => op!('⋍'),
             "backslash" => ident!('\\'),
-            "bar" => {
-                let argument = lex::argument(self.current_string()?)?;
-                self.instruction_stack.push(Instruction::Event(op!('‾')));
-                match argument {
-                    Argument::Token(Token::Character(c)) => self.handle_char_token(c)?,
-                    Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs)?,
-                    Argument::Group(substr) => {
-                        self.instruction_stack
-                            .push(Instruction::Event(Event::EndGroup));
-                        self.instruction_stack.push(Instruction::Substring {
-                            content: substr,
-                            pop_internal_group: false,
-                        });
-                        Event::BeginGroup
-                    }
-                }
-            }
             "barwedge" => op!('⌅'),
             "because" => op!('∵'),
             "between" => op!('≬'),
@@ -371,6 +398,26 @@ impl<'a> Parser<'a> {
             "bigsqcup" => op!('⨆'),
             "bigsqcap" => op!('⨅'),
             "bigtimes" => op!('⨉'),
+
+            /////////////
+            // Accents //
+            /////////////
+            "acute" => accent!('´', self),
+            "bar" => accent!('‾', self),
+            "breve" => accent!('˘', self),
+            "check" => accent!('ˇ', self, {stretchy: Some(false)}),
+            "dot" => accent!('˙', self),
+            "ddot" => accent!('¨', self),
+            "grave" => accent!('`', self),
+            "hat" => accent!('^', self, {stretchy: Some(false)}),
+            "tilde" => accent!('~', self, {stretchy: Some(false)}),
+            "vec" => accent!('→', self, {stretchy: Some(false)}),
+            // Primes
+            "prime" => op!('′'),
+            "dprime" => op!('″'),
+            "trprime" => op!('‴'),
+            "backprime" => op!('‵'),
+            
             _ => todo!(),
         })
     }

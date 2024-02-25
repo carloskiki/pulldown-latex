@@ -1,11 +1,12 @@
 mod lex;
 mod primitives;
+mod operator_table;
 
 use thiserror::Error;
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{Content, Event, Infix},
+    event::{Content, Event},
 };
 
 pub type Dimension = (f32, DimensionUnit);
@@ -198,24 +199,6 @@ impl<'a> Parser<'a> {
                 self.handle_char_token(c)
             }
         }
-    }
-
-    /// Handle a character token, returning a corresponding event.
-    ///
-    /// This function specially treats numbers as `mi`.
-    ///
-    /// ## Panics
-    /// - This function will panic if the `\` character is given
-    fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
-        Ok(match token {
-            '\\' => panic!("this function does not handle control sequences"),
-            '{' => Event::BeginGroup,
-            '}' => Event::EndGroup,
-            '_' => Event::Infix(Infix::Subscript),
-            '^' => Event::Infix(Infix::Superscript),
-            // TODO: handle every character correctly.
-            _ => todo!(),
-        })
     }
 
     /// Return the next event by unwraping it.
