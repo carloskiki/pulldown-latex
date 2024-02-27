@@ -2,23 +2,26 @@
 //! includes every primitive macro and active character.
 
 use crate::{
-    attribute::{tex_to_css_units, DimensionUnit, Font},
+    attribute::{DimensionUnit, Font},
     event::{Content, Event, Identifier, Infix, Operator},
-    parse::{lex, GroupNesting, GroupType, ParseError, Parser, Result},
+    parse::{lex, GroupNesting, GroupType, Parser, Result},
     Argument, Token,
 };
 
-use super::Instruction;
+use super::{
+    operator_table::{is_delimiter, is_operator},
+    Instruction, ParseError,
+};
 
 // Return a `Content::Identifier` event with the given content and font variant.
 macro_rules! ident {
-    ($content:literal) => {
+    ($content:expr) => {
         Event::Content(Content::Identifier(Identifier::Char {
             content: $content,
             variant: None,
         }))
     };
-    ($content:literal, $self_:ident) => {
+    ($content:expr, $self_:ident) => {
         Event::Content(Content::Identifier(Identifier::Char {
             content: $content,
             variant: $self_.current_group().font_state,
@@ -121,7 +124,33 @@ macro_rules! accent {
             Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
             Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
             Argument::Group(substr) => {
-                $self_.instruction_stack
+                $self_
+                    .instruction_stack
+                    .push(Instruction::Event(Event::EndGroup));
+                $self_.instruction_stack.push(Instruction::Substring {
+                    content: substr,
+                    pop_internal_group: false,
+                });
+                Event::BeginGroup
+            }
+        }
+    }};
+}
+
+/// Underscript commands. parse the argument, and underset the accent.
+macro_rules! underscript {
+    ($accent:literal, $self_:ident) => {{
+        let argument = lex::argument($self_.current_string()?)?;
+        $self_.instruction_stack.extend([
+            Instruction::Event(op!($accent)),
+            Instruction::Event(Event::Infix(Infix::Underscript)),
+        ]);
+        match argument {
+            Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
+            Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
+            Argument::Group(substr) => {
+                $self_
+                    .instruction_stack
                     .push(Instruction::Event(Event::EndGroup));
                 $self_.instruction_stack.push(Instruction::Substring {
                     content: substr,
@@ -141,16 +170,48 @@ impl<'a> Parser<'a> {
     /// ## Panics
     /// - This function will panic if the `\` character is given
     pub fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
+        // TODO: bracket table
         Ok(match token {
             '\\' => panic!("this function does not handle control sequences"),
-            '{' => Event::BeginGroup,
-            '}' => Event::EndGroup,
+            '%' => {
+                let content = self.current_string()?;
+                if let Some((_, rest)) = content.split_once('\n') {
+                    *content = rest;
+                } else {
+                    *content = "";
+                };
+                return self.next_unwrap();
+            }
+            '{' => {
+                self.group_stack.push(GroupNesting {
+                    font_state: self.current_group().font_state,
+                    group_type: GroupType::Brace,
+                });
+                Event::BeginGroup
+            },
+            '}' => {
+                let group = self.group_stack.pop();
+                assert!(matches!(
+                    group,
+                    Some(GroupNesting {
+                        group_type: GroupType::Brace,
+                        ..
+                    })
+                ));
+                Event::EndGroup
+            },
             '_' => Event::Infix(Infix::Subscript),
             '^' => Event::Infix(Infix::Superscript),
+            '$' => return Err(ParseError::MathShift),
+            '#' => return Err(ParseError::HashSign),
+            '&' => return Err(ParseError::AlignmentChar),
+            // TODO: check for double and triple primes
             '\'' => op!('′'),
 
+            c if is_delimiter(c) => op!(c, {stretchy: Some(false)}),
+            c if is_operator(c) => op!(c),
             // TODO: handle every character correctly.
-            _ => todo!(),
+            c => ident!(c),
         })
     }
 
@@ -160,7 +221,6 @@ impl<'a> Parser<'a> {
     /// 2. If the event is a primitive, apply the corresponding primitive.
     /// 3. If the control sequence is not defined, return an error.
     pub fn handle_primitive(&mut self, control_sequence: &'a str) -> Result<Event<'a>> {
-        dbg!(control_sequence);
         Ok(match control_sequence {
             "#" | "%" | "&" | "$" | "_" => Event::Content(Content::Identifier(Identifier::Char {
                 content: control_sequence.chars().next().unwrap(),
@@ -176,7 +236,6 @@ impl<'a> Parser<'a> {
             /////////////////////////
             // Non-Latin Alphabets //
             /////////////////////////
-
             // Lowercase Greek letters
             "alpha" => ident!('α', self),
             "beta" => ident!('β', self),
@@ -236,6 +295,21 @@ impl<'a> Parser<'a> {
             "beth" => ident!('ℶ'),
             "gimel" => ident!('ℷ'),
             "daleth" => ident!('ℸ'),
+            // Other symbols
+            "eth" => ident!('ð'),
+            "ell" => ident!('ℓ'),
+            "nabla" => ident!('∇'),
+            "partial" => ident!('⅁'),
+            "Finv" => ident!('Ⅎ'),
+            "Game" => ident!('ℷ'),
+            "hbar" | "hslash" => ident!('ℏ'),
+            "imath" => ident!('ı'),
+            "jmath" => ident!('ȷ'),
+            "Im" => ident!('ℑ'),
+            "Re" => ident!('ℜ'),
+            "wp" => ident!('℘'),
+            "Bbbk" => ident!('𝕜'),
+            "Angstrom" => ident!('Å'),
 
             ////////////////////////
             // Font state changes //
@@ -403,7 +477,8 @@ impl<'a> Parser<'a> {
             // Accents //
             /////////////
             "acute" => accent!('´', self),
-            "bar" => accent!('‾', self),
+            "bar" | "overline" => accent!('‾', self),
+            "underbar" | "underline" => underscript!('_', self),
             "breve" => accent!('˘', self),
             "check" => accent!('ˇ', self, {stretchy: Some(false)}),
             "dot" => accent!('˙', self),
@@ -412,12 +487,41 @@ impl<'a> Parser<'a> {
             "hat" => accent!('^', self, {stretchy: Some(false)}),
             "tilde" => accent!('~', self, {stretchy: Some(false)}),
             "vec" => accent!('→', self, {stretchy: Some(false)}),
+            "mathring" => accent!('˚', self),
+
+            // Arrows
+            "overleftarrow" => accent!('←', self),
+            "underleftarrow" => underscript!('←', self),
+            "overrightarrow" => accent!('→', self),
+            "Overrightarrow" => accent!('⇒', self),
+            "underrightarrow" => underscript!('→', self),
+            "overleftrightarrow" => accent!('↔', self),
+            "underleftrightarrow" => underscript!('↔', self),
+            "overleftharpoon" => accent!('↼', self),
+            "overrightharpoon" => accent!('⇀', self),
+
+            // Wide accents
+            "widecheck" => accent!('ˇ', self),
+            "widehat" => accent!('^', self),
+            "widetilde" => accent!('~', self),
+            "wideparen" | "overparen" => accent!('⏜', self),
+
+            // Groups
+            "overgroup" => accent!('⏠', self),
+            "undergroup" => underscript!('⏡', self),
+            "overbrace" => accent!('⏞', self),
+            "underbrace" => underscript!('⏟', self),
+            "underparen" => underscript!('⏝', self),
+
             // Primes
             "prime" => op!('′'),
             "dprime" => op!('″'),
             "trprime" => op!('‴'),
+            "qprime" => op!('⁗'),
             "backprime" => op!('‵'),
-            
+            "backdprime" => op!('‶'),
+            "backtrprime" => op!('‷'),
+
             _ => todo!(),
         })
     }

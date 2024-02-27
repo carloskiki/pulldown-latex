@@ -1,6 +1,6 @@
 mod lex;
-mod primitives;
 mod operator_table;
+mod primitives;
 
 use thiserror::Error;
 
@@ -42,6 +42,7 @@ type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
 //
 // Either way, we will be fine so lets not worry about it for now.
 
+#[derive(Debug)]
 pub enum Instruction<'a> {
     /// Push the event
     Event(Event<'a>),
@@ -52,6 +53,7 @@ pub enum Instruction<'a> {
     },
 }
 
+#[derive(Debug)]
 pub enum GroupType {
     /// The group was initiated by a command which required a subgroup, but should not be apparent
     /// in the rendered output.
@@ -68,6 +70,7 @@ pub enum GroupType {
     BeginGroup,
 }
 
+#[derive(Debug)]
 pub struct GroupNesting {
     /// The font state of the group.
     font_state: Option<Font>,
@@ -75,6 +78,7 @@ pub struct GroupNesting {
     group_type: GroupType,
 }
 
+#[derive(Debug)]
 pub struct Parser<'a> {
     initial_byte_ptr: *const u8,
     /// The next thing that should be parsed or outputed.
@@ -97,6 +101,14 @@ pub type Result<T> = std::result::Result<T, ParseError>;
 pub enum ParseError {
     #[error("invalid character found in input: {0}")]
     InvalidChar(char),
+    #[error(
+        "unexpected math `$` (math shift) character - this character is currently unsupported."
+    )]
+    MathShift,
+    #[error("unexpected hash sign `#` character - this character can only be used in macro definitions.")]
+    HashSign,
+    #[error("unexpected alignment character `&` - this character can only be used in tabular environments (not yet supported).")]
+    AlignmentChar,
     #[error("unexpected end of input")]
     EndOfInput,
 }
@@ -164,49 +176,13 @@ impl<'a> Parser<'a> {
             .expect("we should always be inside of a group")
     }
 
-    /// Parse the next event in the input.
-    ///
-    /// This is different from `handle_token` in the sense that it parses numbers completely.
-    ///
-    /// ### Panic
-    /// This function must be called with a non-empty input.
-    fn next_event(&mut self, input: &mut &'a str) -> Result<Event<'a>> {
-        let mut chars = input.chars();
-        let next_char = chars.next().expect("the input should not be empty");
-
-        match next_char {
-            '.' | '0'..='9' => {
-                let len = input
-                    .chars()
-                    .skip(1)
-                    .take_while(|&c| c.is_ascii_digit() || c == '.')
-                    .count()
-                    + 1;
-                let (number, rest) = input.split_at(len);
-                *input = rest;
-                Ok(Event::Content(Content::Number {
-                    content: number,
-                    variant: self.group_stack.last().map(|g| g.font_state).flatten(),
-                }))
-            }
-            '\\' => {
-                *input = &input[1..];
-                let cs = lex::rhs_control_sequence(input);
-                self.handle_primitive(cs)
-            }
-            c => {
-                *input = chars.as_str();
-                self.handle_char_token(c)
-            }
-        }
-    }
-
     /// Return the next event by unwraping it.
     ///
     /// This is an internal function that only works if the `Parser` is currently parsing a string.
     /// If it is so, then we are guaranteed to at least return one event next, the `EndGroup` event.
     fn next_unwrap(&mut self) -> Result<Event<'a>> {
-        self.next().expect("we should always have at least one event")
+        self.next()
+            .expect("we should always have at least one event")
     }
 
     /// Return the byte index of the current position in the input.
@@ -244,23 +220,40 @@ impl<'a> Iterator for Parser<'a> {
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::Substring {
-                content: mut substr,
-                pop_internal_group,
-            }) => {
-                if substr.is_empty() {
-                    if *pop_internal_group {
-                        let group = self.group_stack.pop();
-                        assert!(
-                            group.is_some_and(|g| matches!(g.group_type, GroupType::Internal)),
-                            "(internal error) `internal` group should be at the top of the stack"
-                        );
-                    }
+            Some(Instruction::Substring { content, .. }) => {
+                if content.is_empty() {
                     self.instruction_stack.pop();
-                    self.next()
-                } else {
-                    Some(self.next_event(&mut substr))
+                    return self.next();
                 }
+                let mut chars = content.chars();
+                let next_char = chars.next().expect("the content is not empty");
+
+                Some(match next_char {
+                    // TODO: Why are numbers handled here?
+                    '.' | '0'..='9' => {
+                        let len = content
+                            .chars()
+                            .skip(1)
+                            .take_while(|&c| c.is_ascii_digit() || c == '.')
+                            .count()
+                            + 1;
+                        let (number, rest) = content.split_at(len);
+                        *content = rest;
+                        Ok(Event::Content(Content::Number {
+                            content: number,
+                            variant: self.group_stack.last().map(|g| g.font_state).flatten(),
+                        }))
+                    }
+                    '\\' => {
+                        *content = &content[1..];
+                        let cs = lex::rhs_control_sequence(content);
+                        self.handle_primitive(cs)
+                    }
+                    c => {
+                        *content = chars.as_str();
+                        self.handle_char_token(c)
+                    }
+                })
             }
             None => None,
         }
@@ -269,7 +262,7 @@ impl<'a> Iterator for Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::Identifier;
+    use crate::event::{Identifier, Operator, Infix};
 
     use super::*;
 
@@ -284,6 +277,8 @@ mod tests {
         let parser = Parser::new("\\bar{y}");
         let events = parser.collect::<Result<Vec<_>>>().unwrap();
 
+        println!("{events:?}");
+
         assert_eq!(
             events,
             vec![
@@ -294,13 +289,15 @@ mod tests {
                     variant: None,
                 })),
                 Event::EndGroup,
-                Event::Content(Content::Operator {
+                Event::Infix(Infix::Overscript),
+                Event::Content(Content::Operator(Operator {
                     content: '‾',
                     stretchy: None,
                     moveable_limits: None,
                     left_space: None,
-                    right_space: None
-                }),
+                    right_space: None,
+                    size: None,
+                })),
                 Event::EndGroup
             ]
         );

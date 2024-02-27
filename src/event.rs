@@ -1,4 +1,4 @@
-use crate::{parse::Dimension, attribute::Font};
+use crate::{attribute::Font, parse::Dimension};
 
 #[derive(Debug, PartialEq)]
 pub enum Event<'a> {
@@ -10,14 +10,14 @@ pub enum Event<'a> {
     /// For example, a `Fraction` event signals that the next event is the denominator of a
     /// fraction where the previous event is the numerator.
     Infix(Infix),
-    Visuals(Visual)
+    Visuals(Visual),
 }
 
 /// Base events that produce `mathml` nodes
 #[derive(Debug, PartialEq)]
 pub enum Content<'a> {
     Text(&'a str),
-    Number{
+    Number {
         content: &'a str,
         variant: Option<Font>,
     },
@@ -41,7 +41,7 @@ pub struct Operator {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Identifier<'a> {
     Str(&'a str),
-    Char{ 
+    Char {
         content: char,
         variant: Option<Font>,
     },
@@ -60,5 +60,5 @@ pub enum Infix {
 #[derive(Debug, PartialEq)]
 pub enum Visual {
     Root,
-    Fraction(Option<Dimension>, /* TODO: style */),
+    Fraction(Option<Dimension> /* TODO: style */),
 }

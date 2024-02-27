@@ -52,20 +52,20 @@ impl Default for ParserConfig {
 /// (__α-ω__ and __Α-Ω__). Here is a table of the different styles:
 ///
 /// ## Math Styles
-/// 
+///
 /// | Style     | Low. Latin | Upp. Latin | Low. Greek | Upp. Greek |
 /// | -----     | ---------- | ---------- | ---------- | ---------- |
 /// | `TeX`     | _italic_   | _italic_   | _italic_   | upright    |
 /// | `ISO`     | _italic_   | _italic_   | _italic_   | _italic_    |
 /// | `French`  | _italic_   | upright    | upright    | upright    |
 /// | `Upright` | upright    | upright    | upright    | upright    |
-/// 
+///
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum MathStyle {
     /// The default style used in TeX.
-    /// 
+    ///
     /// Makes everything italic except for uppercase greek letters.
-    /// 
+    ///
     /// __This is the default value.__
     #[default]
     TeX,

@@ -2,13 +2,14 @@ use std::mem::MaybeUninit;
 
 use crate::{attribute::DimensionUnit, Argument, Token};
 
-use super::{Dimension, Glue, ParseError, Result};
+use super::{operator_table::is_delimiter, Dimension, Glue, ParseError, Result};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
 /// In this case, a definition is any of `def`, `edef`, `gdef`, or `xdef`.
 ///
 /// Returns the control sequence, the parameter text, and the replacement text.
+// TODO: make sure that the parameter text includes none of: `}`, or `%`
 pub fn definition<'a>(input: &mut &'a str) -> Result<(&'a str, &'a str, &'a str)> {
     let control_sequence = control_sequence(input)?;
     let (parameter_text, rest) = input.split_once('{').ok_or(ParseError::EndOfInput)?;
@@ -20,6 +21,7 @@ pub fn definition<'a>(input: &mut &'a str) -> Result<(&'a str, &'a str, &'a str)
 
 pub fn argument<'a>(input: &mut &'a str) -> Result<Argument<'a>> {
     *input = input.trim_start();
+    dbg!(&input);
 
     if input.starts_with('{') {
         *input = &input[1..];
@@ -34,6 +36,9 @@ pub fn argument<'a>(input: &mut &'a str) -> Result<Argument<'a>> {
 ///
 /// The output is the content within the group without the surrounding `{}`. This content is
 /// guaranteed to be balanced.
+// TODO: Handle `%` inside of the group, i.e., ignore everything after `%` until the end of the
+// group.
+// TODO: handle `%` with `Vec<&str>` by eagerly consuming the rest of the input until newline.
 pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
     let mut escaped = false;
     // In this case `Err` is the desired result.
@@ -71,58 +76,60 @@ pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
 /// Converts a control sequence or character into its corresponding delimiter unicode
 /// character.
 ///
-/// Current delimiters supported are listed in TeXBook p. 146.
+/// Current delimiters supported are listed in TeXBook p. 146, and on https://temml.org/docs/en/supported ("delimiter" section).
 pub fn delimiter(input: &mut &str) -> Result<char> {
+    // TODO: make use of bracket table for character tokens
     *input = input.trim_start();
     let maybe_delim = token(input)?;
     match maybe_delim {
-        Token::ControlSequence("lparen") | Token::Character('(') => Ok('('),
-        Token::ControlSequence("rparen") | Token::Character(')') => Ok(')'),
-        Token::ControlSequence("llparenthesis") | Token::Character('⦇') => Ok('⦇'),
-        Token::ControlSequence("rrparenthesis") | Token::Character('⦈') => Ok('⦈'),
-        Token::ControlSequence("lgroup") | Token::Character('⟮') => Ok('⟮'),
-        Token::ControlSequence("rgroup") | Token::Character('⟯') => Ok('⟯'),
+        Token::ControlSequence("lparen") => Ok('('),
+        Token::ControlSequence("rparen") => Ok(')'),
+        Token::ControlSequence("llparenthesis") => Ok('⦇'),
+        Token::ControlSequence("rrparenthesis") => Ok('⦈'),
+        Token::ControlSequence("lgroup") => Ok('⟮'),
+        Token::ControlSequence("rgroup") => Ok('⟯'),
 
-        Token::ControlSequence("lbrack") | Token::Character('[') => Ok('['),
-        Token::ControlSequence("rbrack") | Token::Character(']') => Ok(']'),
-        Token::ControlSequence("lBrack") | Token::Character('⟦') => Ok('⟦'),
-        Token::ControlSequence("rBrack") | Token::Character('⟧') => Ok('⟧'),
+        Token::ControlSequence("lbrack") => Ok('['),
+        Token::ControlSequence("rbrack") => Ok(']'),
+        Token::ControlSequence("lBrack") => Ok('⟦'),
+        Token::ControlSequence("rBrack") => Ok('⟧'),
 
         Token::ControlSequence("{") | Token::ControlSequence("lbrace") => Ok('{'),
         Token::ControlSequence("}") | Token::ControlSequence("rbrace") => Ok('}'),
-        Token::ControlSequence("lBrace") | Token::Character('⦃') => Ok('⦃'),
-        Token::ControlSequence("rBrace") | Token::Character('⦄') => Ok('⦄'),
+        Token::ControlSequence("lBrace") => Ok('⦃'),
+        Token::ControlSequence("rBrace") => Ok('⦄'),
 
-        Token::ControlSequence("langle") | Token::Character('⟨') => Ok('⟨'),
-        Token::ControlSequence("rangle") | Token::Character('⟩') => Ok('⟩'),
-        Token::ControlSequence("lAngle") | Token::Character('⟪') => Ok('⟪'),
-        Token::ControlSequence("rAngle") | Token::Character('⟫') => Ok('⟫'),
-        Token::ControlSequence("llangle") | Token::Character('⦉') => Ok('⦉'),
-        Token::ControlSequence("rrangle") | Token::Character('⦊') => Ok('⦊'),
+        Token::ControlSequence("langle") => Ok('⟨'),
+        Token::ControlSequence("rangle") => Ok('⟩'),
+        Token::ControlSequence("lAngle") => Ok('⟪'),
+        Token::ControlSequence("rAngle") => Ok('⟫'),
+        Token::ControlSequence("llangle") => Ok('⦉'),
+        Token::ControlSequence("rrangle") => Ok('⦊'),
 
-        Token::ControlSequence("lfloor") | Token::Character('⌊') => Ok('⌊'),
-        Token::ControlSequence("rfloor") | Token::Character('⌋') => Ok('⌋'),
-        Token::ControlSequence("lceil") | Token::Character('⌈') => Ok('⌈'),
-        Token::ControlSequence("rceil") | Token::Character('⌉') => Ok('⌉'),
-        Token::ControlSequence("ulcorner") | Token::Character('┌') => Ok('┌'),
-        Token::ControlSequence("urcorner") | Token::Character('┐') => Ok('┐'),
-        Token::ControlSequence("llcorner") | Token::Character('└') => Ok('└'),
-        Token::ControlSequence("lrcorner") | Token::Character('┘') => Ok('┘'),
+        Token::ControlSequence("lfloor") => Ok('⌊'),
+        Token::ControlSequence("rfloor") => Ok('⌋'),
+        Token::ControlSequence("lceil") => Ok('⌈'),
+        Token::ControlSequence("rceil") => Ok('⌉'),
+        Token::ControlSequence("ulcorner") => Ok('┌'),
+        Token::ControlSequence("urcorner") => Ok('┐'),
+        Token::ControlSequence("llcorner") => Ok('└'),
+        Token::ControlSequence("lrcorner") => Ok('┘'),
 
-        Token::ControlSequence("lmoustache") | Token::Character('⎰') => Ok('⎰'),
-        Token::ControlSequence("rmoustache") | Token::Character('⎱') => Ok('⎱'),
+        Token::ControlSequence("lmoustache") => Ok('⎰'),
+        Token::ControlSequence("rmoustache") => Ok('⎱'),
 
         Token::Character('/') => Ok('/'),
         Token::ControlSequence("backslash") => Ok('\\'),
 
-        Token::Character('|') | Token::ControlSequence("vert") => Ok('|'),
+        Token::ControlSequence("vert") => Ok('|'),
         Token::ControlSequence("|") | Token::ControlSequence("Vert") => Ok('‖'),
-        Token::ControlSequence("uparrow") | Token::Character('↑') => Ok('↑'),
-        Token::ControlSequence("Uparrow") | Token::Character('⇑') => Ok('⇑'),
-        Token::ControlSequence("downarrow") | Token::Character('↓') => Ok('↓'),
-        Token::ControlSequence("Downarrow") | Token::Character('⇓') => Ok('⇓'),
-        Token::ControlSequence("updownarrow") | Token::Character('↕') => Ok('↕'),
-        Token::ControlSequence("Updownarrow") | Token::Character('⇕') => Ok('⇕'),
+        Token::ControlSequence("uparrow") => Ok('↑'),
+        Token::ControlSequence("Uparrow") => Ok('⇑'),
+        Token::ControlSequence("downarrow") => Ok('↓'),
+        Token::ControlSequence("Downarrow") => Ok('⇓'),
+        Token::ControlSequence("updownarrow") => Ok('↕'),
+        Token::ControlSequence("Updownarrow") => Ok('⇕'),
+        Token::Character(c) if is_delimiter(c) => Ok(c),
         Token::Character(c) => Err(ParseError::InvalidChar(c)),
         Token::ControlSequence(cs) => Err(cs
             .chars()
@@ -412,7 +419,7 @@ pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
         Ok(cs) => Ok(Token::ControlSequence(cs)),
         Err(e) => match e {
             ParseError::InvalidChar(c) => Ok(Token::Character(c)),
-            ParseError::EndOfInput => Err(ParseError::EndOfInput),
+            e => Err(e),
         },
     }
 }

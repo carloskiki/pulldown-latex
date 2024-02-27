@@ -142,7 +142,7 @@ impl<'a> MacroContext<'a> {
                                 _ => unreachable!(),
                             }
                         }
-                        
+
                         if replacement_tokens
                             .last()
                             .is_some_and(|t| matches!(t, ReplacementToken::String("")))

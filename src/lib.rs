@@ -1,6 +1,6 @@
-pub mod event;
 pub(crate) mod attribute;
 pub mod config;
+pub mod event;
 mod macros;
 pub(crate) mod parse;
 
