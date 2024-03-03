@@ -24,7 +24,7 @@ pub struct ParserConfig {
 impl Default for ParserConfig {
     /// # Default Value
     /// ```rust
-    /// # use pulldown_latexmml::{config::ParserConfig, DisplayMode};
+    /// # use pulldown_latex::{config::ParserConfig, DisplayMode};
     /// const DEFAULT: ParserConfig = ParserConfig {
     ///     display_mode: DisplayMode::Inline,
     ///     annotate: false,

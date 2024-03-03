@@ -99,8 +99,6 @@ pub type Result<T> = std::result::Result<T, ParseError>;
 //      - We need to know _why_ the character is invalid.
 #[derive(Debug, Error)]
 pub enum ParseError {
-    #[error("invalid character found in input: {0}")]
-    InvalidChar(char),
     #[error(
         "unexpected math `$` (math shift) character - this character is currently unsupported."
     )]
@@ -111,6 +109,20 @@ pub enum ParseError {
     AlignmentChar,
     #[error("unexpected end of input")]
     EndOfInput,
+    #[error("expected a dimension or glue argument")]
+    DimensionArgument,
+    #[error("expected a dimensional unit")]
+    DimensionUnit,
+    #[error("expected mathematical units (mu) in dimension specification")]
+    MathUnit,
+    #[error("expected a delimiter token")]
+    Delimiter,
+    #[error("expected a control sequence")]
+    ControlSequence,
+    #[error("expected a number")]
+    Number,
+    #[error("expected a character representing a number after '`'. found a non ascii character.")]
+    CharacterNumber,
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
@@ -134,9 +146,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Get the current string we are parsing.
-    ///
-    /// This returns `None` if the current instruction is not a `Substring`.
-    fn current_string<'b>(&'b mut self) -> Result<&'b mut &'a str> {
+    // TODO: Should this simply return the string, and not a result?
+    fn current_string(&mut self) -> Result<&mut &'a str> {
         let Some(Instruction::Substring {
             content,
             pop_internal_group,
@@ -241,13 +252,12 @@ impl<'a> Iterator for Parser<'a> {
                         *content = rest;
                         Ok(Event::Content(Content::Number {
                             content: number,
-                            variant: self.group_stack.last().map(|g| g.font_state).flatten(),
+                            variant: self.group_stack.last().and_then(|g| g.font_state),
                         }))
                     }
                     '\\' => {
                         *content = &content[1..];
-                        let cs = lex::rhs_control_sequence(content);
-                        self.handle_primitive(cs)
+                        lex::rhs_control_sequence(content).and_then(|cs| self.handle_primitive(cs))
                     }
                     c => {
                         *content = chars.as_str();
@@ -262,7 +272,7 @@ impl<'a> Iterator for Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Identifier, Operator, Infix};
+    use crate::event::{Identifier, Infix, Operator};
 
     use super::*;
 

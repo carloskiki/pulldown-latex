@@ -10,7 +10,12 @@ pub enum Event<'a> {
     /// For example, a `Fraction` event signals that the next event is the denominator of a
     /// fraction where the previous event is the numerator.
     Infix(Infix),
-    Visuals(Visual),
+    Visual(Visual),
+    Space {
+        width: Option<Dimension>,
+        height: Option<Dimension>,
+        depth: Option<Dimension>,
+    },
 }
 
 /// Base events that produce `mathml` nodes

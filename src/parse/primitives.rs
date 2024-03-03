@@ -13,7 +13,10 @@ use super::{
     Instruction, ParseError,
 };
 
-// Return a `Content::Identifier` event with the given content and font variant.
+// TODO: perhaps some of the macros could be more optimal as methods. (I'm thinking of the font and
+// accents)
+
+/// Return a `Content::Identifier` event with the given content and font variant.
 macro_rules! ident {
     ($content:expr) => {
         Event::Content(Content::Identifier(Identifier::Char {
@@ -50,14 +53,7 @@ macro_rules! op {
 macro_rules! sized_delim {
     ($size:literal, $self_:ident) => {{
         let delimiter = lex::delimiter($self_.current_string()?)?;
-        Event::Content(Content::Operator(Operator {
-            content: delimiter,
-            stretchy: None,
-            moveable_limits: None,
-            left_space: None,
-            right_space: None,
-            size: Some(($size, DimensionUnit::Em)),
-        }))
+        op!(delimiter, {size: Some(($size, DimensionUnit::Em))})
     }};
 }
 
@@ -170,7 +166,6 @@ impl<'a> Parser<'a> {
     /// ## Panics
     /// - This function will panic if the `\` character is given
     pub fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
-        // TODO: bracket table
         Ok(match token {
             '\\' => panic!("this function does not handle control sequences"),
             '%' => {
@@ -188,7 +183,7 @@ impl<'a> Parser<'a> {
                     group_type: GroupType::Brace,
                 });
                 Event::BeginGroup
-            },
+            }
             '}' => {
                 let group = self.group_stack.pop();
                 assert!(matches!(
@@ -199,7 +194,7 @@ impl<'a> Parser<'a> {
                     })
                 ));
                 Event::EndGroup
-            },
+            }
             '_' => Event::Infix(Infix::Subscript),
             '^' => Event::Infix(Infix::Superscript),
             '$' => return Err(ParseError::MathShift),
@@ -222,10 +217,6 @@ impl<'a> Parser<'a> {
     /// 3. If the control sequence is not defined, return an error.
     pub fn handle_primitive(&mut self, control_sequence: &'a str) -> Result<Event<'a>> {
         Ok(match control_sequence {
-            "#" | "%" | "&" | "$" | "_" => Event::Content(Content::Identifier(Identifier::Char {
-                content: control_sequence.chars().next().unwrap(),
-                variant: None,
-            })),
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
             | "coth" | "dim" | "sin" | "tanh" => {
@@ -310,6 +301,7 @@ impl<'a> Parser<'a> {
             "wp" => ident!('℘'),
             "Bbbk" => ident!('𝕜'),
             "Angstrom" => ident!('Å'),
+            "backepsilon" => ident!('϶'),
 
             ////////////////////////
             // Font state changes //
@@ -342,49 +334,14 @@ impl<'a> Parser<'a> {
             "mathbfsfit" | "symbfsfit" => font_group!(SansSerifBoldItalic, self),
             "mathnormal" | "symnormal" => font_group!(self),
 
-            "|" => ident!('∥'),
-            "angle" => ident!('∠'),
-
-            "approx" => op!('≈'),
-            "approxeq" => op!('≊'),
-            "approxcolon" => {
-                self.instruction_stack.push(Instruction::Event(op! {
-                    ':',
-                    {left_space: Some((0., DimensionUnit::Em))}
-                }));
-                op! {
-                    '≈',
-                    {right_space: Some((0., DimensionUnit::Em))}
-                }
-            }
-            "approxcoloncolon" => {
-                self.instruction_stack.push(Instruction::Event(
-                    op! {':', {left_space: Some((0., DimensionUnit::Em))}},
-                ));
-                self.instruction_stack.push(Instruction::Event(op! {
-                    ':',
-                    {
-                        left_space: Some((0., DimensionUnit::Em)),
-                        right_space: Some((0., DimensionUnit::Em))
-                    }
-                }));
-                op! {
-                    '≈',
-                    {right_space: Some((0., DimensionUnit::Em))}
-                }
-            }
-            "ast" => op!('*'),
-            "asymp" => op!('≍'),
-            "amalg" => op!('⨿'),
-            "And" => op!('&'),
-
-            "backepsilon" => ident!('϶'),
-            "backsim" => op!('∽'),
-            "backsimeq" => op!('⋍'),
-            "backslash" => ident!('\\'),
-            "barwedge" => op!('⌅'),
-            "because" => op!('∵'),
-            "between" => op!('≬'),
+            //////////////////
+            // Miscellanous //
+            //////////////////
+            "#" | "%" | "&" | "$" | "_" => Event::Content(Content::Identifier(Identifier::Char {
+                content: control_sequence.chars().next().unwrap(),
+                variant: None,
+            })),
+            "|" => op!('∥', {stretchy: Some(false)}),
 
             //////////////////////////////
             // Delimiter size modifiers //
@@ -522,15 +479,284 @@ impl<'a> Parser<'a> {
             "backdprime" => op!('‶'),
             "backtrprime" => op!('‷'),
 
+            /////////////
+            // Spacing //
+            /////////////
+            "," | "thinspace" => Event::Space {
+                width: Some((3. / 18., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            ">" | ":" | "medspace" => Event::Space {
+                width: Some((4. / 18., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            ";" | "thickspace" => Event::Space {
+                width: Some((5. / 18., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            "enspace" => Event::Space {
+                width: Some((0.5, DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            "quad" => Event::Space {
+                width: Some((1., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            "qquad" => Event::Space {
+                width: Some((2., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            "~" | "nobreakspace" => Event::Content(Content::Text("&nbsp;")),
+            c if c.trim_start().is_empty() => Event::Content(Content::Text("&nbsp;")),
+            // Variable spacing
+            "kern" => {
+                let dimension = lex::dimension(self.current_string()?)?;
+                Event::Space {
+                    width: Some(dimension),
+                    height: None,
+                    depth: None,
+                }
+            }
+            "hskip" => {
+                let glue = lex::glue(self.current_string()?)?;
+                Event::Space {
+                    width: Some(glue.0),
+                    height: None,
+                    depth: None,
+                }
+            }
+            "mkern" => {
+                let dimension = lex::math_dimension(self.current_string()?)?;
+                Event::Space {
+                    width: Some(dimension),
+                    height: None,
+                    depth: None,
+                }
+            }
+            "mskip" => {
+                let glue = lex::math_glue(self.current_string()?)?;
+                Event::Space {
+                    width: Some(glue.0),
+                    height: None,
+                    depth: None,
+                }
+            }
+            "hspace" => {
+                let Argument::Group(mut argument) = lex::argument(self.current_string()?)? else {
+                    return Err(ParseError::DimensionArgument);
+                };
+                let glue = lex::glue(&mut argument)?;
+                Event::Space {
+                    width: Some(glue.0),
+                    height: None,
+                    depth: None,
+                }
+            }
+            // Negative spacing
+            "!" | "negthinspace" => Event::Space {
+                width: Some((-3. / 18., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            "negmedspace" => Event::Space {
+                width: Some((-4. / 18., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+            "negthickspace" => Event::Space {
+                width: Some((-5. / 18., DimensionUnit::Em)),
+                height: None,
+                depth: None,
+            },
+
+            ////////////////////////
+            // Logic & Set Theory //
+            ////////////////////////
+            "forall" => op!('∀'),
+            "complement" => op!('∁'),
+            "therefore" => op!('∴'),
+            "emptyset" => op!('∅'),
+            "exists" => op!('∃'),
+            "subset" => op!('⊂'),
+            "because" => op!('∵'),
+            "varnothing" => op!('⌀'),
+            "nexists" => op!('∄'),
+            "supset" => op!('⊃'),
+            "mapsto" => op!('↦'),
+            "implies" => op!('⟹'),
+            "in" => op!('∈'),
+            "mid" => op!('∣'),
+            "to" => op!('→'),
+            "impliedby" => op!('⟸'),
+            "ni" => op!('∋'),
+            "land" => op!('∧'),
+            "gets" => op!('←'),
+            "iff" => op!('⟺'),
+            "notni" => op!('∌'),
+            "neg" | "lnot" => op!('¬'),
+            "strictif" => op!('⥽'),
+            "strictfi" => op!('⥼'),
+
+            //////////////////////
+            // Binary Operators //
+            //////////////////////
+            "ldotp" => op!('.'),
+            "cdotp" => op!('·'),
+            "cdot" => op!('⋅'),
+            "centerdot" => op!('·'),
+            "circ" => op!('∘'),
+            "circledast" => op!('⊛'),
+            "circledcirc" => op!('⊚'),
+            "circleddash" => op!('⊝'),
+            "bigcirc" => op!('◯'),
+            "leftthreetimes" => op!('⋋'),
+            "rhd" => op!('⊳'),
+            "lhd" => op!('⊲'),
+            "leftouterjoin" => op!('⟕'),
+            "rightouterjoin" => op!('⟖'),
+            "rightthreetimes" => op!('⋌'),
+            "rtimes" => op!('⋊'),
+            "ltimes" => op!('⋉'),
+            "leftmodels" => op!('⊨'),
+            "amalg" => op!('⨿'),
+            "ast" => op!('*'),
+            "asymp" => op!('≍'),
+            "And" => op!('&'),
+            "lor" => op!('∨'),
+            "setminus" => op!('∖'),
+            "Cup" => op!('⋓'),
+            "cup" => op!('∪'),
+            "sqcup" => op!('⊔'),
+            "sqcap" => op!('⊓'),
+            "lessdot" => op!('⋖'),
+            "smallsetminus" => op!('∖', {size: Some((0.7, DimensionUnit::Em))}),
+            "barwedge" => op!('⌅'),
+            "curlyvee" => op!('⋎'),
+            "curlywedge" => op!('⋏'),
+            "sslash" => op!('⫽'),
+            "bowtie" | "Join" => op!('⋈'),
+            "div" => op!('÷'),
+            "mp" => op!('∓'),
+            "times" => op!('×'),
+            "boxdot" => op!('⊡'),
+            "divideontimes" => op!('⋇'),
+            "odot" => op!('⊙'),
+            "unlhd" => op!('⊴'),
+            "boxminus" => op!('⊟'),
+            "dotplus" => op!('∔'),
+            "ominus" => op!('⊖'),
+            "unrhd" => op!('⊵'),
+            "boxplus" => op!('⊞'),
+            "doublebarwedge" => op!('⩞'),
+            "oplus" => op!('⊕'),
+            "uplus" => op!('⊎'),
+            "boxtimes" => op!('⊠'),
+            "doublecap" => op!('⋒'),
+            "otimes" => op!('⊗'),
+            "vee" => op!('∨'),
+            "veebar" => op!('⊻'),
+            "Cap" => op!('⋒'),
+            "fullouterjoin" => op!('⟗'),
+            "parr" => op!('⅋'),
+            "wedge" => op!('∧'),
+            "cap" => op!('∩'),
+            "gtrdot" => op!('⋗'),
+            "pm" => op!('±'),
+            "with" => op!('&'),
+            "intercal" => op!('⊺'),
+            "wr" => op!('≀'),
+            ///////////////
+            // Fractions //
+            ///////////////
+            "frac" => {
+                let [numerator, denominator] = lex::arguments(self.current_string()?)?;
+                self.instruction_stack
+                    .push(Instruction::Event(Event::EndGroup));
+                let denom_instruction = match denominator {
+                    Argument::Token(Token::Character(c)) => {
+                        Instruction::Event(self.handle_char_token(c)?)
+                    }
+                    Argument::Token(Token::ControlSequence(cs)) => {
+                        Instruction::Event(self.handle_primitive(cs)?)
+                    }
+                    Argument::Group(content) => Instruction::Substring {
+                        content,
+                        pop_internal_group: false,
+                    },
+                };
+                self.instruction_stack.extend([
+                    denom_instruction,
+                    Instruction::Event(Event::BeginGroup),
+                    Instruction::Event(Event::EndGroup),
+                ]);
+
+                let num_instruction = match numerator {
+                    Argument::Token(Token::Character(c)) => {
+                        Instruction::Event(self.handle_char_token(c)?)
+                    }
+                    Argument::Token(Token::ControlSequence(cs)) => {
+                        Instruction::Event(self.handle_primitive(cs)?)
+                    }
+                    Argument::Group(content) => Instruction::Substring {
+                        content,
+                        pop_internal_group: false,
+                    },
+                };
+                self.instruction_stack
+                    .extend([num_instruction, Instruction::Event(Event::BeginGroup)]);
+                Event::Visual(crate::event::Visual::Fraction(None))
+            }
+
+            "angle" => ident!('∠'),
+            "approx" => op!('≈'),
+            "approxeq" => op!('≊'),
+            "approxcolon" => {
+                self.instruction_stack.push(Instruction::Event(op! {
+                    ':',
+                    {left_space: Some((0., DimensionUnit::Em))}
+                }));
+                op! {
+                    '≈',
+                    {right_space: Some((0., DimensionUnit::Em))}
+                }
+            }
+            "approxcoloncolon" => {
+                self.instruction_stack.push(Instruction::Event(
+                    op! {':', {left_space: Some((0., DimensionUnit::Em))}},
+                ));
+                self.instruction_stack.push(Instruction::Event(op! {
+                    ':',
+                    {
+                        left_space: Some((0., DimensionUnit::Em)),
+                        right_space: Some((0., DimensionUnit::Em))
+                    }
+                }));
+                op! {
+                    '≈',
+                    {right_space: Some((0., DimensionUnit::Em))}
+                }
+            }
+            "backsim" => op!('∽'),
+            "backsimeq" => op!('⋍'),
+            "backslash" => ident!('\\'),
+            "between" => op!('≬'),
+
             _ => todo!(),
         })
     }
 }
 
 // TODO implementations:
-//
+// `*` ending commands
 // `begingroup` and `endgroup`: https://tex.stackexchange.com/a/191533
 // `sc` (small caps) font: https://tug.org/texinfohtml/latex2e.html#index-_005csc
+// `bmod`, `pod`, `pmod`, `centerdot`
 
 // Unimplemented primitives:
 // `sl` (slanted) font: https://tug.org/texinfohtml/latex2e.html#index-_005csl

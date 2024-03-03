@@ -1,4 +1,4 @@
-# pulldown-latexmml
+# pulldown-latex
 
 A pull parser for $\LaTeX$ parsing and `mathml` rendering.
 

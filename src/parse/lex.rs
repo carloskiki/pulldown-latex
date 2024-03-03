@@ -21,7 +21,6 @@ pub fn definition<'a>(input: &mut &'a str) -> Result<(&'a str, &'a str, &'a str)
 
 pub fn argument<'a>(input: &mut &'a str) -> Result<Argument<'a>> {
     *input = input.trim_start();
-    dbg!(&input);
 
     if input.starts_with('{') {
         *input = &input[1..];
@@ -78,7 +77,6 @@ pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
 ///
 /// Current delimiters supported are listed in TeXBook p. 146, and on https://temml.org/docs/en/supported ("delimiter" section).
 pub fn delimiter(input: &mut &str) -> Result<char> {
-    // TODO: make use of bracket table for character tokens
     *input = input.trim_start();
     let maybe_delim = token(input)?;
     match maybe_delim {
@@ -130,11 +128,7 @@ pub fn delimiter(input: &mut &str) -> Result<char> {
         Token::ControlSequence("updownarrow") => Ok('↕'),
         Token::ControlSequence("Updownarrow") => Ok('⇕'),
         Token::Character(c) if is_delimiter(c) => Ok(c),
-        Token::Character(c) => Err(ParseError::InvalidChar(c)),
-        Token::ControlSequence(cs) => Err(cs
-            .chars()
-            .next()
-            .map_or(ParseError::EndOfInput, ParseError::InvalidChar)),
+        _ => Err(ParseError::Delimiter),
     }
 }
 
@@ -169,13 +163,13 @@ pub fn let_assignment<'a>(input: &mut &'a str) -> Result<(&'a str, Token<'a>)> {
 pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
     if input.starts_with('\\') {
         *input = &input[1..];
-        Ok(rhs_control_sequence(input))
+        rhs_control_sequence(input)
     } else {
         input
             .chars()
             .next()
-            .map_or(Err(ParseError::EndOfInput), |c| {
-                Err(ParseError::InvalidChar(c))
+            .map_or(Err(ParseError::EndOfInput), |_| {
+                Err(ParseError::ControlSequence)
             })
     }
 }
@@ -183,11 +177,11 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
 /// Parse the right side of a control sequence (`\` already being parsed).
 ///
 /// A control sequence can be of the form `\controlsequence`, or `\#` (control symbol).
-pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> &'a str {
+pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
     if input.is_empty() {
-        return input;
-    };
-
+        return Err(ParseError::EndOfInput);
+    }
+    
     let len = input
         .chars()
         .take_while(|c| c.is_ascii_alphabetic())
@@ -196,7 +190,7 @@ pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> &'a str {
 
     let (control_sequence, rest) = input.split_at(len);
     *input = rest.trim_start();
-    control_sequence
+    Ok(control_sequence)
 }
 
 /// Parse a glue (TeXBook p. 267).
@@ -213,10 +207,33 @@ pub fn glue(input: &mut &str) -> Result<Glue> {
     Ok(dimen)
 }
 
+/// Parse a glue that can only be specified in math units (mu)
+pub fn math_glue(input: &mut &str) -> Result<Glue> {
+    let mut dimen = (math_dimension(input)?, None, None);
+    if let Some(s) = input.trim_start().strip_prefix("plus") {
+        *input = s;
+        dimen.1 = Some(math_dimension(input)?);
+    }
+    if let Some(s) = input.trim_start().strip_prefix("minus") {
+        *input = s;
+        dimen.2 = Some(math_dimension(input)?);
+    }
+    Ok(dimen)
+}
+
 /// Parse a dimension (TeXBook p. 266).
 pub fn dimension(input: &mut &str) -> Result<Dimension> {
     let number = floating_point(input)?;
     let unit = dimension_unit(input)?;
+    Ok((number, unit))
+}
+
+/// Parse a dimension that can only be specified in math units (mu)
+pub fn math_dimension(input: &mut &str) -> Result<Dimension> {
+    let number = floating_point(input)? as f32;
+    *input = input.trim_start();
+    input.strip_prefix("mu").ok_or(ParseError::MathUnit)?;
+    let unit = DimensionUnit::Mu;
     Ok((number, unit))
 }
 
@@ -227,13 +244,7 @@ pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
         return Err(ParseError::EndOfInput);
     }
 
-    let unit = input.get(0..2).ok_or_else(|| {
-        let first_non_ascii = input
-            .chars()
-            .find(|c| !c.is_ascii())
-            .expect("there is a known non-ascii character");
-        ParseError::InvalidChar(first_non_ascii)
-    })?;
+    let unit = input.get(0..2).ok_or(ParseError::DimensionUnit)?;
     let unit = match unit {
         "em" => DimensionUnit::Em,
         "ex" => DimensionUnit::Ex,
@@ -247,16 +258,7 @@ pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
         "cc" => DimensionUnit::Cc,
         "sp" => DimensionUnit::Sp,
         "mu" => DimensionUnit::Mu,
-        _ => {
-            if matches!(
-                unit.as_bytes()[0],
-                b'e' | b'p' | b'i' | b'b' | b'c' | b'm' | b'd' | b's'
-            ) {
-                return Err(ParseError::InvalidChar(unit.chars().nth(1).unwrap()));
-            } else {
-                return Err(ParseError::InvalidChar(unit.chars().next().unwrap()));
-            }
-        }
+        _ => return Err(ParseError::DimensionUnit),
     };
 
     *input = &input[2..];
@@ -265,23 +267,19 @@ pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
     Ok(unit)
 }
 
-/// Parse an integer that may be positive or negative (TeXBook p. 265).
+/// Parse an integer that may be positive or negative and may be represented as octal, decimal,
+/// hexadecimal, or a character code (TeXBook p. 265).
 pub fn integer(input: &mut &str) -> Result<isize> {
-    // TODO: support for internal values
     let signum = signs(input)?;
 
     // The following character must be ascii.
     let next_char = input.chars().next().ok_or(ParseError::EndOfInput)?;
-    if !next_char.is_ascii() {
-        return Err(ParseError::InvalidChar(next_char));
-    }
-
     if next_char.is_ascii_digit() {
-        return decimal(input).map(|x| x as isize * signum);
+        return Ok(decimal(input) as isize * signum);
     }
     *input = &input[1..];
-    let unsigned_int = match next_char as u8 {
-        b'`' => {
+    let unsigned_int = match next_char {
+        '`' => {
             let mut next_byte = *input.as_bytes().first().ok_or(ParseError::EndOfInput)?;
             if next_byte == b'\\' {
                 *input = &input[1..];
@@ -289,17 +287,15 @@ pub fn integer(input: &mut &str) -> Result<isize> {
             }
             if next_byte.is_ascii() {
                 *input = &input[1..];
-                Ok(next_byte as usize)
+                next_byte as usize
             } else {
-                Err(ParseError::InvalidChar(
-                    input.chars().next().expect("the input is not empty"),
-                ))
+                return Err(ParseError::CharacterNumber)
             }
         }
-        b'\'' => octal(input),
-        b'"' => hexadecimal(input),
-        x => return Err(ParseError::InvalidChar(x as char)),
-    }?;
+        '\'' => octal(input),
+        '"' => hexadecimal(input),
+        _ => return Err(ParseError::Number),
+    };
 
     Ok(unsigned_int as isize * signum)
 }
@@ -322,7 +318,7 @@ pub fn signs(input: &mut &str) -> Result<isize> {
 }
 
 /// Parse a base 16 unsigned number.
-pub fn hexadecimal(input: &mut &str) -> Result<usize> {
+pub fn hexadecimal(input: &mut &str) -> usize {
     let mut number = 0;
     *input = input.trim_start_matches(|c: char| {
         if c.is_ascii_alphanumeric() && c < 'G' {
@@ -335,7 +331,7 @@ pub fn hexadecimal(input: &mut &str) -> Result<usize> {
     });
     one_optional_space(input);
 
-    Ok(number)
+    number
 }
 
 /// Parse a floating point number (named `factor` in TeXBook p. 266).
@@ -371,7 +367,7 @@ pub fn floating_point(input: &mut &str) -> Result<f32> {
 }
 
 /// Parse a base 10 unsigned number.
-pub fn decimal(input: &mut &str) -> Result<usize> {
+pub fn decimal(input: &mut &str) -> usize {
     let mut number = 0;
     *input = input.trim_start_matches(|c: char| {
         if c.is_ascii_digit() {
@@ -383,11 +379,11 @@ pub fn decimal(input: &mut &str) -> Result<usize> {
     });
     one_optional_space(input);
 
-    Ok(number)
+    number
 }
 
 /// Parse a base 8 unsigned number.
-pub fn octal(input: &mut &str) -> Result<usize> {
+pub fn octal(input: &mut &str) -> usize {
     let mut number = 0;
     *input = input.trim_start_matches(|c: char| {
         if c.is_ascii_digit() {
@@ -399,7 +395,7 @@ pub fn octal(input: &mut &str) -> Result<usize> {
     });
     one_optional_space(input);
 
-    Ok(number)
+    number
 }
 
 /// Parse an optional space.
@@ -417,10 +413,10 @@ pub fn one_optional_space(input: &mut &str) -> bool {
 pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
     match control_sequence(input) {
         Ok(cs) => Ok(Token::ControlSequence(cs)),
-        Err(e) => match e {
-            ParseError::InvalidChar(c) => Ok(Token::Character(c)),
-            e => Err(e),
-        },
+        Err(_) => input.chars().next().map_or(Err(ParseError::EndOfInput), |c| {
+            *input = &input[c.len_utf8()..];
+            Ok(Token::Character(c))
+        })
     }
 }
 

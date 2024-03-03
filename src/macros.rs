@@ -111,7 +111,7 @@ impl<'a> MacroContext<'a> {
                 .chars()
                 .last()
                 .expect("split inclusive always yields at least one char per element");
-            replacement_tokens.push(ReplacementToken::String(&split));
+            replacement_tokens.push(ReplacementToken::String(split));
 
             match split_char {
                 '#' => {
