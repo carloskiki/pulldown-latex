@@ -5,12 +5,9 @@ mod primitives;
 use thiserror::Error;
 
 use crate::{
-    attribute::{DimensionUnit, Font},
+    attribute::Font,
     event::{Content, Event},
 };
-
-pub type Dimension = (f32, DimensionUnit);
-type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
 
 // FOR NOW:
 // - Do not bother about macros, because they will be solvable.
@@ -42,8 +39,20 @@ type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
 //
 // Either way, we will be fine so lets not worry about it for now.
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Token<'a> {
+    ControlSequence(&'a str),
+    Character(char),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum Argument<'a> {
+    Token(Token<'a>),
+    Group(&'a str),
+}
+
 #[derive(Debug)]
-pub enum Instruction<'a> {
+pub(crate) enum Instruction<'a> {
     /// Push the event
     Event(Event<'a>),
     /// Parse the substring
@@ -80,7 +89,10 @@ pub struct GroupNesting {
 
 #[derive(Debug)]
 pub struct Parser<'a> {
-    initial_byte_ptr: *const u8,
+    /// What the initial input is.
+    ///
+    /// This is required for error reporting and calculating the byte offset when an error occurs.
+    input: &'a str,
     /// The next thing that should be parsed or outputed.
     ///
     /// When this is a string/substring, we should parse it. Some commands output
@@ -94,9 +106,6 @@ pub struct Parser<'a> {
 
 pub type Result<T> = std::result::Result<T, ParseError>;
 
-// TODO: change invalid char in favor of more expressive errors.
-//      - We do not need to know the character, since we know the byte offset.
-//      - We need to know _why_ the character is invalid.
 #[derive(Debug, Error)]
 pub enum ParseError {
     #[error(
@@ -129,7 +138,7 @@ pub enum ParseError {
 impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
         Self {
-            initial_byte_ptr: input.as_ptr(),
+            input,
             instruction_stack: Vec::from([
                 Instruction::Event(Event::EndGroup),
                 Instruction::Substring {
@@ -196,8 +205,8 @@ impl<'a> Parser<'a> {
             .expect("we should always have at least one event")
     }
 
-    /// Return the byte index of the current position in the input.
-    fn get_byte_index(&self) -> usize {
+    /// Return the context surrounding the error reported.
+    fn error_context(&self) -> &str {
         // TODO: Here we should check whether the pointer is currently inside a `prelude` or inside
         // of the inputed string.
         // Safety:

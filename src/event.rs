@@ -1,4 +1,4 @@
-use crate::{attribute::Font, parse::Dimension};
+use crate::attribute::{Font, Dimension};
 
 #[derive(Debug, PartialEq)]
 pub enum Event<'a> {

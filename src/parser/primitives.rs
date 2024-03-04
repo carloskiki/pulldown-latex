@@ -4,13 +4,12 @@
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{Content, Event, Identifier, Infix, Operator},
-    parse::{lex, GroupNesting, GroupType, Parser, Result},
-    Argument, Token,
 };
 
 use super::{
+    lex,
     operator_table::{is_delimiter, is_operator},
-    Instruction, ParseError,
+    Argument, GroupNesting, GroupType, Instruction, ParseError, Parser, Result, Token,
 };
 
 // TODO: perhaps some of the macros could be more optimal as methods. (I'm thinking of the font and

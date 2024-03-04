@@ -1,8 +1,8 @@
 use std::mem::MaybeUninit;
 
-use crate::{attribute::DimensionUnit, Argument, Token};
+use crate::attribute::{DimensionUnit, Dimension, Glue};
 
-use super::{operator_table::is_delimiter, Dimension, Glue, ParseError, Result};
+use super::{operator_table::is_delimiter, Argument, Token, ParseError, Result};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///

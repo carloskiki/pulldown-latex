@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use thiserror::Error;
 
-use crate::Token;
+use crate::parser::Token;
 
 const MAX_EXPANSION: usize = 32;
 

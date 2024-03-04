@@ -1,4 +1,6 @@
-use crate::parse::Dimension;
+pub type Dimension = (f32, DimensionUnit);
+pub type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
+
 
 /// Fonts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -188,6 +190,25 @@ pub enum DimensionUnit {
     Cc,
     Sp,
     Mu,
+}
+
+impl DimensionUnit {
+    pub fn as_bytes(&self) -> [u8; 2] {
+        match self {
+            DimensionUnit::Em => *b"em",
+            DimensionUnit::Ex => *b"ex",
+            DimensionUnit::Pt => *b"pt",
+            DimensionUnit::Pc => *b"pc",
+            DimensionUnit::In => *b"in",
+            DimensionUnit::Bp => *b"bp",
+            DimensionUnit::Cm => *b"cm",
+            DimensionUnit::Mm => *b"mm",
+            DimensionUnit::Dd => *b"dd",
+            DimensionUnit::Cc => *b"cc",
+            DimensionUnit::Sp => *b"sp",
+            DimensionUnit::Mu => *b"mu",
+        }
+    }
 }
 
 /// Convert TeX units to CSS units.
