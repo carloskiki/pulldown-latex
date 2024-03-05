@@ -214,6 +214,7 @@ impl<'a> Parser<'a> {
     /// 1. If the control sequence is user defined, apply the corresponding definition.
     /// 2. If the event is a primitive, apply the corresponding primitive.
     /// 3. If the control sequence is not defined, return an error.
+    // TODO: change assert! to ensure!
     pub fn handle_primitive(&mut self, control_sequence: &'a str) -> Result<Event<'a>> {
         Ok(match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
@@ -357,26 +358,21 @@ impl<'a> Parser<'a> {
                 let curr_str = self.current_string()?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
-                    return self.next_unwrap();
+                } else {
+                    let delimiter = lex::delimiter(self.current_string()?)?;
+                    self.instruction_stack.push(Instruction::Event(op!(delimiter)));
                 }
-                let delimiter = lex::delimiter(self.current_string()?)?;
                 self.group_stack.push(GroupNesting {
-                    font_state: None,
+                    font_state: self.current_group().font_state,
                     group_type: GroupType::Internal,
                 });
-                op!(delimiter)
+                Event::BeginGroup
             }
             "middle" => {
                 let delimiter = lex::delimiter(self.current_string()?)?;
                 op!(delimiter)
             }
             "right" => {
-                let curr_str = self.current_string()?;
-                if let Some(rest) = curr_str.strip_prefix('.') {
-                    *curr_str = rest;
-                    return self.next_unwrap();
-                }
-                let delimiter = lex::delimiter(curr_str)?;
                 let group = self.group_stack.pop();
                 assert!(matches!(
                     group,
@@ -385,8 +381,16 @@ impl<'a> Parser<'a> {
                         ..
                     })
                 ));
-
-                op!(delimiter)
+                
+                let curr_str = self.current_string()?;
+                if let Some(rest) = curr_str.strip_prefix('.') {
+                    *curr_str = rest;
+                    Event::EndGroup
+                } else {
+                    let delimiter = lex::delimiter(self.current_string()?)?;
+                    self.instruction_stack.push(Instruction::Event(Event::EndGroup));
+                    op!(delimiter)
+                }
             }
 
             ///////////////////

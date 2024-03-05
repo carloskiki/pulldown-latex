@@ -1,5 +1,5 @@
 mod lex;
-mod operator_table;
+pub mod operator_table;
 mod primitives;
 
 use thiserror::Error;

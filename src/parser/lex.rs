@@ -1,8 +1,8 @@
 use std::mem::MaybeUninit;
 
-use crate::attribute::{DimensionUnit, Dimension, Glue};
+use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{operator_table::is_delimiter, Argument, Token, ParseError, Result};
+use super::{operator_table::is_delimiter, Argument, ParseError, Result, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -181,7 +181,7 @@ pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
     if input.is_empty() {
         return Err(ParseError::EndOfInput);
     }
-    
+
     let len = input
         .chars()
         .take_while(|c| c.is_ascii_alphabetic())
@@ -289,7 +289,7 @@ pub fn integer(input: &mut &str) -> Result<isize> {
                 *input = &input[1..];
                 next_byte as usize
             } else {
-                return Err(ParseError::CharacterNumber)
+                return Err(ParseError::CharacterNumber);
             }
         }
         '\'' => octal(input),
@@ -413,10 +413,13 @@ pub fn one_optional_space(input: &mut &str) -> bool {
 pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
     match control_sequence(input) {
         Ok(cs) => Ok(Token::ControlSequence(cs)),
-        Err(_) => input.chars().next().map_or(Err(ParseError::EndOfInput), |c| {
-            *input = &input[c.len_utf8()..];
-            Ok(Token::Character(c))
-        })
+        Err(_) => input
+            .chars()
+            .next()
+            .map_or(Err(ParseError::EndOfInput), |c| {
+                *input = &input[c.len_utf8()..];
+                Ok(Token::Character(c))
+            }),
     }
 }
 
@@ -442,7 +445,10 @@ pub fn arguments<'a, const N: usize>(input: &mut &'a str) -> Result<[Argument<'a
 
 #[cfg(test)]
 mod tests {
-    use crate::{attribute::DimensionUnit, parse::lex, Token};
+    use crate::{
+        attribute::DimensionUnit,
+        parser::{lex, Token},
+    };
 
     #[test]
     fn signs() {

@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub type Dimension = (f32, DimensionUnit);
 pub type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
 
@@ -192,22 +194,22 @@ pub enum DimensionUnit {
     Mu,
 }
 
-impl DimensionUnit {
-    pub fn as_bytes(&self) -> [u8; 2] {
-        match self {
-            DimensionUnit::Em => *b"em",
-            DimensionUnit::Ex => *b"ex",
-            DimensionUnit::Pt => *b"pt",
-            DimensionUnit::Pc => *b"pc",
-            DimensionUnit::In => *b"in",
-            DimensionUnit::Bp => *b"bp",
-            DimensionUnit::Cm => *b"cm",
-            DimensionUnit::Mm => *b"mm",
-            DimensionUnit::Dd => *b"dd",
-            DimensionUnit::Cc => *b"cc",
-            DimensionUnit::Sp => *b"sp",
-            DimensionUnit::Mu => *b"mu",
-        }
+impl Display for DimensionUnit {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            DimensionUnit::Em => "em",
+            DimensionUnit::Ex => "ex",
+            DimensionUnit::Pt => "pt",
+            DimensionUnit::Pc => "pc",
+            DimensionUnit::In => "in",
+            DimensionUnit::Bp => "bp",
+            DimensionUnit::Cm => "cm",
+            DimensionUnit::Mm => "mm",
+            DimensionUnit::Dd => "dd",
+            DimensionUnit::Cc => "cc",
+            DimensionUnit::Sp => "sp",
+            DimensionUnit::Mu => "mu",
+        })
     }
 }
 
