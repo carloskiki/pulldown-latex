@@ -39,6 +39,16 @@ use crate::{
 //
 // Either way, we will be fine so lets not worry about it for now.
 
+
+// TODO: double subscript and superscript errors are not handled.
+//  To remedy this, we could systematically make a Instruction::Substring represent a group, and
+//  thus when parsing a `{`, we would check if a `^` or `_` is present. This would make the events
+//  not be `infixes` anymore, which would play nicer with the mathml renderer.
+//
+// TODO: The parser should not return an initial `BeginGroup` event nor a final `EndGroup` event.
+//  Makig this change will invalidate the `next_unwrap` method, as we are not guaranteed to return
+//  something.
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Token<'a> {
     ControlSequence(&'a str),
@@ -104,10 +114,10 @@ pub struct Parser<'a> {
     pub(crate) group_stack: Vec<GroupNesting>,
 }
 
-pub type Result<T> = std::result::Result<T, ParseError>;
+pub type Result<T> = std::result::Result<T, ParserError>;
 
 #[derive(Debug, Error)]
-pub enum ParseError {
+pub enum ParserError {
     #[error(
         "unexpected math `$` (math shift) character - this character is currently unsupported."
     )]
@@ -118,6 +128,10 @@ pub enum ParseError {
     AlignmentChar,
     #[error("unexpected end of input")]
     EndOfInput,
+    #[error("expected a dimension specification")]
+    Dimension,
+    #[error("expected a dimension or glue specification")]
+    Glue,
     #[error("expected a dimension or glue argument")]
     DimensionArgument,
     #[error("expected a dimensional unit")]
@@ -132,6 +146,8 @@ pub enum ParseError {
     Number,
     #[error("expected a character representing a number after '`'. found a non ascii character.")]
     CharacterNumber,
+    #[error("expected an argument")]
+    Argument,
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
@@ -156,13 +172,13 @@ impl<'a> Parser<'a> {
 
     /// Get the current string we are parsing.
     // TODO: Should this simply return the string, and not a result?
-    fn current_string(&mut self) -> Result<&mut &'a str> {
+    fn current_string(&mut self) -> Option<&mut &'a str> {
         let Some(Instruction::Substring {
             content,
             pop_internal_group,
         }) = self.instruction_stack.last()
         else {
-            return Err(ParseError::EndOfInput);
+            return None;
         };
         if content.is_empty() {
             if *pop_internal_group {
@@ -176,7 +192,7 @@ impl<'a> Parser<'a> {
             self.current_string()
         } else {
             match self.instruction_stack.last_mut() {
-                Some(Instruction::Substring { content, .. }) => Ok(content),
+                Some(Instruction::Substring { content, .. }) => Some(content),
                 _ => unreachable!(),
             }
         }

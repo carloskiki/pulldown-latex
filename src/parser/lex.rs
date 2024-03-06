@@ -2,7 +2,7 @@ use std::mem::MaybeUninit;
 
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{operator_table::is_delimiter, Argument, ParseError, Result, Token};
+use super::{operator_table::is_delimiter, Argument, ParserError, Result, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -12,7 +12,7 @@ use super::{operator_table::is_delimiter, Argument, ParseError, Result, Token};
 // TODO: make sure that the parameter text includes none of: `}`, or `%`
 pub fn definition<'a>(input: &mut &'a str) -> Result<(&'a str, &'a str, &'a str)> {
     let control_sequence = control_sequence(input)?;
-    let (parameter_text, rest) = input.split_once('{').ok_or(ParseError::EndOfInput)?;
+    let (parameter_text, rest) = input.split_once('{').ok_or(ParserError::EndOfInput)?;
     *input = rest;
     let replacement_text = group_content(input)?;
 
@@ -68,7 +68,7 @@ pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
         *input = &rest[1..];
         Ok(argument)
     } else {
-        Err(ParseError::EndOfInput)
+        Err(ParserError::EndOfInput)
     }
 }
 
@@ -128,7 +128,7 @@ pub fn delimiter(input: &mut &str) -> Result<char> {
         Token::ControlSequence("updownarrow") => Ok('↕'),
         Token::ControlSequence("Updownarrow") => Ok('⇕'),
         Token::Character(c) if is_delimiter(c) => Ok(c),
-        _ => Err(ParseError::Delimiter),
+        _ => Err(ParserError::Delimiter),
     }
 }
 
@@ -168,8 +168,8 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
         input
             .chars()
             .next()
-            .map_or(Err(ParseError::EndOfInput), |_| {
-                Err(ParseError::ControlSequence)
+            .map_or(Err(ParserError::EndOfInput), |_| {
+                Err(ParserError::ControlSequence)
             })
     }
 }
@@ -179,7 +179,7 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
 /// A control sequence can be of the form `\controlsequence`, or `\#` (control symbol).
 pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
     if input.is_empty() {
-        return Err(ParseError::EndOfInput);
+        return Err(ParserError::EndOfInput);
     }
 
     let len = input
@@ -232,7 +232,7 @@ pub fn dimension(input: &mut &str) -> Result<Dimension> {
 pub fn math_dimension(input: &mut &str) -> Result<Dimension> {
     let number = floating_point(input)? as f32;
     *input = input.trim_start();
-    input.strip_prefix("mu").ok_or(ParseError::MathUnit)?;
+    input.strip_prefix("mu").ok_or(ParserError::MathUnit)?;
     let unit = DimensionUnit::Mu;
     Ok((number, unit))
 }
@@ -241,10 +241,10 @@ pub fn math_dimension(input: &mut &str) -> Result<Dimension> {
 pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
     *input = input.trim_start();
     if input.len() < 2 {
-        return Err(ParseError::EndOfInput);
+        return Err(ParserError::EndOfInput);
     }
 
-    let unit = input.get(0..2).ok_or(ParseError::DimensionUnit)?;
+    let unit = input.get(0..2).ok_or(ParserError::DimensionUnit)?;
     let unit = match unit {
         "em" => DimensionUnit::Em,
         "ex" => DimensionUnit::Ex,
@@ -258,7 +258,7 @@ pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
         "cc" => DimensionUnit::Cc,
         "sp" => DimensionUnit::Sp,
         "mu" => DimensionUnit::Mu,
-        _ => return Err(ParseError::DimensionUnit),
+        _ => return Err(ParserError::DimensionUnit),
     };
 
     *input = &input[2..];
@@ -273,28 +273,28 @@ pub fn integer(input: &mut &str) -> Result<isize> {
     let signum = signs(input)?;
 
     // The following character must be ascii.
-    let next_char = input.chars().next().ok_or(ParseError::EndOfInput)?;
+    let next_char = input.chars().next().ok_or(ParserError::EndOfInput)?;
     if next_char.is_ascii_digit() {
         return Ok(decimal(input) as isize * signum);
     }
     *input = &input[1..];
     let unsigned_int = match next_char {
         '`' => {
-            let mut next_byte = *input.as_bytes().first().ok_or(ParseError::EndOfInput)?;
+            let mut next_byte = *input.as_bytes().first().ok_or(ParserError::EndOfInput)?;
             if next_byte == b'\\' {
                 *input = &input[1..];
-                next_byte = *input.as_bytes().first().ok_or(ParseError::EndOfInput)?;
+                next_byte = *input.as_bytes().first().ok_or(ParserError::EndOfInput)?;
             }
             if next_byte.is_ascii() {
                 *input = &input[1..];
                 next_byte as usize
             } else {
-                return Err(ParseError::CharacterNumber);
+                return Err(ParserError::CharacterNumber);
             }
         }
         '\'' => octal(input),
         '"' => hexadecimal(input),
-        _ => return Err(ParseError::Number),
+        _ => return Err(ParserError::Number),
     };
 
     Ok(unsigned_int as isize * signum)
@@ -416,7 +416,7 @@ pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
         Err(_) => input
             .chars()
             .next()
-            .map_or(Err(ParseError::EndOfInput), |c| {
+            .map_or(Err(ParserError::EndOfInput), |c| {
                 *input = &input[c.len_utf8()..];
                 Ok(Token::Character(c))
             }),
@@ -543,5 +543,16 @@ mod tests {
         assert_eq!(lex::integer(&mut input).unwrap(), 97);
         assert_eq!(lex::floating_point(&mut input).unwrap(), -0.47);
         assert_eq!(input, "");
+    }
+
+    #[test]
+    fn group_content() {
+        let mut input =
+            "this { { is a test } to see if { the content parsing { of this } } } works }";
+        let content = lex::group_content(&mut input).unwrap();
+        assert_eq!(
+            content,
+            "this { { is a test } to see if { the content parsing { of this } } } works "
+        );
     }
 }

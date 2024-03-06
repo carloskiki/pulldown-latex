@@ -28,9 +28,6 @@ pub enum Content<'a> {
     },
     Identifier(Identifier<'a>),
     Operator(Operator),
-    StringLiteral(&'a str),
-    Error(String),
-    Space,
 }
 
 #[derive(Debug, Default, PartialEq)]

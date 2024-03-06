@@ -9,153 +9,44 @@ use crate::{
 use super::{
     lex,
     operator_table::{is_delimiter, is_operator},
-    Argument, GroupNesting, GroupType, Instruction, ParseError, Parser, Result, Token,
+    Argument, GroupNesting, GroupType, Instruction, Parser, ParserError, Result, Token,
 };
 
-// TODO: perhaps some of the macros could be more optimal as methods. (I'm thinking of the font and
-// accents)
-
 /// Return a `Content::Identifier` event with the given content and font variant.
+///
+/// If self is not provided, the font variant is set to `None`.
 macro_rules! ident {
     ($content:expr) => {
-        Event::Content(Content::Identifier(Identifier::Char {
+        Content::Identifier(Identifier::Char {
             content: $content,
             variant: None,
-        }))
+        })
     };
     ($content:expr, $self_:ident) => {
-        Event::Content(Content::Identifier(Identifier::Char {
+        Content::Identifier(Identifier::Char {
             content: $content,
             variant: $self_.current_group().font_state,
-        }))
+        })
     };
 }
 
 /// Return an `Operator` event with the given content and default modifiers.
 macro_rules! op {
     ($content:expr) => {
-        Event::Content(Content::Operator(Operator {
+        Content::Operator(Operator {
             content: $content,
             ..Default::default()
-        }))
+        })
     };
     ($content:expr, {$($field:ident: $value:expr),*}) => {
-        Event::Content(Content::Operator(Operator {
+        Content::Operator(Operator {
             content: $content,
             $($field: $value,)*
             ..Default::default()
-        }))
+        })
     };
 }
 
-/// Return a delimiter with the given size from the next character in the parser.
-macro_rules! sized_delim {
-    ($size:literal, $self_:ident) => {{
-        let delimiter = lex::delimiter($self_.current_string()?)?;
-        op!(delimiter, {size: Some(($size, DimensionUnit::Em))})
-    }};
-}
-
-/// Override the `font_state` to the given font variant.
-macro_rules! font_override {
-    ($font:ident, $self_:ident) => {{
-        $self_.current_group_mut().font_state = Some(Font::$font);
-        $self_.next_unwrap()?
-    }};
-}
-
-/// Override the `font_state` for the argument to the command.
-macro_rules! font_group {
-    ($self_:ident) => {{
-        let argument = lex::argument($self_.current_string()?)?;
-        match argument {
-            Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
-            Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
-            Argument::Group(g) => {
-                $self_.instruction_stack.push(Instruction::Substring {
-                    content: g,
-                    pop_internal_group: true,
-                });
-                $self_.group_stack.push(GroupNesting {
-                    font_state: None,
-                    group_type: GroupType::Internal,
-                });
-                $self_.next_unwrap()?
-            }
-        }
-    }};
-    ($font:ident, $self_:ident) => {{
-        let argument = lex::argument($self_.current_string()?)?;
-        match argument {
-            Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
-            Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
-            Argument::Group(g) => {
-                $self_.instruction_stack.push(Instruction::Substring {
-                    content: g,
-                    pop_internal_group: true,
-                });
-                $self_.group_stack.push(GroupNesting {
-                    font_state: Some(Font::$font),
-                    group_type: GroupType::Internal,
-                });
-                $self_.next_unwrap()?
-            }
-        }
-    }};
-}
-
-/// Accent commands. parse the argument, and overset the accent.
-macro_rules! accent {
-    ($accent:literal, $self_:ident) => {{
-        accent!($accent, $self_, {})
-    }};
-    ($accent:literal, $self_:ident, $opts:tt) => {{
-        let argument = lex::argument($self_.current_string()?)?;
-        $self_.instruction_stack.extend([
-            Instruction::Event(op!($accent, $opts)),
-            Instruction::Event(Event::Infix(Infix::Overscript)),
-        ]);
-        match argument {
-            Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
-            Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
-            Argument::Group(substr) => {
-                $self_
-                    .instruction_stack
-                    .push(Instruction::Event(Event::EndGroup));
-                $self_.instruction_stack.push(Instruction::Substring {
-                    content: substr,
-                    pop_internal_group: false,
-                });
-                Event::BeginGroup
-            }
-        }
-    }};
-}
-
-/// Underscript commands. parse the argument, and underset the accent.
-macro_rules! underscript {
-    ($accent:literal, $self_:ident) => {{
-        let argument = lex::argument($self_.current_string()?)?;
-        $self_.instruction_stack.extend([
-            Instruction::Event(op!($accent)),
-            Instruction::Event(Event::Infix(Infix::Underscript)),
-        ]);
-        match argument {
-            Argument::Token(Token::Character(c)) => $self_.handle_char_token(c)?,
-            Argument::Token(Token::ControlSequence(cs)) => $self_.handle_primitive(cs)?,
-            Argument::Group(substr) => {
-                $self_
-                    .instruction_stack
-                    .push(Instruction::Event(Event::EndGroup));
-                $self_.instruction_stack.push(Instruction::Substring {
-                    content: substr,
-                    pop_internal_group: false,
-                });
-                Event::BeginGroup
-            }
-        }
-    }};
-}
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -167,8 +58,11 @@ impl<'a> Parser<'a> {
     pub fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
         Ok(match token {
             '\\' => panic!("this function does not handle control sequences"),
+            // TODO: Check how we want to handle comments actually.
             '%' => {
-                let content = self.current_string()?;
+                let Some(content) = self.current_string() else {
+                    return self.next_unwrap();
+                };
                 if let Some((_, rest)) = content.split_once('\n') {
                     *content = rest;
                 } else {
@@ -196,16 +90,16 @@ impl<'a> Parser<'a> {
             }
             '_' => Event::Infix(Infix::Subscript),
             '^' => Event::Infix(Infix::Superscript),
-            '$' => return Err(ParseError::MathShift),
-            '#' => return Err(ParseError::HashSign),
-            '&' => return Err(ParseError::AlignmentChar),
+            '$' => return Err(ParserError::MathShift),
+            '#' => return Err(ParserError::HashSign),
+            '&' => return Err(ParserError::AlignmentChar),
             // TODO: check for double and triple primes
-            '\'' => op!('′'),
+            '\'' => Event::Content(op!('′')),
 
-            c if is_delimiter(c) => op!(c, {stretchy: Some(false)}),
-            c if is_operator(c) => op!(c),
+            c if is_delimiter(c) => Event::Content(op!(c, {stretchy: Some(false)})),
+            c if is_operator(c) => Event::Content(op!(c)),
             // TODO: handle every character correctly.
-            c => ident!(c),
+            c => Event::Content(ident!(c)),
         })
     }
 
@@ -228,111 +122,111 @@ impl<'a> Parser<'a> {
             // Non-Latin Alphabets //
             /////////////////////////
             // Lowercase Greek letters
-            "alpha" => ident!('α', self),
-            "beta" => ident!('β', self),
-            "gamma" => ident!('γ', self),
-            "delta" => ident!('δ', self),
-            "epsilon" => ident!('ϵ', self),
-            "varepsilon" => ident!('ε', self),
-            "zeta" => ident!('ζ', self),
-            "eta" => ident!('η', self),
-            "theta" => ident!('θ', self),
-            "vartheta" => ident!('ϑ', self),
-            "iota" => ident!('ι', self),
-            "kappa" => ident!('κ', self),
-            "lambda" => ident!('λ', self),
-            "mu" => ident!('µ', self),
-            "nu" => ident!('ν', self),
-            "xi" => ident!('ξ', self),
-            "pi" => ident!('π', self),
-            "varpi" => ident!('ϖ', self),
-            "rho" => ident!('ρ', self),
-            "varrho" => ident!('ϱ', self),
-            "sigma" => ident!('σ', self),
-            "varsigma" => ident!('ς', self),
-            "tau" => ident!('τ', self),
-            "upsilon" => ident!('υ', self),
-            "phi" => ident!('φ', self),
-            "varphi" => ident!('ϕ', self),
-            "chi" => ident!('χ', self),
-            "psi" => ident!('ψ', self),
-            "omega" => ident!('ω', self),
+            "alpha" => Event::Content(ident!('α', self)),
+            "beta" => Event::Content(ident!('β', self)),
+            "gamma" => Event::Content(ident!('γ', self)),
+            "delta" => Event::Content(ident!('δ', self)),
+            "epsilon" => Event::Content(ident!('ϵ', self)),
+            "varepsilon" => Event::Content(ident!('ε', self)),
+            "zeta" => Event::Content(ident!('ζ', self)),
+            "eta" => Event::Content(ident!('η', self)),
+            "theta" => Event::Content(ident!('θ', self)),
+            "vartheta" => Event::Content(ident!('ϑ', self)),
+            "iota" => Event::Content(ident!('ι', self)),
+            "kappa" => Event::Content(ident!('κ', self)),
+            "lambda" => Event::Content(ident!('λ', self)),
+            "mu" => Event::Content(ident!('µ', self)),
+            "nu" => Event::Content(ident!('ν', self)),
+            "xi" => Event::Content(ident!('ξ', self)),
+            "pi" => Event::Content(ident!('π', self)),
+            "varpi" => Event::Content(ident!('ϖ', self)),
+            "rho" => Event::Content(ident!('ρ', self)),
+            "varrho" => Event::Content(ident!('ϱ', self)),
+            "sigma" => Event::Content(ident!('σ', self)),
+            "varsigma" => Event::Content(ident!('ς', self)),
+            "tau" => Event::Content(ident!('τ', self)),
+            "upsilon" => Event::Content(ident!('υ', self)),
+            "phi" => Event::Content(ident!('φ', self)),
+            "varphi" => Event::Content(ident!('ϕ', self)),
+            "chi" => Event::Content(ident!('χ', self)),
+            "psi" => Event::Content(ident!('ψ', self)),
+            "omega" => Event::Content(ident!('ω', self)),
             // Uppercase Greek letters
-            "Alpha" => ident!('Α', self),
-            "Beta" => ident!('Β', self),
-            "Gamma" => ident!('Γ', self),
-            "Delta" => ident!('Δ', self),
-            "Epsilon" => ident!('Ε', self),
-            "Zeta" => ident!('Ζ', self),
-            "Eta" => ident!('Η', self),
-            "Theta" => ident!('Θ', self),
-            "Iota" => ident!('Ι', self),
-            "Kappa" => ident!('Κ', self),
-            "Lambda" => ident!('Λ', self),
-            "Mu" => ident!('Μ', self),
-            "Nu" => ident!('Ν', self),
-            "Xi" => ident!('Ξ', self),
-            "Pi" => ident!('Π', self),
-            "Rho" => ident!('Ρ', self),
-            "Sigma" => ident!('Σ', self),
-            "Tau" => ident!('Τ', self),
-            "Upsilon" => ident!('Υ', self),
-            "Phi" => ident!('Φ', self),
-            "Chi" => ident!('Χ', self),
-            "Psi" => ident!('Ψ', self),
-            "Omega" => ident!('Ω', self),
+            "Alpha" => Event::Content(ident!('Α', self)),
+            "Beta" => Event::Content(ident!('Β', self)),
+            "Gamma" => Event::Content(ident!('Γ', self)),
+            "Delta" => Event::Content(ident!('Δ', self)),
+            "Epsilon" => Event::Content(ident!('Ε', self)),
+            "Zeta" => Event::Content(ident!('Ζ', self)),
+            "Eta" => Event::Content(ident!('Η', self)),
+            "Theta" => Event::Content(ident!('Θ', self)),
+            "Iota" => Event::Content(ident!('Ι', self)),
+            "Kappa" => Event::Content(ident!('Κ', self)),
+            "Lambda" => Event::Content(ident!('Λ', self)),
+            "Mu" => Event::Content(ident!('Μ', self)),
+            "Nu" => Event::Content(ident!('Ν', self)),
+            "Xi" => Event::Content(ident!('Ξ', self)),
+            "Pi" => Event::Content(ident!('Π', self)),
+            "Rho" => Event::Content(ident!('Ρ', self)),
+            "Sigma" => Event::Content(ident!('Σ', self)),
+            "Tau" => Event::Content(ident!('Τ', self)),
+            "Upsilon" => Event::Content(ident!('Υ', self)),
+            "Phi" => Event::Content(ident!('Φ', self)),
+            "Chi" => Event::Content(ident!('Χ', self)),
+            "Psi" => Event::Content(ident!('Ψ', self)),
+            "Omega" => Event::Content(ident!('Ω', self)),
             // Hebrew letters
-            "aleph" => ident!('ℵ'),
-            "beth" => ident!('ℶ'),
-            "gimel" => ident!('ℷ'),
-            "daleth" => ident!('ℸ'),
+            "aleph" => Event::Content(ident!('ℵ')),
+            "beth" => Event::Content(ident!('ℶ')),
+            "gimel" => Event::Content(ident!('ℷ')),
+            "daleth" => Event::Content(ident!('ℸ')),
             // Other symbols
-            "eth" => ident!('ð'),
-            "ell" => ident!('ℓ'),
-            "nabla" => ident!('∇'),
-            "partial" => ident!('⅁'),
-            "Finv" => ident!('Ⅎ'),
-            "Game" => ident!('ℷ'),
-            "hbar" | "hslash" => ident!('ℏ'),
-            "imath" => ident!('ı'),
-            "jmath" => ident!('ȷ'),
-            "Im" => ident!('ℑ'),
-            "Re" => ident!('ℜ'),
-            "wp" => ident!('℘'),
-            "Bbbk" => ident!('𝕜'),
-            "Angstrom" => ident!('Å'),
-            "backepsilon" => ident!('϶'),
+            "eth" => Event::Content(ident!('ð')),
+            "ell" => Event::Content(ident!('ℓ')),
+            "nabla" => Event::Content(ident!('∇')),
+            "partial" => Event::Content(ident!('⅁')),
+            "Finv" => Event::Content(ident!('Ⅎ')),
+            "Game" => Event::Content(ident!('ℷ')),
+            "hbar" | "hslash" => Event::Content(ident!('ℏ')),
+            "imath" => Event::Content(ident!('ı')),
+            "jmath" => Event::Content(ident!('ȷ')),
+            "Im" => Event::Content(ident!('ℑ')),
+            "Re" => Event::Content(ident!('ℜ')),
+            "wp" => Event::Content(ident!('℘')),
+            "Bbbk" => Event::Content(ident!('𝕜')),
+            "Angstrom" => Event::Content(ident!('Å')),
+            "backepsilon" => Event::Content(ident!('϶')),
 
             ////////////////////////
             // Font state changes //
             ////////////////////////
             // LaTeX native absolute font changes (old behavior a.k.a NFSS 1)
-            "bf" => font_override!(Bold, self),
-            "cal" => font_override!(Script, self),
-            "it" => font_override!(Italic, self),
-            "rm" => font_override!(UpRight, self),
-            "sf" => font_override!(SansSerif, self),
-            "tt" => font_override!(Monospace, self),
+            "bf" => self.font_override(Font::Bold)?,
+            "cal" => self.font_override(Font::Script)?,
+            "it" => self.font_override(Font::Italic)?,
+            "rm" => self.font_override(Font::UpRight)?,
+            "sf" => self.font_override(Font::SansSerif)?,
+            "tt" => self.font_override(Font::Monospace)?,
             // amsfonts font changes (old behavior a.k.a NFSS 1)
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // TODO: Make it so that there is a different between `\sym_` and `\math_` font
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" => font_group!(Bold, self),
-            "mathcal" | "symcal" | "mathup" | "symup" => font_group!(Script, self),
-            "mathit" | "symit" => font_group!(Italic, self),
-            "mathrm" | "symrm" => font_group!(UpRight, self),
-            "mathsf" | "symsf" | "mathsfup" | "symsfup" => font_group!(SansSerif, self),
-            "mathtt" | "symtt" => font_group!(Monospace, self),
-            "mathbb" | "symbb" => font_group!(DoubleStruck, self),
-            "mathfrak" | "symfrak" => font_group!(Fraktur, self),
-            "mathbfcal" | "symbfcal" => font_group!(BoldScript, self),
-            "mathsfit" | "symsfit" => font_group!(SansSerifItalic, self),
-            "mathbfit" | "symbfit" => font_group!(BoldItalic, self),
-            "mathbffrak" | "symbffrak" => font_group!(BoldFraktur, self),
-            "mathbfsfup" | "symbfsfup" => font_group!(BoldSansSerif, self),
-            "mathbfsfit" | "symbfsfit" => font_group!(SansSerifBoldItalic, self),
-            "mathnormal" | "symnormal" => font_group!(self),
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => self.font_group(Some(Font::Bold))?,
+            "mathcal" | "symcal" | "mathup" | "symup" => self.font_group(Some(Font::Script))?,
+            "mathit" | "symit" => self.font_group(Some(Font::Italic))?,
+            "mathrm" | "symrm" => self.font_group(Some(Font::UpRight))?,
+            "mathsf" | "symsf" | "mathsfup" | "symsfup" => self.font_group(Some(Font::SansSerif))?,
+            "mathtt" | "symtt" => self.font_group(Some(Font::Monospace))?,
+            "mathbb" | "symbb" => self.font_group(Some(Font::DoubleStruck))?,
+            "mathfrak" | "symfrak" => self.font_group(Some(Font::Fraktur))?,
+            "mathbfcal" | "symbfcal" => self.font_group(Some(Font::BoldScript))?,
+            "mathsfit" | "symsfit" => self.font_group(Some(Font::SansSerifItalic))?,
+            "mathbfit" | "symbfit" => self.font_group(Some(Font::BoldItalic))?,
+            "mathbffrak" | "symbffrak" => self.font_group(Some(Font::BoldFraktur))?,
+            "mathbfsfup" | "symbfsfup" => self.font_group(Some(Font::BoldSansSerif))?,
+            "mathbfsfit" | "symbfsfit" => self.font_group(Some(Font::SansSerifBoldItalic))?,
+            "mathnormal" | "symnormal" => self.font_group(None)?,
 
             //////////////////
             // Miscellanous //
@@ -341,26 +235,28 @@ impl<'a> Parser<'a> {
                 content: control_sequence.chars().next().unwrap(),
                 variant: None,
             })),
-            "|" => op!('∥', {stretchy: Some(false)}),
+            "|" => Event::Content(op!('∥', {stretchy: Some(false)})),
 
             //////////////////////////////
             // Delimiter size modifiers //
             //////////////////////////////
             // Sizes taken from `texzilla`
             // Big left and right seem to not care about which delimiter is used. i.e., \bigl) and \bigr) are the same.
-            "big" | "bigl" | "bigr" | "bigm" => sized_delim!(1.2, self),
-            "Big" | "Bigl" | "Bigr" | "Bigm" => sized_delim!(1.8, self),
-            "bigg" | "biggl" | "biggr" | "biggm" => sized_delim!(2.4, self),
-            "Bigg" | "Biggl" | "Biggr" | "Biggm" => sized_delim!(3.0, self),
+            "big" | "bigl" | "bigr" | "bigm" => self.em_sized_delim(1.2)?,
+            "Big" | "Bigl" | "Bigr" | "Bigm" => self.em_sized_delim(1.8)?,
+            "bigg" | "biggl" | "biggr" | "biggm" => self.em_sized_delim(2.4)?,
+            "Bigg" | "Biggl" | "Biggr" | "Biggm" => self.em_sized_delim(3.0)?,
 
             // TODO: maybe use something else than an internal group for this?
             "left" => {
-                let curr_str = self.current_string()?;
+                let curr_str = self.current_string().ok_or(ParserError::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                 } else {
-                    let delimiter = lex::delimiter(self.current_string()?)?;
-                    self.instruction_stack.push(Instruction::Event(op!(delimiter)));
+                    let delimiter =
+                        lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+                    self.instruction_stack
+                        .push(Instruction::Event(Event::Content(op!(delimiter))));
                 }
                 self.group_stack.push(GroupNesting {
                     font_state: self.current_group().font_state,
@@ -369,8 +265,9 @@ impl<'a> Parser<'a> {
                 Event::BeginGroup
             }
             "middle" => {
-                let delimiter = lex::delimiter(self.current_string()?)?;
-                op!(delimiter)
+                let delimiter =
+                    lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+                Event::Content(op!(delimiter))
             }
             "right" => {
                 let group = self.group_stack.pop();
@@ -381,106 +278,108 @@ impl<'a> Parser<'a> {
                         ..
                     })
                 ));
-                
-                let curr_str = self.current_string()?;
+
+                let curr_str = self.current_string().ok_or(ParserError::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     Event::EndGroup
                 } else {
-                    let delimiter = lex::delimiter(self.current_string()?)?;
-                    self.instruction_stack.push(Instruction::Event(Event::EndGroup));
-                    op!(delimiter)
+                    let delimiter =
+                        lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+                    self.instruction_stack
+                        .push(Instruction::Event(Event::EndGroup));
+                    Event::Content(op!(delimiter))
                 }
             }
 
             ///////////////////
             // Big Operators //
             ///////////////////
-            "sum" => op!('∑'),
-            "prod" => op!('∏'),
-            "coprod" => op!('∐'),
-            "int" => op!('∫'),
-            "iint" => op!('∬'),
-            "intop" => op!('∫'),
-            "iiint" => op!('∭'),
-            "smallint" => op!('∫'),
-            "iiiint" => op!('⨌'),
-            "intcap" => op!('⨙'),
-            "intcup" => op!('⨚'),
-            "oint" => op!('∮'),
-            "varointclockwise" => op!('∲'),
-            "intclockwise" => op!('∱'),
-            "oiint" => op!('∯'),
-            "pointint" => op!('⨕'),
-            "rppolint" => op!('⨒'),
-            "scpolint" => op!('⨓'),
-            "oiiint" => op!('∰'),
-            "intlarhk" => op!('⨗'),
-            "sqint" => op!('⨖'),
-            "intx" => op!('⨘'),
-            "intbar" => op!('⨍'),
-            "intBar" => op!('⨎'),
-            "fint" => op!('⨏'),
-            "bigoplus" => op!('⨁'),
-            "bigotimes" => op!('⨂'),
-            "bigvee" => op!('⋁'),
-            "bigwedge" => op!('⋀'),
-            "bigodot" => op!('⨀'),
-            "bigcap" => op!('⋂'),
-            "biguplus" => op!('⨄'),
-            "bigcup" => op!('⋃'),
-            "bigsqcup" => op!('⨆'),
-            "bigsqcap" => op!('⨅'),
-            "bigtimes" => op!('⨉'),
+            "sum" => Event::Content(op!('∑')),
+            "prod" => Event::Content(op!('∏')),
+            "coprod" => Event::Content(op!('∐')),
+            "int" => Event::Content(op!('∫')),
+            "iint" => Event::Content(op!('∬')),
+            "intop" => Event::Content(op!('∫')),
+            "iiint" => Event::Content(op!('∭')),
+            "smallint" => Event::Content(op!('∫')),
+            "iiiint" => Event::Content(op!('⨌')),
+            "intcap" => Event::Content(op!('⨙')),
+            "intcup" => Event::Content(op!('⨚')),
+            "oint" => Event::Content(op!('∮')),
+            "varointclockwise" => Event::Content(op!('∲')),
+            "intclockwise" => Event::Content(op!('∱')),
+            "oiint" => Event::Content(op!('∯')),
+            "pointint" => Event::Content(op!('⨕')),
+            "rppolint" => Event::Content(op!('⨒')),
+            "scpolint" => Event::Content(op!('⨓')),
+            "oiiint" => Event::Content(op!('∰')),
+            "intlarhk" => Event::Content(op!('⨗')),
+            "sqint" => Event::Content(op!('⨖')),
+            "intx" => Event::Content(op!('⨘')),
+            "intbar" => Event::Content(op!('⨍')),
+            "intBar" => Event::Content(op!('⨎')),
+            "fint" => Event::Content(op!('⨏')),
+            "bigoplus" => Event::Content(op!('⨁')),
+            "bigotimes" => Event::Content(op!('⨂')),
+            "bigvee" => Event::Content(op!('⋁')),
+            "bigwedge" => Event::Content(op!('⋀')),
+            "bigodot" => Event::Content(op!('⨀')),
+            "bigcap" => Event::Content(op!('⋂')),
+            "biguplus" => Event::Content(op!('⨄')),
+            "bigcup" => Event::Content(op!('⋃')),
+            "bigsqcup" => Event::Content(op!('⨆')),
+            "bigsqcap" => Event::Content(op!('⨅')),
+            "bigtimes" => Event::Content(op!('⨉')),
 
             /////////////
             // Accents //
             /////////////
-            "acute" => accent!('´', self),
-            "bar" | "overline" => accent!('‾', self),
-            "underbar" | "underline" => underscript!('_', self),
-            "breve" => accent!('˘', self),
-            "check" => accent!('ˇ', self, {stretchy: Some(false)}),
-            "dot" => accent!('˙', self),
-            "ddot" => accent!('¨', self),
-            "grave" => accent!('`', self),
-            "hat" => accent!('^', self, {stretchy: Some(false)}),
-            "tilde" => accent!('~', self, {stretchy: Some(false)}),
-            "vec" => accent!('→', self, {stretchy: Some(false)}),
-            "mathring" => accent!('˚', self),
+            "acute" => self.accent(op!('´'))?,
+            "bar" | "overline" => self.accent(op!('‾'))?,
+            "underbar" | "underline" => self.underscript(op!('_'))?,
+            "breve" => self.accent(op!('˘'))?,
+            "check" => self.accent(op!('ˇ', {stretchy: Some(false)}))?,
+            "dot" => self.accent(op!('˙'))?,
+            "ddot" => self.accent(op!('¨'))?,
+            "grave" => self.accent(op!('`'))?,
+            "hat" => self.accent(op!('^', {stretchy: Some(false)}))?,
+            "tilde" => self.accent(op!('~', {stretchy: Some(false)}))?,
+            "vec" => self.accent(op!('→', {stretchy: Some(false)}))?,
+            "mathring" => self.accent(op!('˚'))?,
 
             // Arrows
-            "overleftarrow" => accent!('←', self),
-            "underleftarrow" => underscript!('←', self),
-            "overrightarrow" => accent!('→', self),
-            "Overrightarrow" => accent!('⇒', self),
-            "underrightarrow" => underscript!('→', self),
-            "overleftrightarrow" => accent!('↔', self),
-            "underleftrightarrow" => underscript!('↔', self),
-            "overleftharpoon" => accent!('↼', self),
-            "overrightharpoon" => accent!('⇀', self),
+            "overleftarrow" => self.accent(op!('←'))?,
+            "underleftarrow" => self.underscript(op!('←'))?,
+            "overrightarrow" => self.accent(op!('→'))?,
+            "Overrightarrow" => self.accent(op!('⇒'))?,
+            "underrightarrow" => self.underscript(op!('→'))?,
+            "overleftrightarrow" => self.accent(op!('↔'))?,
+            "underleftrightarrow" => self.underscript(op!('↔'))?,
+            "overleftharpoon" => self.accent(op!('↼'))?,
+            "overrightharpoon" => self.accent(op!('⇀'))?,
 
-            // Wide accents
-            "widecheck" => accent!('ˇ', self),
-            "widehat" => accent!('^', self),
-            "widetilde" => accent!('~', self),
-            "wideparen" | "overparen" => accent!('⏜', self),
+            // Wide ops
+            "widecheck" => self.accent(op!('ˇ'))?,
+            "widehat" => self.accent(op!('^'))?,
+            "widetilde" => self.accent(op!('~'))?,
+            "wideparen" | "overparen" => self.accent(op!('⏜'))?,
 
             // Groups
-            "overgroup" => accent!('⏠', self),
-            "undergroup" => underscript!('⏡', self),
-            "overbrace" => accent!('⏞', self),
-            "underbrace" => underscript!('⏟', self),
-            "underparen" => underscript!('⏝', self),
+            "overgroup" => self.accent(op!('⏠'))?,
+            "undergroup" => self.underscript(op!('⏡'))?,
+            "overbrace" => self.accent(op!('⏞'))?,
+            "underbrace" => self.underscript(op!('⏟'))?,
+            "underparen" => self.underscript(op!('⏝'))?,
 
             // Primes
-            "prime" => op!('′'),
-            "dprime" => op!('″'),
-            "trprime" => op!('‴'),
-            "qprime" => op!('⁗'),
-            "backprime" => op!('‵'),
-            "backdprime" => op!('‶'),
-            "backtrprime" => op!('‷'),
+            "prime" => Event::Content(op!('′')),
+            "dprime" => Event::Content(op!('″')),
+            "trprime" => Event::Content(op!('‴')),
+            "qprime" => Event::Content(op!('⁗')),
+            "backprime" => Event::Content(op!('‵')),
+            "backdprime" => Event::Content(op!('‶')),
+            "backtrprime" => Event::Content(op!('‷')),
 
             /////////////
             // Spacing //
@@ -519,7 +418,8 @@ impl<'a> Parser<'a> {
             c if c.trim_start().is_empty() => Event::Content(Content::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
-                let dimension = lex::dimension(self.current_string()?)?;
+                let dimension =
+                    lex::dimension(self.current_string().ok_or(ParserError::Dimension)?)?;
                 Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -527,7 +427,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "hskip" => {
-                let glue = lex::glue(self.current_string()?)?;
+                let glue = lex::glue(self.current_string().ok_or(ParserError::Glue)?)?;
                 Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -535,7 +435,8 @@ impl<'a> Parser<'a> {
                 }
             }
             "mkern" => {
-                let dimension = lex::math_dimension(self.current_string()?)?;
+                let dimension =
+                    lex::math_dimension(self.current_string().ok_or(ParserError::Dimension)?)?;
                 Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -543,7 +444,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "mskip" => {
-                let glue = lex::math_glue(self.current_string()?)?;
+                let glue = lex::math_glue(self.current_string().ok_or(ParserError::Glue)?)?;
                 Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -551,8 +452,10 @@ impl<'a> Parser<'a> {
                 }
             }
             "hspace" => {
-                let Argument::Group(mut argument) = lex::argument(self.current_string()?)? else {
-                    return Err(ParseError::DimensionArgument);
+                let Argument::Group(mut argument) =
+                    lex::argument(self.current_string().ok_or(ParserError::Argument)?)?
+                else {
+                    return Err(ParserError::DimensionArgument);
                 };
                 let glue = lex::glue(&mut argument)?;
                 Event::Space {
@@ -581,104 +484,107 @@ impl<'a> Parser<'a> {
             ////////////////////////
             // Logic & Set Theory //
             ////////////////////////
-            "forall" => op!('∀'),
-            "complement" => op!('∁'),
-            "therefore" => op!('∴'),
-            "emptyset" => op!('∅'),
-            "exists" => op!('∃'),
-            "subset" => op!('⊂'),
-            "because" => op!('∵'),
-            "varnothing" => op!('⌀'),
-            "nexists" => op!('∄'),
-            "supset" => op!('⊃'),
-            "mapsto" => op!('↦'),
-            "implies" => op!('⟹'),
-            "in" => op!('∈'),
-            "mid" => op!('∣'),
-            "to" => op!('→'),
-            "impliedby" => op!('⟸'),
-            "ni" => op!('∋'),
-            "land" => op!('∧'),
-            "gets" => op!('←'),
-            "iff" => op!('⟺'),
-            "notni" => op!('∌'),
-            "neg" | "lnot" => op!('¬'),
-            "strictif" => op!('⥽'),
-            "strictfi" => op!('⥼'),
+            "forall" => Event::Content(op!('∀')),
+            "complement" => Event::Content(op!('∁')),
+            "therefore" => Event::Content(op!('∴')),
+            "emptyset" => Event::Content(op!('∅')),
+            "exists" => Event::Content(op!('∃')),
+            "subset" => Event::Content(op!('⊂')),
+            "because" => Event::Content(op!('∵')),
+            "varnothing" => Event::Content(op!('⌀')),
+            "nexists" => Event::Content(op!('∄')),
+            "supset" => Event::Content(op!('⊃')),
+            "mapsto" => Event::Content(op!('↦')),
+            "implies" => Event::Content(op!('⟹')),
+            "in" => Event::Content(op!('∈')),
+            "mid" => Event::Content(op!('∣')),
+            "to" => Event::Content(op!('→')),
+            "impliedby" => Event::Content(op!('⟸')),
+            "ni" => Event::Content(op!('∋')),
+            "land" => Event::Content(op!('∧')),
+            "gets" => Event::Content(op!('←')),
+            "iff" => Event::Content(op!('⟺')),
+            "notni" => Event::Content(op!('∌')),
+            "neg" | "lnot" => Event::Content(op!('¬')),
+            "strictif" => Event::Content(op!('⥽')),
+            "strictfi" => Event::Content(op!('⥼')),
 
             //////////////////////
             // Binary Operators //
             //////////////////////
-            "ldotp" => op!('.'),
-            "cdotp" => op!('·'),
-            "cdot" => op!('⋅'),
-            "centerdot" => op!('·'),
-            "circ" => op!('∘'),
-            "circledast" => op!('⊛'),
-            "circledcirc" => op!('⊚'),
-            "circleddash" => op!('⊝'),
-            "bigcirc" => op!('◯'),
-            "leftthreetimes" => op!('⋋'),
-            "rhd" => op!('⊳'),
-            "lhd" => op!('⊲'),
-            "leftouterjoin" => op!('⟕'),
-            "rightouterjoin" => op!('⟖'),
-            "rightthreetimes" => op!('⋌'),
-            "rtimes" => op!('⋊'),
-            "ltimes" => op!('⋉'),
-            "leftmodels" => op!('⊨'),
-            "amalg" => op!('⨿'),
-            "ast" => op!('*'),
-            "asymp" => op!('≍'),
-            "And" => op!('&'),
-            "lor" => op!('∨'),
-            "setminus" => op!('∖'),
-            "Cup" => op!('⋓'),
-            "cup" => op!('∪'),
-            "sqcup" => op!('⊔'),
-            "sqcap" => op!('⊓'),
-            "lessdot" => op!('⋖'),
-            "smallsetminus" => op!('∖', {size: Some((0.7, DimensionUnit::Em))}),
-            "barwedge" => op!('⌅'),
-            "curlyvee" => op!('⋎'),
-            "curlywedge" => op!('⋏'),
-            "sslash" => op!('⫽'),
-            "bowtie" | "Join" => op!('⋈'),
-            "div" => op!('÷'),
-            "mp" => op!('∓'),
-            "times" => op!('×'),
-            "boxdot" => op!('⊡'),
-            "divideontimes" => op!('⋇'),
-            "odot" => op!('⊙'),
-            "unlhd" => op!('⊴'),
-            "boxminus" => op!('⊟'),
-            "dotplus" => op!('∔'),
-            "ominus" => op!('⊖'),
-            "unrhd" => op!('⊵'),
-            "boxplus" => op!('⊞'),
-            "doublebarwedge" => op!('⩞'),
-            "oplus" => op!('⊕'),
-            "uplus" => op!('⊎'),
-            "boxtimes" => op!('⊠'),
-            "doublecap" => op!('⋒'),
-            "otimes" => op!('⊗'),
-            "vee" => op!('∨'),
-            "veebar" => op!('⊻'),
-            "Cap" => op!('⋒'),
-            "fullouterjoin" => op!('⟗'),
-            "parr" => op!('⅋'),
-            "wedge" => op!('∧'),
-            "cap" => op!('∩'),
-            "gtrdot" => op!('⋗'),
-            "pm" => op!('±'),
-            "with" => op!('&'),
-            "intercal" => op!('⊺'),
-            "wr" => op!('≀'),
+            "ldotp" => Event::Content(op!('.')),
+            "cdotp" => Event::Content(op!('·')),
+            "cdot" => Event::Content(op!('⋅')),
+            "centerdot" => Event::Content(op!('·')),
+            "circ" => Event::Content(op!('∘')),
+            "circledast" => Event::Content(op!('⊛')),
+            "circledcirc" => Event::Content(op!('⊚')),
+            "circleddash" => Event::Content(op!('⊝')),
+            "bigcirc" => Event::Content(op!('◯')),
+            "leftthreetimes" => Event::Content(op!('⋋')),
+            "rhd" => Event::Content(op!('⊳')),
+            "lhd" => Event::Content(op!('⊲')),
+            "leftouterjoin" => Event::Content(op!('⟕')),
+            "rightouterjoin" => Event::Content(op!('⟖')),
+            "rightthreetimes" => Event::Content(op!('⋌')),
+            "rtimes" => Event::Content(op!('⋊')),
+            "ltimes" => Event::Content(op!('⋉')),
+            "leftmodels" => Event::Content(op!('⊨')),
+            "amalg" => Event::Content(op!('⨿')),
+            "ast" => Event::Content(op!('*')),
+            "asymp" => Event::Content(op!('≍')),
+            "And" => Event::Content(op!('&')),
+            "lor" => Event::Content(op!('∨')),
+            "setminus" => Event::Content(op!('∖')),
+            "Cup" => Event::Content(op!('⋓')),
+            "cup" => Event::Content(op!('∪')),
+            "sqcup" => Event::Content(op!('⊔')),
+            "sqcap" => Event::Content(op!('⊓')),
+            "lessdot" => Event::Content(op!('⋖')),
+            "smallsetminus" => Event::Content(op!('∖', {size: Some((0.7, DimensionUnit::Em))})),
+            "barwedge" => Event::Content(op!('⌅')),
+            "curlyvee" => Event::Content(op!('⋎')),
+            "curlywedge" => Event::Content(op!('⋏')),
+            "sslash" => Event::Content(op!('⫽')),
+            "bowtie" | "Join" => Event::Content(op!('⋈')),
+            "div" => Event::Content(op!('÷')),
+            "mp" => Event::Content(op!('∓')),
+            "times" => Event::Content(op!('×')),
+            "boxdot" => Event::Content(op!('⊡')),
+            "divideontimes" => Event::Content(op!('⋇')),
+            "odot" => Event::Content(op!('⊙')),
+            "unlhd" => Event::Content(op!('⊴')),
+            "boxminus" => Event::Content(op!('⊟')),
+            "dotplus" => Event::Content(op!('∔')),
+            "ominus" => Event::Content(op!('⊖')),
+            "unrhd" => Event::Content(op!('⊵')),
+            "boxplus" => Event::Content(op!('⊞')),
+            "doublebarwedge" => Event::Content(op!('⩞')),
+            "oplus" => Event::Content(op!('⊕')),
+            "uplus" => Event::Content(op!('⊎')),
+            "boxtimes" => Event::Content(op!('⊠')),
+            "doublecap" => Event::Content(op!('⋒')),
+            "otimes" => Event::Content(op!('⊗')),
+            "vee" => Event::Content(op!('∨')),
+            "veebar" => Event::Content(op!('⊻')),
+            "Cap" => Event::Content(op!('⋒')),
+            "fullouterjoin" => Event::Content(op!('⟗')),
+            "parr" => Event::Content(op!('⅋')),
+            "wedge" => Event::Content(op!('∧')),
+            "cap" => Event::Content(op!('∩')),
+            "gtrdot" => Event::Content(op!('⋗')),
+            "pm" => Event::Content(op!('±')),
+            "with" => Event::Content(op!('&')),
+            "intercal" => Event::Content(op!('⊺')),
+            "wr" => Event::Content(op!('≀')),
             ///////////////
             // Fractions //
             ///////////////
             "frac" => {
-                let [numerator, denominator] = lex::arguments(self.current_string()?)?;
+                // TODO: This does not handle the case where both arguments are separated across different
+                // instructions.
+                let [numerator, denominator] =
+                    lex::arguments(self.current_string().ok_or(ParserError::Argument)?)?;
                 self.instruction_stack
                     .push(Instruction::Event(Event::EndGroup));
                 let denom_instruction = match denominator {
@@ -716,44 +622,126 @@ impl<'a> Parser<'a> {
                 Event::Visual(crate::event::Visual::Fraction(None))
             }
 
-            "angle" => ident!('∠'),
-            "approx" => op!('≈'),
-            "approxeq" => op!('≊'),
+            "angle" => Event::Content(ident!('∠')),
+            "approx" => Event::Content(op!('≈')),
+            "approxeq" => Event::Content(op!('≊')),
             "approxcolon" => {
-                self.instruction_stack.push(Instruction::Event(op! {
+                self.instruction_stack.push(Instruction::Event(Event::Content(op! {
                     ':',
                     {left_space: Some((0., DimensionUnit::Em))}
-                }));
-                op! {
+                })));
+                Event::Content(op! {
                     '≈',
                     {right_space: Some((0., DimensionUnit::Em))}
-                }
+                })
             }
             "approxcoloncolon" => {
                 self.instruction_stack.push(Instruction::Event(
-                    op! {':', {left_space: Some((0., DimensionUnit::Em))}},
+                    Event::Content(op! {':', {left_space: Some((0., DimensionUnit::Em))}}),
                 ));
-                self.instruction_stack.push(Instruction::Event(op! {
+                self.instruction_stack.push(Instruction::Event(Event::Content(op! {
                     ':',
                     {
                         left_space: Some((0., DimensionUnit::Em)),
                         right_space: Some((0., DimensionUnit::Em))
                     }
-                }));
-                op! {
+                })));
+                Event::Content(op! {
                     '≈',
                     {right_space: Some((0., DimensionUnit::Em))}
-                }
+                })
             }
-            "backsim" => op!('∽'),
-            "backsimeq" => op!('⋍'),
-            "backslash" => ident!('\\'),
-            "between" => op!('≬'),
+            "backsim" => Event::Content(op!('∽')),
+            "backsimeq" => Event::Content(op!('⋍')),
+            "backslash" => Event::Content(ident!('\\')),
+            "between" => Event::Content(op!('≬')),
 
             _ => todo!(),
         })
     }
+
+    /// Return a delimiter with the given size from the next character in the parser.
+    fn em_sized_delim(&mut self, size: f32) -> Result<Event<'a>> {
+        let delimiter = lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+        Ok(Event::Content(op!(delimiter, {size: Some((size, DimensionUnit::Em))})))
+    }
+
+    /// Override the `font_state` to the given font variant, and return the next event.
+    fn font_override(&mut self, font: Font) -> Result<Event<'a>> {
+        self.current_group_mut().font_state = Some(font);
+        self.next_unwrap()
+    }
+
+
+    /// Override the `font_state` for the argument to the command.
+    fn font_group(&mut self, font: Option<Font>) -> Result<Event<'a>> {
+        let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
+        match argument {
+            Argument::Token(Token::Character(c)) => self.handle_char_token(c),
+            Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs),
+            Argument::Group(g) => {
+                self.instruction_stack.push(Instruction::Substring {
+                    content: g,
+                    pop_internal_group: true,
+                });
+                self.group_stack.push(GroupNesting {
+                    font_state: font,
+                    group_type: GroupType::Internal,
+                });
+                self.next_unwrap()
+            }
+        }
+    }
+
+    /// Accent commands. parse the argument, and overset the accent.
+    fn accent(&mut self, accent: Content) -> Result<Event<'a>> {
+        let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
+        self.instruction_stack.extend([
+            Instruction::Event(Event::Content(accent)),
+            Instruction::Event(Event::Infix(Infix::Overscript)),
+        ]);
+        match argument {
+            Argument::Token(Token::Character(c)) => self.handle_char_token(c),
+            Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs),
+            Argument::Group(g) => {
+                self.instruction_stack.push(Instruction::Substring {
+                    content: g,
+                    pop_internal_group: true,
+                });
+                self.group_stack.push(GroupNesting {
+                    font_state: self.current_group().font_state,
+                    group_type: GroupType::Internal,
+                });
+                self.next_unwrap()
+            }
+        }
+    }
+
+    /// Underscript commands. parse the argument, and underset the accent.
+    fn underscript(&mut self, content: Content) -> Result<Event<'a>> {
+        let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
+        self.instruction_stack.extend([
+            Instruction::Event(Event::Content(content)),
+            Instruction::Event(Event::Infix(Infix::Underscript)),
+        ]);
+        match argument {
+            Argument::Token(Token::Character(c)) => self.handle_char_token(c),
+            Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs),
+            Argument::Group(g) => {
+                self.instruction_stack.push(Instruction::Substring {
+                    content: g,
+                    pop_internal_group: true,
+                });
+                self.group_stack.push(GroupNesting {
+                    font_state: self.current_group().font_state,
+                    group_type: GroupType::Internal,
+                });
+                self.next_unwrap()
+            }
+        }
+    }
 }
+
 
 // TODO implementations:
 // `*` ending commands
