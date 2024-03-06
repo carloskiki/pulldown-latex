@@ -66,7 +66,7 @@ impl<'a> Parser<'a> {
                 if let Some((_, rest)) = content.split_once('\n') {
                     *content = rest;
                 } else {
-                    *content = "";
+                    *content = &content[content.len()..];
                 };
                 return self.next_unwrap();
             }

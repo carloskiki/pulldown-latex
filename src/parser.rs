@@ -212,6 +212,14 @@ impl<'a> Parser<'a> {
             .expect("we should always be inside of a group")
     }
 
+    /// Handles the superscript and/or subscript following what was parsed previously.
+    ///
+    /// This must be called when a suffix can be expected on the element being parsed.
+    fn suffixes(&mut self) {
+        // TODO: We are here
+        todo!("")
+    }
+
     /// Return the next event by unwraping it.
     ///
     /// This is an internal function that only works if the `Parser` is currently parsing a string.
