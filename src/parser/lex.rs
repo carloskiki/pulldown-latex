@@ -35,15 +35,19 @@ pub fn argument<'a>(input: &mut &'a str) -> Result<Argument<'a>> {
 ///
 /// The output is the content within the group without the surrounding `{}`. This content is
 /// guaranteed to be balanced.
-// TODO: Handle `%` inside of the group, i.e., ignore everything after `%` until the end of the
-// group.
-// TODO: handle `%` with `Vec<&str>` by eagerly consuming the rest of the input until newline.
 pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
     let mut escaped = false;
+    let mut in_comment = false;
     // In this case `Err` is the desired result.
     let end_index = input
         .char_indices()
         .try_fold(0usize, |balance, (index, c)| match c {
+            _ if in_comment => {
+                if c == '\n' {
+                    in_comment = false;
+                }
+                Ok(balance)
+            }
             '{' if !escaped => Ok(balance + 1),
             '}' if !escaped => {
                 if balance == 0 {
@@ -55,6 +59,10 @@ pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
             '\\' => {
                 // Makes it so that two backslashes in a row don't escape the next character.
                 escaped = !escaped;
+                Ok(balance)
+            }
+            '%' if !escaped => {
+                in_comment = true;
                 Ok(balance)
             }
             _ => {
@@ -410,37 +418,26 @@ pub fn one_optional_space(input: &mut &str) -> bool {
 }
 
 /// Return the next token in the input.
+///
+/// A token will never be whitespace, and will never be a `%` character.
 pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
-    match control_sequence(input) {
-        Ok(cs) => Ok(Token::ControlSequence(cs)),
-        Err(_) => input
-            .chars()
-            .next()
-            .map_or(Err(ParserError::EndOfInput), |c| {
-                *input = &input[c.len_utf8()..];
-                Ok(Token::Character(c))
-            }),
+    input.trim_start();
+    match input.chars().next() {
+        Some('\\') => {
+            *input = &input[1..];
+            Ok(Token::ControlSequence(rhs_control_sequence(input)?))
+        },
+        Some('%') => {
+           let (_, rest) = input.split_once('\n').ok_or(ParserError::EndOfInput)?;
+           *input = rest;
+           token(input)
+        }
+        Some(c) if c.is_whitespace() => {
+            *input = &input[1..];
+            Ok(Token::Character(c))
+        }
+        None => Err(ParserError::EndOfInput),
     }
-}
-
-/// Parse the following `n` mandatory arguments.
-pub fn arguments<'a, const N: usize>(input: &mut &'a str) -> Result<[Argument<'a>; N]> {
-    let mut args = [MaybeUninit::uninit(); N];
-    let mut index = 0;
-    while index < N {
-        let arg = argument(input)?;
-        args[index].write(arg);
-        index += 1;
-    }
-
-    // Safety: all elements of `args` have been initialized.
-    //
-    // All elements are initialized in the loop, and the `index` is incremented if and
-    // only if the argument was initialized to. The only way of escaping the loop without
-    // having run through every index is the `?`, which returns an error. Thus if `args[index]` must
-    // be initialized for `index` to be incremented, and if the loop can only be exited once
-    // `index` is equal to `N`, then it follows that  `args[0..N]` is initialized.
-    Ok(args.map(|arg| unsafe { arg.assume_init() }))
 }
 
 #[cfg(test)]

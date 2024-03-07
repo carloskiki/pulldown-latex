@@ -2,12 +2,11 @@ mod lex;
 pub mod operator_table;
 mod primitives;
 
+use std::fmt::{Display, Write};
+
 use thiserror::Error;
 
-use crate::{
-    attribute::Font,
-    event::{Content, Event, Visual},
-};
+use crate::event::{Content, Event, Visual};
 
 // FOR NOW:
 // - Do not bother about macros, because they will be solvable.
@@ -43,11 +42,6 @@ use crate::{
 //  To remedy this, we could systematically make a Instruction::Substring represent a group, and
 //  thus when parsing a `{`, we would check if a `^` or `_` is present. This would make the events
 //  not be `infixes` anymore, which would play nicer with the mathml renderer.
-//
-// TODO: The parser should not return an initial `BeginGroup` event nor a final `EndGroup` event.
-//  Makig this change will invalidate the `next_unwrap` method, as we are not guaranteed to return
-//  something.
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Token<'a> {
     ControlSequence(&'a str),
@@ -62,39 +56,30 @@ pub enum Argument<'a> {
 
 #[derive(Debug)]
 pub(crate) enum Instruction<'a> {
-    /// Push the event
+    /// Send the event
     Event(Event<'a>),
     /// Parse the substring
-    Substring {
-        content: &'a str,
-        pop_internal_group: bool,
-    },
-    PopInternalGroup,
+    Substring(&'a str),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum GroupType {
-    /// The group was initiated by a command which required a subgroup, but should not be apparent
-    /// in the rendered output.
-    ///
-    /// For example, the `\mathbf` command should not output a group, but one is required for the
-    /// font state to be changed.
-    ///
-    /// Semantically, if an `Internal` group is at the top of the stack, then it should be popped
-    /// only by an encounter with an empty `Substring` instruction.
-    Internal,
     /// The group was initiated by a `{` character.
     Brace,
     /// The group was initiated by a `\begingroup` command.
     BeginGroup,
+    /// The group was initiated by a `\left` command.
+    LeftRight,
 }
 
-#[derive(Debug)]
-pub struct GroupNesting {
-    /// The font state of the group.
-    font_state: Option<Font>,
-    /// How was the group opened?
-    group_type: GroupType,
+impl Display for GroupType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GroupType::Brace => f.write_char('}'),
+            GroupType::BeginGroup => f.write_str("\\endgroup"),
+            GroupType::LeftRight => f.write_str("\\right"),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -109,15 +94,16 @@ pub struct Parser<'a> {
     /// multiple events, so we need to keep track of them and ouput them in the next
     /// iteration before continuing parsing.
     pub(crate) instruction_stack: Vec<Instruction<'a>>,
-    /// The initial byte pointer of the input.
-    /// The stack representing group nesting.
-    pub(crate) group_stack: Vec<GroupNesting>,
+
+    pub(crate) group_stack: Vec<GroupType>,
 }
 
 pub type Result<T> = std::result::Result<T, ParserError>;
 
 #[derive(Debug, Error)]
 pub enum ParserError {
+    #[error("unbalanced group found, expected {}", .0.map_or("no group closing", |t| &t.to_string()))]
+    UnbalancedGroup(Option<GroupType>),
     #[error(
         "unexpected math `$` (math shift) character - this character is currently unsupported."
     )]
@@ -148,6 +134,14 @@ pub enum ParserError {
     CharacterNumber,
     #[error("expected an argument")]
     Argument,
+    #[error("trying to add a subscript to an empty element")]
+    Subscript,
+    #[error("trying to add a superscript to an empty element")]
+    Superscript,
+    #[error("Trying to add a subscript twice to the same element")]
+    DoubleSubscript,
+    #[error("Trying to add a superscript twice to the same element")]
+    DoubleSuperscript,
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
@@ -155,102 +149,66 @@ impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
         Self {
             input,
-            instruction_stack: Vec::from([
-                Instruction::Event(Event::EndGroup),
-                Instruction::Substring {
-                    content: input,
-                    pop_internal_group: true,
-                },
-                Instruction::Event(Event::BeginGroup),
-            ]),
-            group_stack: Vec::from([GroupNesting {
-                font_state: None,
-                group_type: GroupType::Internal,
-            }]),
+            instruction_stack: Vec::from([Instruction::Substring(input)]),
+            group_stack: Vec::new(),
         }
     }
 
     /// Get the current string we are parsing.
-    // TODO: Should this simply return the string, and not a result?
+    ///
+    /// This function guarantees that the string returned is not empty.
     fn current_string(&mut self) -> Option<&mut &'a str> {
-        let Some(Instruction::Substring {
-            content,
-            pop_internal_group,
-        }) = self.instruction_stack.last()
-        else {
+        let Some(Instruction::Substring(content)) = self.instruction_stack.last() else {
             return None;
         };
         if content.is_empty() {
-            if *pop_internal_group {
-                let group = self.group_stack.pop();
-                assert!(
-                    group.is_some_and(|g| matches!(g.group_type, GroupType::Internal)),
-                    "(internal error) `internal` group should be at the top of the stack"
-                );
-            }
             self.instruction_stack.pop();
             self.current_string()
         } else {
             match self.instruction_stack.last_mut() {
-                Some(Instruction::Substring { content, .. }) => Some(content),
+                Some(Instruction::Substring(content)) => Some(content),
                 _ => unreachable!(),
             }
         }
     }
 
-    /// Get the current group we are in.
-    fn current_group(&self) -> &GroupNesting {
-        self.group_stack
-            .last()
-            .expect("we should always be inside of a group")
-    }
-
-    /// Get the current group we are in, mutably.
-    fn current_group_mut(&mut self) -> &mut GroupNesting {
-        self.group_stack
-            .last_mut()
-            .expect("we should always be inside of a group")
-    }
-
     /// Handles the superscript and/or subscript following what was parsed previously.
     ///
     /// This must be called when a suffix can be expected on the element being parsed.
-    fn suffixes(&mut self) -> Result<()> {
-        let Some(input) = self.current_string() else {
-            return Ok(());
-        };
-        let mut chars = input.chars();
-        let suffix = match chars.next() {
-            Some('^') => Visual::Superscript,
-            Some('_') => Visual::Subscript,
-            _ => return Ok(()),
-        };
-        *input = chars.as_str();
-        self.instruction_stack.push(Instruction::Event(Event::Visual(suffix)));
-        let argument = lex::argument(input)?;
-        // TODO: We are here
-        todo!()
-
-    }
-
-    fn handle_arugment(&mut self, argument: Argument<'a>) -> Result<Event<'a>> {
-        match argument {
-            Argument::Token(token) => match token {
-                Token::ControlSequence(cs) => self.handle_primitive(cs),
-                Token::Character(c) => self.handle_char_token(c),
-            },
-            Argument::Group(group) => self.handle_group(group),
+    fn check_suffixes(&mut self) -> Option<Result<Visual>> {
+        let curr_string = self.current_string()?;
+        match curr_string.chars().next().expect("current_string is not empty") {
+            '^' => {
+                *curr_string = &curr_string[1..];
+                Some(Ok(Visual::Superscript))
+            }
+            '_' => {
+                *curr_string = &curr_string[1..];
+                Some(Ok(Visual::Subscript))
+            }
+            _ => None,
+            
         }
-        // TODO: We are here
     }
 
-    /// Return the next event by unwraping it.
-    ///
-    /// This is an internal function that only works if the `Parser` is currently parsing a string.
-    /// If it is so, then we are guaranteed to at least return one event next, the `EndGroup` event.
-    fn next_unwrap(&mut self) -> Result<Event<'a>> {
-        self.next()
-            .expect("we should always have at least one event")
+    /// Parse an arugment and pushes the argument to the stack surrounded by a
+    /// group: [..., EndGroup, Argument, BeginGroup]
+    //
+    // TODO: What if we get something like '^' as an argument?, the function handle_char_token will
+    // throw an error, so should we
+    pub(crate) fn handle_argument(&mut self, argument: Argument<'a>) -> Result<()> {
+        self.instruction_stack
+            .push(Instruction::Event(Event::EndGroup));
+        let arg = match argument {
+            Argument::Token(token) => Instruction::Event(match token {
+                Token::ControlSequence(cs) => self.handle_primitive(cs)?,
+                Token::Character(c) => self.handle_char_token(c)?,
+            }),
+            Argument::Group(group) => Instruction::Substring(group),
+        };
+        self.instruction_stack
+            .extend([arg, Instruction::Event(Event::BeginGroup)]);
+        Ok(())
     }
 
     /// Return the context surrounding the error reported.
@@ -282,13 +240,16 @@ impl<'a> Iterator for Parser<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         match self.instruction_stack.last_mut() {
             Some(Instruction::Event(_)) => {
-                let event = self.instruction_stack.pop().unwrap();
+                let event = self
+                    .instruction_stack
+                    .pop()
+                    .expect("there is something in the stack");
                 Some(Ok(match event {
                     Instruction::Event(event) => event,
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::Substring { content, .. }) => {
+            Some(Instruction::Substring(content)) => {
                 if content.is_empty() {
                     self.instruction_stack.pop();
                     return self.next();
@@ -297,7 +258,7 @@ impl<'a> Iterator for Parser<'a> {
                 let next_char = chars.next().expect("the content is not empty");
 
                 Some(match next_char {
-                    // TODO: Why are numbers handled here?
+                    // TODO: Comments should be handled here.
                     '.' | '0'..='9' => {
                         let len = content
                             .chars()
@@ -307,10 +268,7 @@ impl<'a> Iterator for Parser<'a> {
                             + 1;
                         let (number, rest) = content.split_at(len);
                         *content = rest;
-                        Ok(Event::Content(Content::Number {
-                            content: number,
-                            variant: self.group_stack.last().and_then(|g| g.font_state),
-                        }))
+                        Ok(Event::Content(Content::Number(number)))
                     }
                     '\\' => {
                         *content = &content[1..];
@@ -329,7 +287,7 @@ impl<'a> Iterator for Parser<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Identifier, Infix, Operator};
+    use crate::event::{Identifier, Operator};
 
     use super::*;
 
@@ -349,14 +307,10 @@ mod tests {
         assert_eq!(
             events,
             vec![
+                Event::Visual(Visual::Overscript),
                 Event::BeginGroup,
-                Event::BeginGroup,
-                Event::Content(Content::Identifier(Identifier::Char {
-                    content: 'y',
-                    variant: None,
-                })),
+                Event::Content(Content::Identifier(Identifier::Char('y'))),
                 Event::EndGroup,
-                Event::Infix(Infix::Overscript),
                 Event::Content(Content::Operator(Operator {
                     content: '‾',
                     stretchy: None,
@@ -365,11 +319,17 @@ mod tests {
                     right_space: None,
                     size: None,
                 })),
-                Event::EndGroup
             ]
         );
     }
 }
+
+
+// How to handle Comments:
+//
+// Comments are handled by the lexer, and are not passed to the parser. The lexer will remove the 
+// comment from the input, and the parser will not see it.
+
 
 // Token parsing procedure, as per TeXbook p. 46-47.
 //

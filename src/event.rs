@@ -9,23 +9,20 @@ pub enum Event<'a> {
     ///
     /// For example, a `Fraction` event signals that the next event is the denominator of a
     /// fraction where the previous event is the numerator.
-    Infix(Infix),
     Visual(Visual),
     Space {
         width: Option<Dimension>,
         height: Option<Dimension>,
         depth: Option<Dimension>,
     },
+    FontChange(Option<Font>),
 }
 
 /// Base events that produce `mathml` nodes
 #[derive(Debug, PartialEq)]
 pub enum Content<'a> {
     Text(&'a str),
-    Number {
-        content: &'a str,
-        variant: Option<Font>,
-    },
+    Number(&'a str),
     Identifier(Identifier<'a>),
     Operator(Operator),
 }
@@ -43,21 +40,26 @@ pub struct Operator {
 #[derive(Debug, PartialEq, Eq)]
 pub enum Identifier<'a> {
     Str(&'a str),
-    Char {
-        content: char,
-        variant: Option<Font>,
-    },
+    Char(char)
 }
 
 /// Event that affect the following 2 events visually
 #[derive(Debug, PartialEq)]
 pub enum Visual {
-    Root,
-    Fraction(Option<Dimension> /* TODO: style */),
+    /// The following event is the content of the root
+    SquareRoot,
+    /// The 2 following events are the numerator and denominator of a fraction
+    Fraction(Option<Dimension>),
+    /// The 2 following events are the base and and the subscript
     Subscript,
+    /// The 2 following events are the base and and the superscript
     Superscript,
+    /// The 3 following events are the base, subscript and superscript
     SubSuperscript,
+    /// The 2 following events are the base and and the underscript
     Underscript,
+    /// The 2 following events are the base and and the overscript
     Overscript,
+    /// The 3 following events are the base, underscript and overscript
     UnderOverscript,
 }

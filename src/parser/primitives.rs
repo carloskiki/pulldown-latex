@@ -3,13 +3,13 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{Content, Event, Identifier, Infix, Operator},
+    event::{Content, Event, Identifier, Operator, Visual},
 };
 
 use super::{
     lex,
     operator_table::{is_delimiter, is_operator},
-    Argument, GroupNesting, GroupType, Instruction, Parser, ParserError, Result, Token,
+    Argument, GroupType, Instruction, Parser, ParserError, Result,
 };
 
 /// Return a `Content::Identifier` event with the given content and font variant.
@@ -17,16 +17,7 @@ use super::{
 /// If self is not provided, the font variant is set to `None`.
 macro_rules! ident {
     ($content:expr) => {
-        Content::Identifier(Identifier::Char {
-            content: $content,
-            variant: None,
-        })
-    };
-    ($content:expr, $self_:ident) => {
-        Content::Identifier(Identifier::Char {
-            content: $content,
-            variant: $self_.current_group().font_state,
-        })
+        Content::Identifier(Identifier::Char($content))
     };
 }
 
@@ -47,6 +38,16 @@ macro_rules! op {
     };
 }
 
+macro_rules! ensure_eq {
+    ($left:expr, $right:expr, $err:expr) => {
+        if $left != $right {
+            return Err($err);
+        }
+    };
+}
+
+// TODO: Every primitive must represent one and only one mathml node, we must ensure that it is
+// wrapped inside of a group. e.g., `\approxcoloncolon`, `\genfrac`, etc.
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -54,45 +55,26 @@ impl<'a> Parser<'a> {
     /// This function specially treats numbers as `mi`.
     ///
     /// ## Panics
-    /// - This function will panic if the `\` character is given
+    /// - This function will panic if the `\` or `%` character is given
     pub fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
         Ok(match token {
-            '\\' => panic!("this function does not handle control sequences"),
             // TODO: Check how we want to handle comments actually.
-            '%' => {
-                let Some(content) = self.current_string() else {
-                    return self.next_unwrap();
-                };
-                if let Some((_, rest)) = content.split_once('\n') {
-                    *content = rest;
-                } else {
-                    *content = &content[content.len()..];
-                };
-                return self.next_unwrap();
-            }
-            '{' => {
-                self.group_stack.push(GroupNesting {
-                    font_state: self.current_group().font_state,
-                    group_type: GroupType::Brace,
-                });
-                Event::BeginGroup
-            }
-            '}' => {
-                let group = self.group_stack.pop();
-                assert!(matches!(
-                    group,
-                    Some(GroupNesting {
-                        group_type: GroupType::Brace,
-                        ..
-                    })
-                ));
-                Event::EndGroup
-            }
-            '_' => Event::Infix(Infix::Subscript),
-            '^' => Event::Infix(Infix::Superscript),
+            '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
+            '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
+            '_' => return Err(ParserError::Subscript),
+            '^' => return Err(ParserError::Superscript),
             '$' => return Err(ParserError::MathShift),
             '#' => return Err(ParserError::HashSign),
             '&' => return Err(ParserError::AlignmentChar),
+            '{' => {
+                self.group_stack.push(GroupType::Brace);
+                Event::BeginGroup
+            },
+            '}' => {
+                let grouping = self.group_stack.pop().ok_or(ParserError::UnbalancedGroup(None))?;
+                ensure_eq!(grouping, GroupType::Brace, ParserError::UnbalancedGroup(Some(grouping)));
+                Event::EndGroup
+            },
             // TODO: check for double and triple primes
             '\'' => Event::Content(op!('′')),
 
@@ -122,59 +104,59 @@ impl<'a> Parser<'a> {
             // Non-Latin Alphabets //
             /////////////////////////
             // Lowercase Greek letters
-            "alpha" => Event::Content(ident!('α', self)),
-            "beta" => Event::Content(ident!('β', self)),
-            "gamma" => Event::Content(ident!('γ', self)),
-            "delta" => Event::Content(ident!('δ', self)),
-            "epsilon" => Event::Content(ident!('ϵ', self)),
-            "varepsilon" => Event::Content(ident!('ε', self)),
-            "zeta" => Event::Content(ident!('ζ', self)),
-            "eta" => Event::Content(ident!('η', self)),
-            "theta" => Event::Content(ident!('θ', self)),
-            "vartheta" => Event::Content(ident!('ϑ', self)),
-            "iota" => Event::Content(ident!('ι', self)),
-            "kappa" => Event::Content(ident!('κ', self)),
-            "lambda" => Event::Content(ident!('λ', self)),
-            "mu" => Event::Content(ident!('µ', self)),
-            "nu" => Event::Content(ident!('ν', self)),
-            "xi" => Event::Content(ident!('ξ', self)),
-            "pi" => Event::Content(ident!('π', self)),
-            "varpi" => Event::Content(ident!('ϖ', self)),
-            "rho" => Event::Content(ident!('ρ', self)),
-            "varrho" => Event::Content(ident!('ϱ', self)),
-            "sigma" => Event::Content(ident!('σ', self)),
-            "varsigma" => Event::Content(ident!('ς', self)),
-            "tau" => Event::Content(ident!('τ', self)),
-            "upsilon" => Event::Content(ident!('υ', self)),
-            "phi" => Event::Content(ident!('φ', self)),
-            "varphi" => Event::Content(ident!('ϕ', self)),
-            "chi" => Event::Content(ident!('χ', self)),
-            "psi" => Event::Content(ident!('ψ', self)),
-            "omega" => Event::Content(ident!('ω', self)),
+            "alpha" => Event::Content(ident!('α')),
+            "beta" => Event::Content(ident!('β')),
+            "gamma" => Event::Content(ident!('γ')),
+            "delta" => Event::Content(ident!('δ')),
+            "epsilon" => Event::Content(ident!('ϵ')),
+            "varepsilon" => Event::Content(ident!('ε')),
+            "zeta" => Event::Content(ident!('ζ')),
+            "eta" => Event::Content(ident!('η')),
+            "theta" => Event::Content(ident!('θ')),
+            "vartheta" => Event::Content(ident!('ϑ')),
+            "iota" => Event::Content(ident!('ι')),
+            "kappa" => Event::Content(ident!('κ')),
+            "lambda" => Event::Content(ident!('λ')),
+            "mu" => Event::Content(ident!('µ')),
+            "nu" => Event::Content(ident!('ν')),
+            "xi" => Event::Content(ident!('ξ')),
+            "pi" => Event::Content(ident!('π')),
+            "varpi" => Event::Content(ident!('ϖ')),
+            "rho" => Event::Content(ident!('ρ')),
+            "varrho" => Event::Content(ident!('ϱ')),
+            "sigma" => Event::Content(ident!('σ')),
+            "varsigma" => Event::Content(ident!('ς')),
+            "tau" => Event::Content(ident!('τ')),
+            "upsilon" => Event::Content(ident!('υ')),
+            "phi" => Event::Content(ident!('φ')),
+            "varphi" => Event::Content(ident!('ϕ')),
+            "chi" => Event::Content(ident!('χ')),
+            "psi" => Event::Content(ident!('ψ')),
+            "omega" => Event::Content(ident!('ω')),
             // Uppercase Greek letters
-            "Alpha" => Event::Content(ident!('Α', self)),
-            "Beta" => Event::Content(ident!('Β', self)),
-            "Gamma" => Event::Content(ident!('Γ', self)),
-            "Delta" => Event::Content(ident!('Δ', self)),
-            "Epsilon" => Event::Content(ident!('Ε', self)),
-            "Zeta" => Event::Content(ident!('Ζ', self)),
-            "Eta" => Event::Content(ident!('Η', self)),
-            "Theta" => Event::Content(ident!('Θ', self)),
-            "Iota" => Event::Content(ident!('Ι', self)),
-            "Kappa" => Event::Content(ident!('Κ', self)),
-            "Lambda" => Event::Content(ident!('Λ', self)),
-            "Mu" => Event::Content(ident!('Μ', self)),
-            "Nu" => Event::Content(ident!('Ν', self)),
-            "Xi" => Event::Content(ident!('Ξ', self)),
-            "Pi" => Event::Content(ident!('Π', self)),
-            "Rho" => Event::Content(ident!('Ρ', self)),
-            "Sigma" => Event::Content(ident!('Σ', self)),
-            "Tau" => Event::Content(ident!('Τ', self)),
-            "Upsilon" => Event::Content(ident!('Υ', self)),
-            "Phi" => Event::Content(ident!('Φ', self)),
-            "Chi" => Event::Content(ident!('Χ', self)),
-            "Psi" => Event::Content(ident!('Ψ', self)),
-            "Omega" => Event::Content(ident!('Ω', self)),
+            "Alpha" => Event::Content(ident!('Α')),
+            "Beta" => Event::Content(ident!('Β')),
+            "Gamma" => Event::Content(ident!('Γ')),
+            "Delta" => Event::Content(ident!('Δ')),
+            "Epsilon" => Event::Content(ident!('Ε')),
+            "Zeta" => Event::Content(ident!('Ζ')),
+            "Eta" => Event::Content(ident!('Η')),
+            "Theta" => Event::Content(ident!('Θ')),
+            "Iota" => Event::Content(ident!('Ι')),
+            "Kappa" => Event::Content(ident!('Κ')),
+            "Lambda" => Event::Content(ident!('Λ')),
+            "Mu" => Event::Content(ident!('Μ')),
+            "Nu" => Event::Content(ident!('Ν')),
+            "Xi" => Event::Content(ident!('Ξ')),
+            "Pi" => Event::Content(ident!('Π')),
+            "Rho" => Event::Content(ident!('Ρ')),
+            "Sigma" => Event::Content(ident!('Σ')),
+            "Tau" => Event::Content(ident!('Τ')),
+            "Upsilon" => Event::Content(ident!('Υ')),
+            "Phi" => Event::Content(ident!('Φ')),
+            "Chi" => Event::Content(ident!('Χ')),
+            "Psi" => Event::Content(ident!('Ψ')),
+            "Omega" => Event::Content(ident!('Ω')),
             // Hebrew letters
             "aleph" => Event::Content(ident!('ℵ')),
             "beth" => Event::Content(ident!('ℶ')),
@@ -216,7 +198,9 @@ impl<'a> Parser<'a> {
             "mathcal" | "symcal" | "mathup" | "symup" => self.font_group(Some(Font::Script))?,
             "mathit" | "symit" => self.font_group(Some(Font::Italic))?,
             "mathrm" | "symrm" => self.font_group(Some(Font::UpRight))?,
-            "mathsf" | "symsf" | "mathsfup" | "symsfup" => self.font_group(Some(Font::SansSerif))?,
+            "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
+                self.font_group(Some(Font::SansSerif))?
+            }
             "mathtt" | "symtt" => self.font_group(Some(Font::Monospace))?,
             "mathbb" | "symbb" => self.font_group(Some(Font::DoubleStruck))?,
             "mathfrak" | "symfrak" => self.font_group(Some(Font::Fraktur))?,
@@ -231,10 +215,12 @@ impl<'a> Parser<'a> {
             //////////////////
             // Miscellanous //
             //////////////////
-            "#" | "%" | "&" | "$" | "_" => Event::Content(Content::Identifier(Identifier::Char {
-                content: control_sequence.chars().next().unwrap(),
-                variant: None,
-            })),
+            "#" | "%" | "&" | "$" | "_" => Event::Content(Content::Identifier(Identifier::Char(
+                control_sequence
+                    .chars()
+                    .next()
+                    .expect("the control sequence contains one of the matched characters"),
+            ))),
             "|" => Event::Content(op!('∥', {stretchy: Some(false)})),
 
             //////////////////////////////
@@ -247,7 +233,7 @@ impl<'a> Parser<'a> {
             "bigg" | "biggl" | "biggr" | "biggm" => self.em_sized_delim(2.4)?,
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => self.em_sized_delim(3.0)?,
 
-            // TODO: maybe use something else than an internal group for this?
+            // TODO: This does not work anymore we have to check how we want to handle this.
             "left" => {
                 let curr_str = self.current_string().ok_or(ParserError::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
@@ -258,10 +244,6 @@ impl<'a> Parser<'a> {
                     self.instruction_stack
                         .push(Instruction::Event(Event::Content(op!(delimiter))));
                 }
-                self.group_stack.push(GroupNesting {
-                    font_state: self.current_group().font_state,
-                    group_type: GroupType::Internal,
-                });
                 Event::BeginGroup
             }
             "middle" => {
@@ -270,15 +252,6 @@ impl<'a> Parser<'a> {
                 Event::Content(op!(delimiter))
             }
             "right" => {
-                let group = self.group_stack.pop();
-                assert!(matches!(
-                    group,
-                    Some(GroupNesting {
-                        group_type: GroupType::Internal,
-                        ..
-                    })
-                ));
-
                 let curr_str = self.current_string().ok_or(ParserError::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
@@ -585,67 +558,38 @@ impl<'a> Parser<'a> {
                 // instructions.
                 let [numerator, denominator] =
                     lex::arguments(self.current_string().ok_or(ParserError::Argument)?)?;
-                self.instruction_stack
-                    .push(Instruction::Event(Event::EndGroup));
-                let denom_instruction = match denominator {
-                    Argument::Token(Token::Character(c)) => {
-                        Instruction::Event(self.handle_char_token(c)?)
-                    }
-                    Argument::Token(Token::ControlSequence(cs)) => {
-                        Instruction::Event(self.handle_primitive(cs)?)
-                    }
-                    Argument::Group(content) => Instruction::Substring {
-                        content,
-                        pop_internal_group: false,
-                    },
-                };
-                self.instruction_stack.extend([
-                    denom_instruction,
-                    Instruction::Event(Event::BeginGroup),
-                    Instruction::Event(Event::EndGroup),
-                ]);
-
-                let num_instruction = match numerator {
-                    Argument::Token(Token::Character(c)) => {
-                        Instruction::Event(self.handle_char_token(c)?)
-                    }
-                    Argument::Token(Token::ControlSequence(cs)) => {
-                        Instruction::Event(self.handle_primitive(cs)?)
-                    }
-                    Argument::Group(content) => Instruction::Substring {
-                        content,
-                        pop_internal_group: false,
-                    },
-                };
-                self.instruction_stack
-                    .extend([num_instruction, Instruction::Event(Event::BeginGroup)]);
-                Event::Visual(crate::event::Visual::Fraction(None))
+                self.handle_argument(denominator)?;
+                self.handle_argument(numerator)?;
+                Event::Visual(Visual::Fraction(None))
             }
 
             "angle" => Event::Content(ident!('∠')),
             "approx" => Event::Content(op!('≈')),
             "approxeq" => Event::Content(op!('≊')),
             "approxcolon" => {
-                self.instruction_stack.push(Instruction::Event(Event::Content(op! {
-                    ':',
-                    {left_space: Some((0., DimensionUnit::Em))}
-                })));
+                self.instruction_stack
+                    .push(Instruction::Event(Event::Content(op! {
+                        ':',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })));
                 Event::Content(op! {
                     '≈',
                     {right_space: Some((0., DimensionUnit::Em))}
                 })
             }
             "approxcoloncolon" => {
-                self.instruction_stack.push(Instruction::Event(
-                    Event::Content(op! {':', {left_space: Some((0., DimensionUnit::Em))}}),
-                ));
-                self.instruction_stack.push(Instruction::Event(Event::Content(op! {
-                    ':',
-                    {
-                        left_space: Some((0., DimensionUnit::Em)),
-                        right_space: Some((0., DimensionUnit::Em))
-                    }
-                })));
+                self.instruction_stack.extend([
+                    Instruction::Event(Event::Content(
+                        op! {':', {left_space: Some((0., DimensionUnit::Em))}},
+                    )),
+                    Instruction::Event(Event::Content(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                ]);
                 Event::Content(op! {
                     '≈',
                     {right_space: Some((0., DimensionUnit::Em))}
@@ -663,87 +607,88 @@ impl<'a> Parser<'a> {
     /// Return a delimiter with the given size from the next character in the parser.
     fn em_sized_delim(&mut self, size: f32) -> Result<Event<'a>> {
         let delimiter = lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
-        Ok(Event::Content(op!(delimiter, {size: Some((size, DimensionUnit::Em))})))
+        Ok(Event::Content(
+            op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
+        ))
     }
 
     /// Override the `font_state` to the given font variant, and return the next event.
     fn font_override(&mut self, font: Font) -> Result<Event<'a>> {
-        self.current_group_mut().font_state = Some(font);
-        self.next_unwrap()
+        Ok(Event::FontChange(Some(font)))
     }
-
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> Result<Event<'a>> {
-        // TODO: This is straight up wrong, we do not seem to apply the font to non grouped
-        // things.
         let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
-        match argument {
-            Argument::Token(Token::Character(c)) => self.handle_char_token(c),
-            Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs),
-            Argument::Group(g) => {
-                self.instruction_stack.push(Instruction::Substring {
-                    content: g,
-                    pop_internal_group: true,
-                });
-                self.group_stack.push(GroupNesting {
-                    font_state: font,
-                    group_type: GroupType::Internal,
-                });
-                self.next_unwrap()
-            }
-        }
+        self.instruction_stack
+            .push(Instruction::Event(Event::EndGroup));
+        self.handle_argument(argument)?;
+        // Kind of silly, we could inline `handle_argument` here and not push the
+        // BeginGroup
+        self.instruction_stack.pop();
+        self.instruction_stack
+            .push(Instruction::Event(Event::FontChange(font)));
+        Ok(Event::BeginGroup)
     }
 
     /// Accent commands. parse the argument, and overset the accent.
-    fn accent(&mut self, accent: Content) -> Result<Event<'a>> {
+    fn accent(&mut self, accent: Content<'a>) -> Result<Event<'a>> {
+        self.instruction_stack
+            .push(Instruction::Event(Event::Content(accent)));
+
         let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
-        self.instruction_stack.extend([
-            Instruction::Event(Event::Content(accent)),
-            Instruction::Event(Event::Infix(Infix::Overscript)),
-        ]);
-        match argument {
-            Argument::Token(Token::Character(c)) => self.handle_char_token(c),
-            Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs),
-            Argument::Group(g) => {
-                self.instruction_stack.push(Instruction::Substring {
-                    content: g,
-                    pop_internal_group: true,
-                });
-                self.group_stack.push(GroupNesting {
-                    font_state: self.current_group().font_state,
-                    group_type: GroupType::Internal,
-                });
-                self.next_unwrap()
-            }
-        }
+        self.handle_argument(argument)?;
+        Ok(Event::Visual(Visual::Overscript))
     }
 
     /// Underscript commands. parse the argument, and underset the accent.
-    fn underscript(&mut self, content: Content) -> Result<Event<'a>> {
+    fn underscript(&mut self, content: Content<'a>) -> Result<Event<'a>> {
+        self.instruction_stack
+            .push(Instruction::Event(Event::Content(content)));
+
         let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
-        self.instruction_stack.extend([
-            Instruction::Event(Event::Content(content)),
-            Instruction::Event(Event::Infix(Infix::Underscript)),
-        ]);
-        match argument {
-            Argument::Token(Token::Character(c)) => self.handle_char_token(c),
-            Argument::Token(Token::ControlSequence(cs)) => self.handle_primitive(cs),
-            Argument::Group(g) => {
-                self.instruction_stack.push(Instruction::Substring {
-                    content: g,
-                    pop_internal_group: true,
-                });
-                self.group_stack.push(GroupNesting {
-                    font_state: self.current_group().font_state,
-                    group_type: GroupType::Internal,
-                });
-                self.next_unwrap()
-            }
+        self.handle_argument(argument)?;
+        Ok(Event::Visual(Visual::Underscript))
+    }
+
+    fn ident(&mut self, ident: char) -> Result<Event<'a>> {
+        let event = Event::Content(Content::Identifier(Identifier::Char(ident)));
+
+        if let Some(suffixes) = self.check_suffixes() {
+            self.instruction_stack.push(Instruction::Event(event));
+            Ok(Event::Visual(suffixes?))
+        } else {
+            Ok(event)
+        }
+    }
+
+    fn operator(&mut self, operator: Operator) -> Result<Event<'a>> {
+        let event = Event::Content(Content::Operator(operator));
+
+        if let Some(suffixes) = self.check_suffixes() {
+            self.instruction_stack.push(Instruction::Event(event));
+            Ok(Event::Visual(suffixes?))
+        } else {
+            Ok(event)
         }
     }
 }
 
+// Fonts are handled by the renderer using groups.
+// In font group, a group is opened, the font state is set, and the argument is parsed.
+// In frac, always use groups for safety.
+// In accent, always use groups for safety.
+// Everywhere, we can't go wrong using groups.
+//
+//
+// Expanded macros are owned strings, and to fetch the context of an error, we use the previous
+// string in the stack. INVARIANT: an expanded macro must always have a source that is its neigbour
+// in the stack. That is because macro expansion does not output anything other than the expanded
+// macro to the top of the stack. Example: [... (Other stuff), &'a str (source), String (macro), String (macro)]
+//
+//
+// Comments must be checked when parsing an argument, but are left in the string in order to have a
+// continuous string.
 
 // TODO implementations:
 // `*` ending commands
