@@ -675,6 +675,8 @@ impl<'a> Parser<'a> {
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> Result<Event<'a>> {
+        // TODO: This is straight up wrong, we do not seem to apply the font to non grouped
+        // things.
         let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
         match argument {
             Argument::Token(Token::Character(c)) => self.handle_char_token(c),

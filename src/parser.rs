@@ -6,7 +6,7 @@ use thiserror::Error;
 
 use crate::{
     attribute::Font,
-    event::{Content, Event},
+    event::{Content, Event, Visual},
 };
 
 // FOR NOW:
@@ -39,7 +39,6 @@ use crate::{
 //
 // Either way, we will be fine so lets not worry about it for now.
 
-
 // TODO: double subscript and superscript errors are not handled.
 //  To remedy this, we could systematically make a Instruction::Substring represent a group, and
 //  thus when parsing a `{`, we would check if a `^` or `_` is present. This would make the events
@@ -70,6 +69,7 @@ pub(crate) enum Instruction<'a> {
         content: &'a str,
         pop_internal_group: bool,
     },
+    PopInternalGroup,
 }
 
 #[derive(Debug)]
@@ -215,9 +215,33 @@ impl<'a> Parser<'a> {
     /// Handles the superscript and/or subscript following what was parsed previously.
     ///
     /// This must be called when a suffix can be expected on the element being parsed.
-    fn suffixes(&mut self) {
+    fn suffixes(&mut self) -> Result<()> {
+        let Some(input) = self.current_string() else {
+            return Ok(());
+        };
+        let mut chars = input.chars();
+        let suffix = match chars.next() {
+            Some('^') => Visual::Superscript,
+            Some('_') => Visual::Subscript,
+            _ => return Ok(()),
+        };
+        *input = chars.as_str();
+        self.instruction_stack.push(Instruction::Event(Event::Visual(suffix)));
+        let argument = lex::argument(input)?;
         // TODO: We are here
-        todo!("")
+        todo!()
+
+    }
+
+    fn handle_arugment(&mut self, argument: Argument<'a>) -> Result<Event<'a>> {
+        match argument {
+            Argument::Token(token) => match token {
+                Token::ControlSequence(cs) => self.handle_primitive(cs),
+                Token::Character(c) => self.handle_char_token(c),
+            },
+            Argument::Group(group) => self.handle_group(group),
+        }
+        // TODO: We are here
     }
 
     /// Return the next event by unwraping it.

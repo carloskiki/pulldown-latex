@@ -49,18 +49,15 @@ pub enum Identifier<'a> {
     },
 }
 
-/// Events that affect the previous and next event
-#[derive(Debug, PartialEq, Eq)]
-pub enum Infix {
-    Subscript,
-    Superscript,
-    Underscript,
-    Overscript,
-}
-
 /// Event that affect the following 2 events visually
 #[derive(Debug, PartialEq)]
 pub enum Visual {
     Root,
     Fraction(Option<Dimension> /* TODO: style */),
+    Subscript,
+    Superscript,
+    SubSuperscript,
+    Underscript,
+    Overscript,
+    UnderOverscript,
 }
