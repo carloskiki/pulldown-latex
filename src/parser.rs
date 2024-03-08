@@ -102,7 +102,7 @@ pub type Result<T> = std::result::Result<T, ParserError>;
 
 #[derive(Debug, Error)]
 pub enum ParserError {
-    #[error("unbalanced group found, expected {}", .0.map_or("no group closing", |t| &t.to_string()))]
+    #[error("unbalanced group found, expected {}", .0.map_or(String::from("no group closing"), |t| t.to_string()))]
     UnbalancedGroup(Option<GroupType>),
     #[error(
         "unexpected math `$` (math shift) character - this character is currently unsupported."
@@ -223,7 +223,7 @@ impl<'a> Parser<'a> {
                         Ok(arg) => superscript = Some(arg),
                         Err(e) => return Some(Err(e)),
                     };
-                },
+                }
                 '_' if subscript.is_none() => {
                     *s = &s[1..];
                     let Some(str) = self.current_string() else {
@@ -233,23 +233,20 @@ impl<'a> Parser<'a> {
                         Ok(arg) => subscript = Some(arg),
                         Err(e) => return Some(Err(e)),
                     };
-                },
+                }
                 '^' => return Some(Err(ParserError::DoubleSuperscript)),
                 '_' => return Some(Err(ParserError::DoubleSubscript)),
-                _ => {},
+                _ => {}
             };
         };
 
         Some(match (subscript, superscript) {
-            (Some(sub), Some(sup)) => {
-                self.handle_argument(sup).and_then(|_| self.handle_argument(sub)).map(|_| Visual::SubSuperscript)
-            },
-            (None, Some(sup)) => {
-                self.handle_argument(sup).map(|_| Visual::Superscript)
-            },
-            (Some(sub), None) => {
-                self.handle_argument(sub).map(|_| Visual::Subscript)
-            },
+            (Some(sub), Some(sup)) => self
+                .handle_argument(sup)
+                .and_then(|_| self.handle_argument(sub))
+                .map(|_| Visual::SubSuperscript),
+            (None, Some(sup)) => self.handle_argument(sup).map(|_| Visual::Superscript),
+            (Some(sub), None) => self.handle_argument(sub).map(|_| Visual::Subscript),
             (None, None) => unreachable!(),
         })
     }
