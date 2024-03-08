@@ -134,10 +134,10 @@ pub enum ParserError {
     CharacterNumber,
     #[error("expected an argument")]
     Argument,
-    #[error("trying to add a subscript to an empty element")]
-    Subscript,
-    #[error("trying to add a superscript to an empty element")]
-    Superscript,
+    #[error("Trying to add a subscript with no content")]
+    EmptySubscript,
+    #[error("trying to add a superscript with no content")]
+    EmptySuperscript,
     #[error("Trying to add a subscript twice to the same element")]
     DoubleSubscript,
     #[error("Trying to add a superscript twice to the same element")]
@@ -147,10 +147,13 @@ pub enum ParserError {
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
 impl<'a> Parser<'a> {
     fn new(input: &'a str) -> Self {
+        let mut instruction_stack = Vec::with_capacity(64);
+        instruction_stack.push(Instruction::Substring(input));
+        let group_stack = Vec::with_capacity(16);
         Self {
             input,
-            instruction_stack: Vec::from([Instruction::Substring(input)]),
-            group_stack: Vec::new(),
+            instruction_stack,
+            group_stack,
         }
     }
 
@@ -163,6 +166,11 @@ impl<'a> Parser<'a> {
         };
         if content.is_empty() {
             self.instruction_stack.pop();
+            let popped = self.group_stack.pop();
+            if popped != Some(GroupType::Brace) {
+                // TODO: This should be: return Err(ParserError::UnbalancedGroup(popped));
+                return None;
+            }
             self.current_string()
         } else {
             match self.instruction_stack.last_mut() {
@@ -174,20 +182,84 @@ impl<'a> Parser<'a> {
 
     /// Handles the superscript and/or subscript following what was parsed previously.
     ///
-    /// This must be called when a suffix can be expected on the element being parsed.
+    /// This must be called when a suffix can be present on the element being parsed.
     fn check_suffixes(&mut self) -> Option<Result<Visual>> {
-        let curr_string = self.current_string()?;
-        match curr_string.chars().next().expect("current_string is not empty") {
+        let (mut subscript, mut superscript) = (None, None);
+        let str = self.current_string()?;
+        *str = str.trim_start();
+        let suffix = str.chars().next().expect("current_string is not empty");
+        match suffix {
             '^' => {
-                *curr_string = &curr_string[1..];
-                Some(Ok(Visual::Superscript))
+                *str = &str[1..];
+                let Some(str) = self.current_string() else {
+                    return Some(Err(ParserError::EmptySuperscript));
+                };
+                match lex::argument(str) {
+                    Ok(arg) => superscript = Some(arg),
+                    Err(e) => return Some(Err(e)),
+                };
             }
             '_' => {
-                *curr_string = &curr_string[1..];
-                Some(Ok(Visual::Subscript))
+                *str = &str[1..];
+                let Some(str) = self.current_string() else {
+                    return Some(Err(ParserError::EmptySubscript));
+                };
+                match lex::argument(str) {
+                    Ok(arg) => subscript = Some(arg),
+                    Err(e) => return Some(Err(e)),
+                };
             }
-            _ => None,
-            
+            _ => return None,
+        };
+        if let Some(s) = self.current_string() {
+            *s = s.trim_start();
+            match s.chars().next().expect("current_string is not empty") {
+                '^' if superscript.is_none() => {
+                    *s = &s[1..];
+                    let Some(str) = self.current_string() else {
+                        return Some(Err(ParserError::EmptySuperscript));
+                    };
+                    match lex::argument(str) {
+                        Ok(arg) => superscript = Some(arg),
+                        Err(e) => return Some(Err(e)),
+                    };
+                },
+                '_' if subscript.is_none() => {
+                    *s = &s[1..];
+                    let Some(str) = self.current_string() else {
+                        return Some(Err(ParserError::EmptySubscript));
+                    };
+                    match lex::argument(str) {
+                        Ok(arg) => subscript = Some(arg),
+                        Err(e) => return Some(Err(e)),
+                    };
+                },
+                '^' => return Some(Err(ParserError::DoubleSuperscript)),
+                '_' => return Some(Err(ParserError::DoubleSubscript)),
+                _ => {},
+            };
+        };
+
+        Some(match (subscript, superscript) {
+            (Some(sub), Some(sup)) => {
+                self.handle_argument(sup).and_then(|_| self.handle_argument(sub)).map(|_| Visual::SubSuperscript)
+            },
+            (None, Some(sup)) => {
+                self.handle_argument(sup).map(|_| Visual::Superscript)
+            },
+            (Some(sub), None) => {
+                self.handle_argument(sub).map(|_| Visual::Subscript)
+            },
+            (None, None) => unreachable!(),
+        })
+    }
+
+    fn handle_suffix(&mut self, event: Event<'a>) -> Result<Event<'a>> {
+        if let Some(visual) = self.check_suffixes() {
+            self.instruction_stack.push(Instruction::Event(event));
+            visual.map(|v| Event::Visual(v))
+        } else {
+            Ok(event)
         }
     }
 
@@ -204,7 +276,10 @@ impl<'a> Parser<'a> {
                 Token::ControlSequence(cs) => self.handle_primitive(cs)?,
                 Token::Character(c) => self.handle_char_token(c)?,
             }),
-            Argument::Group(group) => Instruction::Substring(group),
+            Argument::Group(group) => {
+                self.group_stack.push(GroupType::Brace);
+                Instruction::Substring(group)
+            }
         };
         self.instruction_stack
             .extend([arg, Instruction::Event(Event::BeginGroup)]);
@@ -252,6 +327,10 @@ impl<'a> Iterator for Parser<'a> {
             Some(Instruction::Substring(content)) => {
                 if content.is_empty() {
                     self.instruction_stack.pop();
+                    let popped = self.group_stack.pop();
+                    if popped != Some(GroupType::Brace) {
+                        return Some(Err(ParserError::UnbalancedGroup(popped)));
+                    }
                     return self.next();
                 }
                 let mut chars = content.chars();
@@ -324,12 +403,10 @@ mod tests {
     }
 }
 
-
 // How to handle Comments:
 //
-// Comments are handled by the lexer, and are not passed to the parser. The lexer will remove the 
+// Comments are handled by the lexer, and are not passed to the parser. The lexer will remove the
 // comment from the input, and the parser will not see it.
-
 
 // Token parsing procedure, as per TeXbook p. 46-47.
 //

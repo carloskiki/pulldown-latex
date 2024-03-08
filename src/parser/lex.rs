@@ -432,8 +432,8 @@ pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
            *input = rest;
            token(input)
         }
-        Some(c) if c.is_whitespace() => {
-            *input = &input[1..];
+        Some(c) => {
+            *input = &input[c.len_utf8()..];
             Ok(Token::Character(c))
         }
         None => Err(ParserError::EndOfInput),
