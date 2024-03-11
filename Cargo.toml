@@ -11,4 +11,4 @@ keywords = ["latex", "mathml"]
 categories = ["science"]
 
 [dependencies]
-thiserror = "1.0.56"
+thiserror = "1.0.57"

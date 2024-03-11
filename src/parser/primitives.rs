@@ -612,7 +612,7 @@ impl<'a> Parser<'a> {
             // Spacing
             c if c.trim_start().is_empty() => Ok(Event::Content(Content::Text("&nbsp;"))),
 
-            _ => todo!(),
+            _ => Err(ParserError::UnknownPrimitive),
         }
     }
 

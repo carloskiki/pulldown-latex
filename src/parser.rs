@@ -142,6 +142,8 @@ pub enum ParserError {
     DoubleSubscript,
     #[error("Trying to add a superscript twice to the same element")]
     DoubleSuperscript,
+    #[error("Unknown primitive command found")]
+    UnknownPrimitive,
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
