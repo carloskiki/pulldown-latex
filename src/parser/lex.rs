@@ -2,7 +2,7 @@ use std::mem::MaybeUninit;
 
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{operator_table::is_delimiter, Argument, ParserError, Result, Token};
+use super::{operator_table::is_delimiter, Argument, ErrorKind, InnerResult, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -10,16 +10,16 @@ use super::{operator_table::is_delimiter, Argument, ParserError, Result, Token};
 ///
 /// Returns the control sequence, the parameter text, and the replacement text.
 // TODO: make sure that the parameter text includes none of: `}`, or `%`
-pub fn definition<'a>(input: &mut &'a str) -> Result<(&'a str, &'a str, &'a str)> {
+pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a str)> {
     let control_sequence = control_sequence(input)?;
-    let (parameter_text, rest) = input.split_once('{').ok_or(ParserError::EndOfInput)?;
+    let (parameter_text, rest) = input.split_once('{').ok_or(ErrorKind::EndOfInput)?;
     *input = rest;
     let replacement_text = group_content(input)?;
 
     Ok((control_sequence, parameter_text, replacement_text))
 }
 
-pub fn argument<'a>(input: &mut &'a str) -> Result<Argument<'a>> {
+pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
     *input = input.trim_start();
 
     if input.starts_with('{') {
@@ -35,7 +35,7 @@ pub fn argument<'a>(input: &mut &'a str) -> Result<Argument<'a>> {
 ///
 /// The output is the content within the group without the surrounding `{}`. This content is
 /// guaranteed to be balanced.
-pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
+pub fn group_content<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
     let mut escaped = false;
     let mut in_comment = false;
     // In this case `Err` is the desired result.
@@ -76,7 +76,7 @@ pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
         *input = &rest[1..];
         Ok(argument)
     } else {
-        Err(ParserError::EndOfInput)
+        Err(ErrorKind::EndOfInput)
     }
 }
 
@@ -84,7 +84,7 @@ pub fn group_content<'a>(input: &mut &'a str) -> Result<&'a str> {
 /// character.
 ///
 /// Current delimiters supported are listed in TeXBook p. 146, and on https://temml.org/docs/en/supported ("delimiter" section).
-pub fn delimiter(input: &mut &str) -> Result<char> {
+pub fn delimiter(input: &mut &str) -> InnerResult<char> {
     *input = input.trim_start();
     let maybe_delim = token(input)?;
     match maybe_delim {
@@ -136,14 +136,14 @@ pub fn delimiter(input: &mut &str) -> Result<char> {
         Token::ControlSequence("updownarrow") => Ok('↕'),
         Token::ControlSequence("Updownarrow") => Ok('⇕'),
         Token::Character(c) if is_delimiter(c) => Ok(c),
-        _ => Err(ParserError::Delimiter),
+        _ => Err(ErrorKind::Delimiter),
     }
 }
 
 /// Parse the right-hand side of a `futurelet` assignment (TeXBook p. 273).
 ///
 /// Returns the control sequence and both following tokens.
-pub fn futurelet_assignment<'a>(input: &mut &'a str) -> Result<(&'a str, Token<'a>, Token<'a>)> {
+pub fn futurelet_assignment<'a>(input: &mut &'a str) -> InnerResult<(&'a str, Token<'a>, Token<'a>)> {
     let control_sequence = control_sequence(input)?;
 
     let token1 = token(input)?;
@@ -154,7 +154,7 @@ pub fn futurelet_assignment<'a>(input: &mut &'a str) -> Result<(&'a str, Token<'
 /// Parse the right-hand side of a `let` assignment (TeXBook p. 273).
 ///
 /// Returns the control sequence and the value it is assigned to.
-pub fn let_assignment<'a>(input: &mut &'a str) -> Result<(&'a str, Token<'a>)> {
+pub fn let_assignment<'a>(input: &mut &'a str) -> InnerResult<(&'a str, Token<'a>)> {
     let control_sequence = control_sequence(input)?;
 
     *input = input.trim_start();
@@ -168,7 +168,7 @@ pub fn let_assignment<'a>(input: &mut &'a str) -> Result<(&'a str, Token<'a>)> {
 }
 
 /// Parse a control_sequence, including the leading `\`.
-pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
+pub fn control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
     if input.starts_with('\\') {
         *input = &input[1..];
         rhs_control_sequence(input)
@@ -176,8 +176,8 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
         input
             .chars()
             .next()
-            .map_or(Err(ParserError::EndOfInput), |_| {
-                Err(ParserError::ControlSequence)
+            .map_or(Err(ErrorKind::EndOfInput), |_| {
+                Err(ErrorKind::ControlSequence)
             })
     }
 }
@@ -185,9 +185,9 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
 /// Parse the right side of a control sequence (`\` already being parsed).
 ///
 /// A control sequence can be of the form `\controlsequence`, or `\#` (control symbol).
-pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
+pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
     if input.is_empty() {
-        return Err(ParserError::EndOfInput);
+        return Err(ErrorKind::EndOfInput);
     }
 
     let len = input
@@ -202,7 +202,7 @@ pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> Result<&'a str> {
 }
 
 /// Parse a glue (TeXBook p. 267).
-pub fn glue(input: &mut &str) -> Result<Glue> {
+pub fn glue(input: &mut &str) -> InnerResult<Glue> {
     let mut dimen = (dimension(input)?, None, None);
     if let Some(s) = input.trim_start().strip_prefix("plus") {
         *input = s;
@@ -216,7 +216,7 @@ pub fn glue(input: &mut &str) -> Result<Glue> {
 }
 
 /// Parse a glue that can only be specified in math units (mu)
-pub fn math_glue(input: &mut &str) -> Result<Glue> {
+pub fn math_glue(input: &mut &str) -> InnerResult<Glue> {
     let mut dimen = (math_dimension(input)?, None, None);
     if let Some(s) = input.trim_start().strip_prefix("plus") {
         *input = s;
@@ -230,29 +230,29 @@ pub fn math_glue(input: &mut &str) -> Result<Glue> {
 }
 
 /// Parse a dimension (TeXBook p. 266).
-pub fn dimension(input: &mut &str) -> Result<Dimension> {
+pub fn dimension(input: &mut &str) -> InnerResult<Dimension> {
     let number = floating_point(input)?;
     let unit = dimension_unit(input)?;
     Ok((number, unit))
 }
 
 /// Parse a dimension that can only be specified in math units (mu)
-pub fn math_dimension(input: &mut &str) -> Result<Dimension> {
+pub fn math_dimension(input: &mut &str) -> InnerResult<Dimension> {
     let number = floating_point(input)? as f32;
     *input = input.trim_start();
-    input.strip_prefix("mu").ok_or(ParserError::MathUnit)?;
+    input.strip_prefix("mu").ok_or(ErrorKind::MathUnit)?;
     let unit = DimensionUnit::Mu;
     Ok((number, unit))
 }
 
 /// Parse a dimension unit (TeXBook p. 266).
-pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
+pub fn dimension_unit(input: &mut &str) -> InnerResult<DimensionUnit> {
     *input = input.trim_start();
     if input.len() < 2 {
-        return Err(ParserError::EndOfInput);
+        return Err(ErrorKind::EndOfInput);
     }
 
-    let unit = input.get(0..2).ok_or(ParserError::DimensionUnit)?;
+    let unit = input.get(0..2).ok_or(ErrorKind::DimensionUnit)?;
     let unit = match unit {
         "em" => DimensionUnit::Em,
         "ex" => DimensionUnit::Ex,
@@ -266,7 +266,7 @@ pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
         "cc" => DimensionUnit::Cc,
         "sp" => DimensionUnit::Sp,
         "mu" => DimensionUnit::Mu,
-        _ => return Err(ParserError::DimensionUnit),
+        _ => return Err(ErrorKind::DimensionUnit),
     };
 
     *input = &input[2..];
@@ -277,39 +277,39 @@ pub fn dimension_unit(input: &mut &str) -> Result<DimensionUnit> {
 
 /// Parse an integer that may be positive or negative and may be represented as octal, decimal,
 /// hexadecimal, or a character code (TeXBook p. 265).
-pub fn integer(input: &mut &str) -> Result<isize> {
+pub fn integer(input: &mut &str) -> InnerResult<isize> {
     let signum = signs(input)?;
 
     // The following character must be ascii.
-    let next_char = input.chars().next().ok_or(ParserError::EndOfInput)?;
+    let next_char = input.chars().next().ok_or(ErrorKind::EndOfInput)?;
     if next_char.is_ascii_digit() {
         return Ok(decimal(input) as isize * signum);
     }
     *input = &input[1..];
     let unsigned_int = match next_char {
         '`' => {
-            let mut next_byte = *input.as_bytes().first().ok_or(ParserError::EndOfInput)?;
+            let mut next_byte = *input.as_bytes().first().ok_or(ErrorKind::EndOfInput)?;
             if next_byte == b'\\' {
                 *input = &input[1..];
-                next_byte = *input.as_bytes().first().ok_or(ParserError::EndOfInput)?;
+                next_byte = *input.as_bytes().first().ok_or(ErrorKind::EndOfInput)?;
             }
             if next_byte.is_ascii() {
                 *input = &input[1..];
                 next_byte as usize
             } else {
-                return Err(ParserError::CharacterNumber);
+                return Err(ErrorKind::CharacterNumber);
             }
         }
         '\'' => octal(input),
         '"' => hexadecimal(input),
-        _ => return Err(ParserError::Number),
+        _ => return Err(ErrorKind::Number),
     };
 
     Ok(unsigned_int as isize * signum)
 }
 
 /// Parse the signs in front of a number, returning the signum.
-pub fn signs(input: &mut &str) -> Result<isize> {
+pub fn signs(input: &mut &str) -> InnerResult<isize> {
     let signs = input.trim_start();
     let mut minus_count = 0;
     *input = signs
@@ -343,7 +343,7 @@ pub fn hexadecimal(input: &mut &str) -> usize {
 }
 
 /// Parse a floating point number (named `factor` in TeXBook p. 266).
-pub fn floating_point(input: &mut &str) -> Result<f32> {
+pub fn floating_point(input: &mut &str) -> InnerResult<f32> {
     let signum = signs(input)?;
 
     let mut number = 0.;
@@ -420,7 +420,7 @@ pub fn one_optional_space(input: &mut &str) -> bool {
 /// Return the next token in the input.
 ///
 /// A token will never be whitespace, and will never be a `%` character.
-pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
+pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
     input.trim_start();
     match input.chars().next() {
         Some('\\') => {
@@ -428,7 +428,7 @@ pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
             Ok(Token::ControlSequence(rhs_control_sequence(input)?))
         },
         Some('%') => {
-           let (_, rest) = input.split_once('\n').ok_or(ParserError::EndOfInput)?;
+           let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
            *input = rest;
            token(input)
         }
@@ -436,7 +436,7 @@ pub fn token<'a>(input: &mut &'a str) -> Result<Token<'a>> {
             *input = &input[c.len_utf8()..];
             Ok(Token::Character(c))
         }
-        None => Err(ParserError::EndOfInput),
+        None => Err(ErrorKind::EndOfInput),
     }
 }
 

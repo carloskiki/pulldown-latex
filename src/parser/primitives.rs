@@ -9,7 +9,7 @@ use crate::{
 use super::{
     lex,
     operator_table::{is_delimiter, is_operator},
-    Argument, GroupType, Instruction, Parser, ParserError, Result,
+    Argument, GroupType, Instruction, Parser, ErrorKind, InnerResult,
 };
 
 /// Return a `Content::Identifier` event with the given content and font variant.
@@ -56,23 +56,23 @@ impl<'a> Parser<'a> {
     ///
     /// ## Panics
     /// - This function will panic if the `\` or `%` character is given
-    pub fn handle_char_token(&mut self, token: char) -> Result<Event<'a>> {
+    pub fn handle_char_token(&mut self, token: char) -> InnerResult<Event<'a>> {
         Ok(match token {
             // TODO: Check how we want to handle comments actually.
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
             '_' => panic!("(internal error: please report) the `_` character should never be observed as a token"),
             '^' => panic!("(internal error: please report) the `^` character should never be observed as a token"),
-            '$' => return Err(ParserError::MathShift),
-            '#' => return Err(ParserError::HashSign),
-            '&' => return Err(ParserError::AlignmentChar),
+            '$' => return Err(ErrorKind::MathShift),
+            '#' => return Err(ErrorKind::HashSign),
+            '&' => return Err(ErrorKind::AlignmentChar),
             '{' => {
                 self.group_stack.push(GroupType::Brace);
                 Event::BeginGroup
             },
             '}' => {
-                let grouping = self.group_stack.pop().ok_or(ParserError::UnbalancedGroup(None))?;
-                ensure_eq!(grouping, GroupType::Brace, ParserError::UnbalancedGroup(Some(grouping)));
+                let grouping = self.group_stack.pop().ok_or(ErrorKind::UnbalancedGroup(None))?;
+                ensure_eq!(grouping, GroupType::Brace, ErrorKind::UnbalancedGroup(Some(grouping)));
                 Event::EndGroup
             },
             // TODO: check for double and triple primes
@@ -91,7 +91,7 @@ impl<'a> Parser<'a> {
     /// 2. If the event is a primitive, apply the corresponding primitive.
     /// 3. If the control sequence is not defined, return an error.
     // TODO: change assert! to ensure!
-    pub fn handle_primitive(&mut self, control_sequence: &'a str) -> Result<Event<'a>> {
+    pub fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<Event<'a>> {
         match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
@@ -233,12 +233,12 @@ impl<'a> Parser<'a> {
 
             // TODO: This does not work anymore we have to check how we want to handle this.
             "left" => {
-                let curr_str = self.current_string().ok_or(ParserError::Delimiter)?;
+                let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                     self.instruction_stack
                         .push(Instruction::Event(Event::Content(Content::Operator(op!(
                             delimiter
@@ -248,17 +248,17 @@ impl<'a> Parser<'a> {
             }
             "middle" => {
                 let delimiter =
-                    lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+                    lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                 self.handle_suffix(Event::Content(Content::Operator(op!(delimiter))))
             }
             "right" => {
-                let curr_str = self.current_string().ok_or(ParserError::Delimiter)?;
+                let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     Ok(Event::EndGroup)
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                     self.instruction_stack
                         .push(Instruction::Event(Event::EndGroup));
                     Ok(Event::Content(Content::Operator(op!(delimiter))))
@@ -391,7 +391,7 @@ impl<'a> Parser<'a> {
             // Variable spacing
             "kern" => {
                 let dimension =
-                    lex::dimension(self.current_string().ok_or(ParserError::Dimension)?)?;
+                    lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
                 Ok(Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -399,7 +399,7 @@ impl<'a> Parser<'a> {
                 })
             }
             "hskip" => {
-                let glue = lex::glue(self.current_string().ok_or(ParserError::Glue)?)?;
+                let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
                 Ok(Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -408,7 +408,7 @@ impl<'a> Parser<'a> {
             }
             "mkern" => {
                 let dimension =
-                    lex::math_dimension(self.current_string().ok_or(ParserError::Dimension)?)?;
+                    lex::math_dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
                 Ok(Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -416,7 +416,7 @@ impl<'a> Parser<'a> {
                 })
             }
             "mskip" => {
-                let glue = lex::math_glue(self.current_string().ok_or(ParserError::Glue)?)?;
+                let glue = lex::math_glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
                 Ok(Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -425,9 +425,9 @@ impl<'a> Parser<'a> {
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
-                    lex::argument(self.current_string().ok_or(ParserError::Argument)?)?
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
                 else {
-                    return Err(ParserError::DimensionArgument);
+                    return Err(ErrorKind::DimensionArgument);
                 };
                 let glue = lex::glue(&mut argument)?;
                 Ok(Event::Space {
@@ -612,26 +612,26 @@ impl<'a> Parser<'a> {
             // Spacing
             c if c.trim_start().is_empty() => Ok(Event::Content(Content::Text("&nbsp;"))),
 
-            _ => Err(ParserError::UnknownPrimitive),
+            _ => Err(ErrorKind::UnknownPrimitive),
         }
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
-    fn em_sized_delim(&mut self, size: f32) -> Result<Event<'a>> {
-        let delimiter = lex::delimiter(self.current_string().ok_or(ParserError::Delimiter)?)?;
+    fn em_sized_delim(&mut self, size: f32) -> InnerResult<Event<'a>> {
+        let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
         self.handle_suffix(Event::Content(Content::Operator(
             op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
         )))
     }
 
     /// Override the `font_state` to the given font variant, and return the next event.
-    fn font_override(&mut self, font: Font) -> Result<Event<'a>> {
+    fn font_override(&mut self, font: Font) -> InnerResult<Event<'a>> {
         Ok(Event::FontChange(Some(font)))
     }
 
     /// Override the `font_state` for the argument to the command.
-    fn font_group(&mut self, font: Option<Font>) -> Result<Event<'a>> {
-        let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
+    fn font_group(&mut self, font: Option<Font>) -> InnerResult<Event<'a>> {
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         self.instruction_stack
             .push(Instruction::Event(Event::EndGroup));
         self.handle_argument(argument)?;
@@ -644,8 +644,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Accent commands. parse the argument, and overset the accent.
-    fn accent(&mut self, accent: Operator) -> Result<Event<'a>> {
-        let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
+    fn accent(&mut self, accent: Operator) -> InnerResult<Event<'a>> {
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         let maybe_suffix = self.check_suffixes();
         self.instruction_stack
             .push(Instruction::Event(Event::Content(Content::Operator(
@@ -662,8 +662,8 @@ impl<'a> Parser<'a> {
     }
 
     /// Underscript commands. parse the argument, and underset the accent.
-    fn underscript(&mut self, content: Operator) -> Result<Event<'a>> {
-        let argument = lex::argument(self.current_string().ok_or(ParserError::Argument)?)?;
+    fn underscript(&mut self, content: Operator) -> InnerResult<Event<'a>> {
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         let maybe_suffix = self.check_suffixes();
         self.instruction_stack
             .push(Instruction::Event(Event::Content(Content::Operator(
@@ -680,11 +680,11 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn ident(&mut self, ident: char) -> Result<Event<'a>> {
+    fn ident(&mut self, ident: char) -> InnerResult<Event<'a>> {
         self.handle_suffix(Event::Content(Content::Identifier(Identifier::Char(ident))))
     }
 
-    fn operator(&mut self, operator: Operator) -> Result<Event<'a>> {
+    fn operator(&mut self, operator: Operator) -> InnerResult<Event<'a>> {
         self.handle_suffix(Event::Content(Content::Operator(operator)))
     }
 }

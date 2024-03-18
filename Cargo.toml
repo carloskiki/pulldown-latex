@@ -12,3 +12,7 @@ categories = ["science"]
 
 [dependencies]
 thiserror = "1.0.57"
+
+[[example]]
+name = "write_to_string"
+

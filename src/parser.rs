@@ -38,10 +38,6 @@ use crate::event::{Content, Event, Visual};
 //
 // Either way, we will be fine so lets not worry about it for now.
 
-// TODO: double subscript and superscript errors are not handled.
-//  To remedy this, we could systematically make a Instruction::Substring represent a group, and
-//  thus when parsing a `{`, we would check if a `^` or `_` is present. This would make the events
-//  not be `infixes` anymore, which would play nicer with the mathml renderer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Token<'a> {
     ControlSequence(&'a str),
@@ -98,10 +94,263 @@ pub struct Parser<'a> {
     pub(crate) group_stack: Vec<GroupType>,
 }
 
-pub type Result<T> = std::result::Result<T, ParserError>;
+// TODO: make `trim_start` (removing whitespace) calls more systematic.
+impl<'a> Parser<'a> {
+    pub fn new(input: &'a str) -> Self {
+        let mut instruction_stack = Vec::with_capacity(64);
+        instruction_stack.push(Instruction::Substring(input));
+        let group_stack = Vec::with_capacity(16);
+        Self {
+            input,
+            instruction_stack,
+            group_stack,
+        }
+    }
+
+    /// Get the current string we are parsing.
+    ///
+    /// This function guarantees that the string returned is not empty.
+    fn current_string(&mut self) -> Option<&mut &'a str> {
+        let Some(Instruction::Substring(content)) = self.instruction_stack.last() else {
+            return None;
+        };
+        if content.is_empty() {
+            self.instruction_stack.pop();
+            let popped = self.group_stack.pop();
+            if popped != Some(GroupType::Brace) {
+                // TODO: This should be: return Err(ParserError::UnbalancedGroup(popped));
+                return None;
+            }
+            self.current_string()
+        } else {
+            match self.instruction_stack.last_mut() {
+                Some(Instruction::Substring(content)) => Some(content),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    /// Handles the superscript and/or subscript following what was parsed previously.
+    ///
+    /// This must be called when a suffix can be present on the element being parsed.
+    fn check_suffixes(&mut self) -> Option<InnerResult<Visual>> {
+        let (mut subscript, mut superscript) = (None, None);
+        let str = self.current_string()?;
+        *str = str.trim_start();
+        let suffix = str.chars().next().expect("current_string is not empty");
+        match suffix {
+            '^' => {
+                *str = &str[1..];
+                let Some(str) = self.current_string() else {
+                    return Some(Err(ErrorKind::EmptySuperscript));
+                };
+                match lex::argument(str) {
+                    Ok(arg) => superscript = Some(arg),
+                    Err(e) => return Some(Err(e)),
+                };
+            }
+            '_' => {
+                *str = &str[1..];
+                let Some(str) = self.current_string() else {
+                    return Some(Err(ErrorKind::EmptySubscript));
+                };
+                match lex::argument(str) {
+                    Ok(arg) => subscript = Some(arg),
+                    Err(e) => return Some(Err(e)),
+                };
+            }
+            _ => return None,
+        };
+        if let Some(s) = self.current_string() {
+            *s = s.trim_start();
+            match s.chars().next().expect("current_string is not empty") {
+                '^' if superscript.is_none() => {
+                    *s = &s[1..];
+                    let Some(str) = self.current_string() else {
+                        return Some(Err(ErrorKind::EmptySuperscript));
+                    };
+                    match lex::argument(str) {
+                        Ok(arg) => superscript = Some(arg),
+                        Err(e) => return Some(Err(e)),
+                    };
+                }
+                '_' if subscript.is_none() => {
+                    *s = &s[1..];
+                    let Some(str) = self.current_string() else {
+                        return Some(Err(ErrorKind::EmptySubscript));
+                    };
+                    match lex::argument(str) {
+                        Ok(arg) => subscript = Some(arg),
+                        Err(e) => return Some(Err(e)),
+                    };
+                }
+                '^' => return Some(Err(ErrorKind::DoubleSuperscript)),
+                '_' => return Some(Err(ErrorKind::DoubleSubscript)),
+                _ => {}
+            };
+        };
+
+        if let Some(Some(first_char)) = self.current_string().map(|s| s.chars().next()) {
+            match first_char {
+                '^' => return Some(Err(ErrorKind::DoubleSuperscript)),
+                '_' => return Some(Err(ErrorKind::DoubleSubscript)),
+                _ => {},
+            };
+        }
+
+        Some(match (subscript, superscript) {
+            (Some(sub), Some(sup)) => self
+                .handle_argument(sup)
+                .and_then(|_| self.handle_argument(sub))
+                .map(|_| Visual::SubSuperscript),
+            (None, Some(sup)) => self.handle_argument(sup).map(|_| Visual::Superscript),
+            (Some(sub), None) => self.handle_argument(sub).map(|_| Visual::Subscript),
+            (None, None) => unreachable!(),
+        })
+    }
+
+    fn handle_suffix(&mut self, event: Event<'a>) -> InnerResult<Event<'a>> {
+        if let Some(visual) = self.check_suffixes() {
+            self.instruction_stack.push(Instruction::Event(event));
+            visual.map(|v| Event::Visual(v))
+        } else {
+            Ok(event)
+        }
+    }
+
+    /// Parse an arugment and pushes the argument to the stack surrounded by a
+    /// group: [..., EndGroup, Argument, BeginGroup]
+    //
+    // TODO: What if we get something like '^' as an argument?, the function handle_char_token will
+    // throw an error, so should we
+    pub(crate) fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
+        self.instruction_stack
+            .push(Instruction::Event(Event::EndGroup));
+        let arg = match argument {
+            Argument::Token(token) => Instruction::Event(match token {
+                Token::ControlSequence(cs) => self.handle_primitive(cs)?,
+                Token::Character(c) => self.handle_char_token(c)?,
+            }),
+            Argument::Group(group) => {
+                self.group_stack.push(GroupType::Brace);
+                Instruction::Substring(group)
+            }
+        };
+        self.instruction_stack
+            .extend([arg, Instruction::Event(Event::BeginGroup)]);
+        Ok(())
+    }
+
+    /// Return the context surrounding the error reported.
+    fn error_context(&mut self) -> &str {
+        // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
+        // of the inputed string, when macros are supported.
+        // Safety:
+        // * Both `self` and `origin` must be either in bounds or one
+        //   byte past the end of the same [allocated object].
+        //   => this is true, as self never changes the allocation of the `input`.
+        //
+        // * Both pointers must be *derived from* a pointer to the same object.
+        //   (See below for an example.)
+        //   => this is true, as `initial_byte_ptr` is derived from `input.as_ptr()`.
+        // * The distance between the pointers, in bytes, must be an exact multiple
+        //   of the size of `T`.
+        //   => this is true, as both pointers are `u8` pointers.
+        // * The distance between the pointers, **in bytes**, cannot overflow an `isize`.
+        //   => this is true, as the distance is always positive.
+        // * The distance being in bounds cannot rely on "wrapping around" the address space.
+        //   => this is true, as the distance is always positive.
+        
+        let curr_ptr = self.current_string().map(|s| s.as_ptr()).unwrap();
+        let initial_byte_ptr = self.input.as_ptr();
+        let distance = unsafe { curr_ptr.offset_from(initial_byte_ptr) } as usize;
+        let start = distance.saturating_sub(10) as usize;
+        let end = self.input.len().min(distance + 10);
+        &self.input[start..end]
+    }
+}
+
+impl<'a> Iterator for Parser<'a> {
+    type Item = Result<Event<'a>, ParseError<'a>>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.instruction_stack.last_mut() {
+            Some(Instruction::Event(_)) => {
+                let event = self
+                    .instruction_stack
+                    .pop()
+                    .expect("there is something in the stack");
+                Some(Ok(match event {
+                    Instruction::Event(event) => event,
+                    _ => unreachable!(),
+                }))
+            }
+            Some(Instruction::Substring(content)) => {
+                if content.is_empty() {
+                    self.instruction_stack.pop();
+                    let popped = self.group_stack.pop();
+                    if popped != Some(GroupType::Brace) {
+                        return Some(Err(ErrorKind::UnbalancedGroup(popped)));
+                    }
+                    return self.next();
+                }
+                let mut chars = content.chars();
+                let next_char = chars.next().expect("the content is not empty");
+
+                // TODO: Here we should just handle a token instead of the first char.
+                Some(match next_char {
+                    // TODO: Comments should be handled here.
+                    '.' | '0'..='9' => {
+                        let len = content
+                            .chars()
+                            .skip(1)
+                            .take_while(|&c| c.is_ascii_digit() || c == '.')
+                            .count()
+                            + 1;
+                        let (number, rest) = content.split_at(len);
+                        *content = rest;
+                        Ok(Event::Content(Content::Number(number)))
+                    }
+                    '\\' => {
+                        *content = &content[1..];
+                        lex::rhs_control_sequence(content).and_then(|cs| self.handle_primitive(cs))
+                    }
+                    c => {
+                        *content = chars.as_str();
+                        self.handle_char_token(c)
+                    }
+                })
+            }
+            None => None,
+        }
+    }
+}
 
 #[derive(Debug, Error)]
-pub enum ParserError {
+pub struct ParseError<'a> {
+    context: Option<(&'a str, usize)>,
+    #[source]
+    error: ErrorKind,
+}
+
+impl Display for ParseError<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Error while parsing: ")?;
+        self.error.fmt(f)?;
+        if let Some((context, char_position)) = self.context {
+            f.write_str("\nContext: ")?;
+            f.write_str(context)?;
+            f.write_str("\n")?;
+            f.write_fmt(format_args!("{:<1$}", "^", char_position))?;
+        }
+        Ok(())
+    }
+}
+
+type InnerResult<T> = std::result::Result<T, ErrorKind>;
+
+#[derive(Debug, Error)]
+enum ErrorKind {
     #[error("unbalanced group found, expected {}", .0.map_or(String::from("no group closing"), |t| t.to_string()))]
     UnbalancedGroup(Option<GroupType>),
     #[error(
@@ -146,222 +395,6 @@ pub enum ParserError {
     UnknownPrimitive,
 }
 
-// TODO: make `trim_start` (removing whitespace) calls more systematic.
-impl<'a> Parser<'a> {
-    fn new(input: &'a str) -> Self {
-        let mut instruction_stack = Vec::with_capacity(64);
-        instruction_stack.push(Instruction::Substring(input));
-        let group_stack = Vec::with_capacity(16);
-        Self {
-            input,
-            instruction_stack,
-            group_stack,
-        }
-    }
-
-    /// Get the current string we are parsing.
-    ///
-    /// This function guarantees that the string returned is not empty.
-    fn current_string(&mut self) -> Option<&mut &'a str> {
-        let Some(Instruction::Substring(content)) = self.instruction_stack.last() else {
-            return None;
-        };
-        if content.is_empty() {
-            self.instruction_stack.pop();
-            let popped = self.group_stack.pop();
-            if popped != Some(GroupType::Brace) {
-                // TODO: This should be: return Err(ParserError::UnbalancedGroup(popped));
-                return None;
-            }
-            self.current_string()
-        } else {
-            match self.instruction_stack.last_mut() {
-                Some(Instruction::Substring(content)) => Some(content),
-                _ => unreachable!(),
-            }
-        }
-    }
-
-    /// Handles the superscript and/or subscript following what was parsed previously.
-    ///
-    /// This must be called when a suffix can be present on the element being parsed.
-    fn check_suffixes(&mut self) -> Option<Result<Visual>> {
-        let (mut subscript, mut superscript) = (None, None);
-        let str = self.current_string()?;
-        *str = str.trim_start();
-        let suffix = str.chars().next().expect("current_string is not empty");
-        match suffix {
-            '^' => {
-                *str = &str[1..];
-                let Some(str) = self.current_string() else {
-                    return Some(Err(ParserError::EmptySuperscript));
-                };
-                match lex::argument(str) {
-                    Ok(arg) => superscript = Some(arg),
-                    Err(e) => return Some(Err(e)),
-                };
-            }
-            '_' => {
-                *str = &str[1..];
-                let Some(str) = self.current_string() else {
-                    return Some(Err(ParserError::EmptySubscript));
-                };
-                match lex::argument(str) {
-                    Ok(arg) => subscript = Some(arg),
-                    Err(e) => return Some(Err(e)),
-                };
-            }
-            _ => return None,
-        };
-        if let Some(s) = self.current_string() {
-            *s = s.trim_start();
-            match s.chars().next().expect("current_string is not empty") {
-                '^' if superscript.is_none() => {
-                    *s = &s[1..];
-                    let Some(str) = self.current_string() else {
-                        return Some(Err(ParserError::EmptySuperscript));
-                    };
-                    match lex::argument(str) {
-                        Ok(arg) => superscript = Some(arg),
-                        Err(e) => return Some(Err(e)),
-                    };
-                }
-                '_' if subscript.is_none() => {
-                    *s = &s[1..];
-                    let Some(str) = self.current_string() else {
-                        return Some(Err(ParserError::EmptySubscript));
-                    };
-                    match lex::argument(str) {
-                        Ok(arg) => subscript = Some(arg),
-                        Err(e) => return Some(Err(e)),
-                    };
-                }
-                '^' => return Some(Err(ParserError::DoubleSuperscript)),
-                '_' => return Some(Err(ParserError::DoubleSubscript)),
-                _ => {}
-            };
-        };
-
-        Some(match (subscript, superscript) {
-            (Some(sub), Some(sup)) => self
-                .handle_argument(sup)
-                .and_then(|_| self.handle_argument(sub))
-                .map(|_| Visual::SubSuperscript),
-            (None, Some(sup)) => self.handle_argument(sup).map(|_| Visual::Superscript),
-            (Some(sub), None) => self.handle_argument(sub).map(|_| Visual::Subscript),
-            (None, None) => unreachable!(),
-        })
-    }
-
-    fn handle_suffix(&mut self, event: Event<'a>) -> Result<Event<'a>> {
-        if let Some(visual) = self.check_suffixes() {
-            self.instruction_stack.push(Instruction::Event(event));
-            visual.map(|v| Event::Visual(v))
-        } else {
-            Ok(event)
-        }
-    }
-
-    /// Parse an arugment and pushes the argument to the stack surrounded by a
-    /// group: [..., EndGroup, Argument, BeginGroup]
-    //
-    // TODO: What if we get something like '^' as an argument?, the function handle_char_token will
-    // throw an error, so should we
-    pub(crate) fn handle_argument(&mut self, argument: Argument<'a>) -> Result<()> {
-        self.instruction_stack
-            .push(Instruction::Event(Event::EndGroup));
-        let arg = match argument {
-            Argument::Token(token) => Instruction::Event(match token {
-                Token::ControlSequence(cs) => self.handle_primitive(cs)?,
-                Token::Character(c) => self.handle_char_token(c)?,
-            }),
-            Argument::Group(group) => {
-                self.group_stack.push(GroupType::Brace);
-                Instruction::Substring(group)
-            }
-        };
-        self.instruction_stack
-            .extend([arg, Instruction::Event(Event::BeginGroup)]);
-        Ok(())
-    }
-
-    /// Return the context surrounding the error reported.
-    fn error_context(&self) -> &str {
-        // TODO: Here we should check whether the pointer is currently inside a `prelude` or inside
-        // of the inputed string.
-        // Safety:
-        // * Both `self` and `origin` must be either in bounds or one
-        //   byte past the end of the same [allocated object].
-        //   => this is true, as self never changes the allocation of the `input`.
-        //
-        // * Both pointers must be *derived from* a pointer to the same object.
-        //   (See below for an example.)
-        //   => this is true, as `initial_byte_ptr` is derived from `input.as_ptr()`.
-        // * The distance between the pointers, in bytes, must be an exact multiple
-        //   of the size of `T`.
-        //   => this is true, as both pointers are `u8` pointers.
-        // * The distance between the pointers, **in bytes**, cannot overflow an `isize`.
-        //   => this is true, as the distance is always positive.
-        // * The distance being in bounds cannot rely on "wrapping around" the address space.
-        //   => this is true, as the distance is always positive.
-        todo!()
-    }
-}
-
-impl<'a> Iterator for Parser<'a> {
-    type Item = Result<Event<'a>>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.instruction_stack.last_mut() {
-            Some(Instruction::Event(_)) => {
-                let event = self
-                    .instruction_stack
-                    .pop()
-                    .expect("there is something in the stack");
-                Some(Ok(match event {
-                    Instruction::Event(event) => event,
-                    _ => unreachable!(),
-                }))
-            }
-            Some(Instruction::Substring(content)) => {
-                if content.is_empty() {
-                    self.instruction_stack.pop();
-                    let popped = self.group_stack.pop();
-                    if popped != Some(GroupType::Brace) {
-                        return Some(Err(ParserError::UnbalancedGroup(popped)));
-                    }
-                    return self.next();
-                }
-                let mut chars = content.chars();
-                let next_char = chars.next().expect("the content is not empty");
-
-                Some(match next_char {
-                    // TODO: Comments should be handled here.
-                    '.' | '0'..='9' => {
-                        let len = content
-                            .chars()
-                            .skip(1)
-                            .take_while(|&c| c.is_ascii_digit() || c == '.')
-                            .count()
-                            + 1;
-                        let (number, rest) = content.split_at(len);
-                        *content = rest;
-                        Ok(Event::Content(Content::Number(number)))
-                    }
-                    '\\' => {
-                        *content = &content[1..];
-                        lex::rhs_control_sequence(content).and_then(|cs| self.handle_primitive(cs))
-                    }
-                    c => {
-                        *content = chars.as_str();
-                        self.handle_char_token(c)
-                    }
-                })
-            }
-            None => None,
-        }
-    }
-}
 
 #[cfg(test)]
 mod tests {
@@ -378,7 +411,7 @@ mod tests {
     #[test]
     fn substr_instructions() {
         let parser = Parser::new("\\bar{y}");
-        let events = parser.collect::<Result<Vec<_>>>().unwrap();
+        let events = parser.collect::<InnerResult<Vec<_>>>().unwrap();
 
         println!("{events:?}");
 
@@ -401,12 +434,6 @@ mod tests {
         );
     }
 }
-
-// How to handle Comments:
-//
-// Comments are handled by the lexer, and are not passed to the parser. The lexer will remove the
-// comment from the input, and the parser will not see it.
-
 // Token parsing procedure, as per TeXbook p. 46-47.
 //
 // This is roughly what the lexer implementation will look like for text mode.

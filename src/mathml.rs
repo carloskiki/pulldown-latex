@@ -29,37 +29,36 @@ where
         }
     }
 
-    pub fn write(mut self) -> io::Result<()> {
+    fn write(mut self) -> io::Result<()> {
+        while let Some(event) = self.input.next() {
+            self.write_event(event)?;
+        }
+        Ok(())
+    }
+
+    fn write_event(&mut self, event: Event<'a>) -> io::Result<()> {
         // Safety: this function must only write valid utf-8 to the writer.
         // Where the writer is written to:
         // - using `write_all` with a utf-8 string.
         // - uwing `write!` with a utf-8 string, and the parameters must all be valid utf-8 since
         //      they are formatted using the `Display` trait.
-        //
-        // TODO: remove expect in favor of error handling.
-
-        // If the stream of events was not modified after being created \
-        // by the parser, this is a bug, and should be reported."));
-    }
-
-    fn handle_event(&mut self, event: Event<'a>) -> io::Result<()> {
         match event {
             Event::Content(content) => match content {
                 Content::Text(str) => {
                     self.writer.write_all(b"<mtext>")?;
                     self.writer.write_all(str.as_bytes())?;
-                    self.writer.write_all(b"</mtext>")?;
+                    self.writer.write_all(b"</mtext>")
                 }
                 Content::Number(content) => {
                     self.writer.write_all(b"<mn>")?;
                     let buf = &mut [0u8; 4];
                     content.chars().try_for_each(|c| {
-                        let content = self.get_font().map_or(c, |v| v.map_char(c));
+                        let content = self.get_font()?.map_or(c, |v| v.map_char(c));
                         let bytes = content.encode_utf8(buf);
                         self.writer.write_all(bytes.as_bytes())?;
                         Ok::<(), io::Error>(())
                     })?;
-                    self.writer.write_all(b"</mn>")?;
+                    self.writer.write_all(b"</mn>")
                 }
                 Content::Identifier(ident) => {
                     self.writer.write_all(b"<mi>")?;
@@ -68,12 +67,12 @@ where
                         Identifier::Char(content) => {
                             let buf = &mut [0u8; 4];
                             // TODO: Handle the config of ISO vs. LaTeX vs. French vs. Upright
-                            let content = self.get_font().map_or(content, |v| v.map_char(content));
+                            let content = self.get_font()?.map_or(content, |v| v.map_char(content));
                             let bytes = content.encode_utf8(buf);
                             self.writer.write_all(bytes.as_bytes())?;
                         }
                     }
-                    self.writer.write_all(b"</mi>")?;
+                    self.writer.write_all(b"</mi>")
                 }
                 Content::Operator(Operator {
                     content,
@@ -107,7 +106,7 @@ where
                     let buf = &mut [0u8; 4];
                     let bytes = content.encode_utf8(buf).as_bytes();
                     self.writer.write_all(bytes)?;
-                    self.writer.write_all(b"</mo>")?;
+                    self.writer.write_all(b"</mo>")
                 }
             },
             Event::BeginGroup => {
@@ -119,20 +118,18 @@ where
                         ));
                     };
                     let stop = event == Event::EndGroup;
-                    self.handle_event(event)?;
+                    self.write_event(event)?;
                     if stop {
                         break;
                     }
                 }
-                self.writer.write_all(b"</mrow>")?;
+                self.writer.write_all(b"</mrow>")
             }
             // This should always be reached in the process of the `BeginGroup` event, and thus we
             // should most likely output and error if it is reached here.
-            Event::EndGroup => {
-                return Err(io::Error::other(
-                    "unbalanced use of `BeginGroup` and `EndGroup` events.",
-                ));
-            }
+            Event::EndGroup => Err(io::Error::other(
+                "unbalanced use of `BeginGroup` and `EndGroup` events.",
+            )),
             Event::Visual(Visual::Fraction(dim)) => {
                 let (Some(first), Some(second)) = (self.input.next(), self.input.next()) else {
                     return Err(io::Error::other(
@@ -144,19 +141,91 @@ where
                     let (dim, unit) = tex_to_css_units(dim);
                     write!(self.writer, " linethickness=\"{}{}\"", dim, unit)?;
                 }
-                self.handle_event(first)?;
-                self.handle_event(second)?;
-                self.writer.write_all(b"</mfrac>")?;
+                self.write_event(first)?;
+                self.write_event(second)?;
+                self.writer.write_all(b"</mfrac>")
             }
             Event::Visual(Visual::SquareRoot) => {
-                let Some(degree) = self.input.next() else {
+                let Some(argument) = self.input.next() else {
                     return Err(io::Error::other(
                         "expected two components after a `Root` event.",
                     ));
                 };
                 self.writer.write_all(b"<msqrt>")?;
-                self.handle_event(degree)?;
-                self.writer.write_all(b"</msqrt>")?;
+                self.write_event(argument)?;
+                self.writer.write_all(b"</msqrt>")
+            }
+            Event::Visual(Visual::Subscript) => {
+                let (Some(base), Some(subscript)) = (self.input.next(), self.input.next()) else {
+                    return Err(io::Error::other(
+                        "expected two components after a `Subscript` event.",
+                    ));
+                };
+                self.writer.write_all(b"<msub>")?;
+                self.write_event(base)?;
+                self.write_event(subscript)?;
+                self.writer.write_all(b"</msub>")
+            }
+            Event::Visual(Visual::Superscript) => {
+                let (Some(base), Some(superscript)) = (self.input.next(), self.input.next()) else {
+                    return Err(io::Error::other(
+                        "expected two components after a `Superscript` event.",
+                    ));
+                };
+                self.writer.write_all(b"<msup>")?;
+                self.write_event(base)?;
+                self.write_event(superscript)?;
+                self.writer.write_all(b"</msup>")
+            }
+            Event::Visual(Visual::SubSuperscript) => {
+                let (Some(base), Some(subscript), Some(superscript)) =
+                    (self.input.next(), self.input.next(), self.input.next())
+                else {
+                    return Err(io::Error::other(
+                        "expected three components after a `SubSuperscript` event.",
+                    ));
+                };
+                self.writer.write_all(b"<msubsup>")?;
+                self.write_event(base)?;
+                self.write_event(subscript)?;
+                self.write_event(superscript)?;
+                self.writer.write_all(b"</msubsup>")
+            }
+            Event::Visual(Visual::Overscript) => {
+                let (Some(base), Some(overscript)) = (self.input.next(), self.input.next()) else {
+                    return Err(io::Error::other(
+                        "expected two components after a `Overscript` event.",
+                    ));
+                };
+                self.writer.write_all(b"<mover>")?;
+                self.write_event(base)?;
+                self.write_event(overscript)?;
+                self.writer.write_all(b"</mover>")
+            }
+            Event::Visual(Visual::Underscript) => {
+                let (Some(base), Some(underscript)) = (self.input.next(), self.input.next()) else {
+                    return Err(io::Error::other(
+                        "expected two components after a `Underscript` event.",
+                    ));
+                };
+                self.writer.write_all(b"<munder>")?;
+                self.write_event(base)?;
+                self.write_event(underscript)?;
+                self.writer.write_all(b"</munder>")
+            }
+            Event::Visual(Visual::UnderOverscript) => {
+                let (Some(base), Some(underscript), Some(overscript)) =
+                    (self.input.next(), self.input.next(), self.input.next())
+                else {
+                    return Err(io::Error::other(
+                        "expected three components after a `UnderOverscript` event.",
+                    ));
+                };
+                self.writer.write_all(b"<munderover>")?;
+                self.write_event(base)?;
+                self.write_event(underscript)?;
+                self.write_event(overscript)?;
+                self.writer.write_all(b"</munderover>")
             }
             Event::Space {
                 width,
@@ -178,22 +247,26 @@ where
                     let (depth, unit) = tex_to_css_units(depth);
                     write!(self.writer, " depth=\"{}{}\"", depth, unit)?;
                 }
-                self.writer.write_all(b" />")?;
+                self.writer.write_all(b" />")
             }
             Event::FontChange(font) => {
-                let font_state = self.font_state.last_mut().expect("(internal error: please report) unbalanced use of `FontChange` events.");
+                let font_state = self.font_state.last_mut().ok_or(io::Error::other(
+                    "unbalanced use of grouping in `FontChange` events, no font state found",
+                ))?;
                 *font_state = font;
-                self.
-            },
+                let next_event = self.input.next().ok_or(io::Error::other(
+                    "missing following event in use of grouping in `FontChange` events",
+                ))?;
+                self.write_event(next_event)
+            }
         }
-        Ok(())
     }
 
-    fn get_font(&self) -> Option<Font> {
-        *self
-            .font_state
+    fn get_font(&self) -> io::Result<Option<Font>> {
+        self.font_state
             .last()
-            .expect("(internal error: please report) unbalanced use of `FontChange` events.")
+            .copied()
+            .ok_or(io::Error::other("unbalanced use of `FontChange` events."))
     }
 }
 
