@@ -38,7 +38,7 @@ where
 
     fn write_event(&mut self, event: Event<'a>) -> io::Result<()> {
         // Safety: this function must only write valid utf-8 to the writer.
-        // Where the writer is written to:
+        // How is the writer used?:
         // - using `write_all` with a utf-8 string.
         // - uwing `write!` with a utf-8 string, and the parameters must all be valid utf-8 since
         //      they are formatted using the `Display` trait.
@@ -111,29 +111,34 @@ where
             },
             Event::BeginGroup => {
                 self.writer.write_all(b"<mrow>")?;
+                self.font_state
+                    .push(*self.font_state.last().ok_or(io::Error::other(
+                        "unbalanced use of grouping in `FontChange` events, no font state found",
+                    ))?);
                 loop {
                     let Some(event) = self.input.next() else {
                         return Err(io::Error::other(
-                            "expected `EndGroup` event before the end of the input.",
+                            "expected `EndGroup` event before the end of the input",
                         ));
                     };
                     let stop = event == Event::EndGroup;
-                    self.write_event(event)?;
                     if stop {
+                        self.font_state.pop();
                         break;
                     }
+                    self.write_event(event)?;
                 }
                 self.writer.write_all(b"</mrow>")
             }
             // This should always be reached in the process of the `BeginGroup` event, and thus we
             // should most likely output and error if it is reached here.
             Event::EndGroup => Err(io::Error::other(
-                "unbalanced use of `BeginGroup` and `EndGroup` events.",
+                "unbalanced use of `BeginGroup` and `EndGroup` events",
             )),
             Event::Visual(Visual::Fraction(dim)) => {
                 let (Some(first), Some(second)) = (self.input.next(), self.input.next()) else {
                     return Err(io::Error::other(
-                        "expected two components after a `Fraction` event.",
+                        "expected two components after a `Fraction` event",
                     ));
                 };
                 self.writer.write_all(b"<mfrac")?;
@@ -148,7 +153,7 @@ where
             Event::Visual(Visual::SquareRoot) => {
                 let Some(argument) = self.input.next() else {
                     return Err(io::Error::other(
-                        "expected two components after a `Root` event.",
+                        "expected two components after a `Root` event",
                     ));
                 };
                 self.writer.write_all(b"<msqrt>")?;
@@ -158,7 +163,7 @@ where
             Event::Visual(Visual::Subscript) => {
                 let (Some(base), Some(subscript)) = (self.input.next(), self.input.next()) else {
                     return Err(io::Error::other(
-                        "expected two components after a `Subscript` event.",
+                        "expected two components after a `Subscript` event",
                     ));
                 };
                 self.writer.write_all(b"<msub>")?;
@@ -169,7 +174,7 @@ where
             Event::Visual(Visual::Superscript) => {
                 let (Some(base), Some(superscript)) = (self.input.next(), self.input.next()) else {
                     return Err(io::Error::other(
-                        "expected two components after a `Superscript` event.",
+                        "expected two components after a `Superscript` event",
                     ));
                 };
                 self.writer.write_all(b"<msup>")?;
@@ -182,7 +187,7 @@ where
                     (self.input.next(), self.input.next(), self.input.next())
                 else {
                     return Err(io::Error::other(
-                        "expected three components after a `SubSuperscript` event.",
+                        "expected three components after a `SubSuperscript` event",
                     ));
                 };
                 self.writer.write_all(b"<msubsup>")?;
@@ -194,7 +199,7 @@ where
             Event::Visual(Visual::Overscript) => {
                 let (Some(base), Some(overscript)) = (self.input.next(), self.input.next()) else {
                     return Err(io::Error::other(
-                        "expected two components after a `Overscript` event.",
+                        "expected two components after a `Overscript` event",
                     ));
                 };
                 self.writer.write_all(b"<mover>")?;
@@ -205,7 +210,7 @@ where
             Event::Visual(Visual::Underscript) => {
                 let (Some(base), Some(underscript)) = (self.input.next(), self.input.next()) else {
                     return Err(io::Error::other(
-                        "expected two components after a `Underscript` event.",
+                        "expected two components after a `Underscript` event",
                     ));
                 };
                 self.writer.write_all(b"<munder>")?;
@@ -218,7 +223,7 @@ where
                     (self.input.next(), self.input.next(), self.input.next())
                 else {
                     return Err(io::Error::other(
-                        "expected three components after a `UnderOverscript` event.",
+                        "expected three components after a `UnderOverscript` event",
                     ));
                 };
                 self.writer.write_all(b"<munderover>")?;
@@ -266,7 +271,7 @@ where
         self.font_state
             .last()
             .copied()
-            .ok_or(io::Error::other("unbalanced use of `FontChange` events."))
+            .ok_or(io::Error::other("unbalanced use of grouping in `FontChange` events, no font state found"))
     }
 }
 

@@ -56,7 +56,7 @@ impl<'a> Parser<'a> {
     ///
     /// ## Panics
     /// - This function will panic if the `\` or `%` character is given
-    pub fn handle_char_token(&mut self, token: char) -> InnerResult<Event<'a>> {
+    pub(crate) fn handle_char_token(&mut self, token: char) -> InnerResult<Event<'a>> {
         Ok(match token {
             // TODO: Check how we want to handle comments actually.
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
@@ -91,7 +91,7 @@ impl<'a> Parser<'a> {
     /// 2. If the event is a primitive, apply the corresponding primitive.
     /// 3. If the control sequence is not defined, return an error.
     // TODO: change assert! to ensure!
-    pub fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<Event<'a>> {
+    pub(crate) fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<Event<'a>> {
         match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
@@ -632,8 +632,6 @@ impl<'a> Parser<'a> {
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<Event<'a>> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-        self.instruction_stack
-            .push(Instruction::Event(Event::EndGroup));
         self.handle_argument(argument)?;
         // Kind of silly, we could inline `handle_argument` here and not push the
         // BeginGroup

@@ -194,7 +194,7 @@ impl<'a> Parser<'a> {
             match first_char {
                 '^' => return Some(Err(ErrorKind::DoubleSuperscript)),
                 '_' => return Some(Err(ErrorKind::DoubleSubscript)),
-                _ => {},
+                _ => {}
             };
         }
 
@@ -242,9 +242,19 @@ impl<'a> Parser<'a> {
     }
 
     /// Return the context surrounding the error reported.
-    fn error_context(&mut self) -> &str {
-        // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
-        // of the inputed string, when macros are supported.
+    fn error_with_context(&mut self, kind: ErrorKind) -> ParseError<'a> {
+        let Some(curr_ptr) = self.instruction_stack.last().and_then(|i| match i {
+            Instruction::Event(_) => None,
+            // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
+            // of the inputed string, when macros are supported.
+            Instruction::Substring(s) => Some(s.as_ptr()),
+        }) else {
+            return ParseError {
+                context: None,
+                error: kind,
+            };
+        };
+        let initial_byte_ptr = self.input.as_ptr();
         // Safety:
         // * Both `self` and `origin` must be either in bounds or one
         //   byte past the end of the same [allocated object].
@@ -252,7 +262,8 @@ impl<'a> Parser<'a> {
         //
         // * Both pointers must be *derived from* a pointer to the same object.
         //   (See below for an example.)
-        //   => this is true, as `initial_byte_ptr` is derived from `input.as_ptr()`.
+        //   => this is true, as `initial_byte_ptr` is derived from `input.as_ptr()`, and
+        //   `curr_ptr` is derived from `s.as_ptr()`, which points to `input`.
         // * The distance between the pointers, in bytes, must be an exact multiple
         //   of the size of `T`.
         //   => this is true, as both pointers are `u8` pointers.
@@ -260,13 +271,13 @@ impl<'a> Parser<'a> {
         //   => this is true, as the distance is always positive.
         // * The distance being in bounds cannot rely on "wrapping around" the address space.
         //   => this is true, as the distance is always positive.
-        
-        let curr_ptr = self.current_string().map(|s| s.as_ptr()).unwrap();
-        let initial_byte_ptr = self.input.as_ptr();
         let distance = unsafe { curr_ptr.offset_from(initial_byte_ptr) } as usize;
         let start = distance.saturating_sub(10) as usize;
         let end = self.input.len().min(distance + 10);
-        &self.input[start..end]
+        ParseError {
+            context: Some((&self.input[start..end], distance - start)),
+            error: kind,
+        }
     }
 }
 
@@ -285,41 +296,39 @@ impl<'a> Iterator for Parser<'a> {
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::Substring(content)) => {
-                if content.is_empty() {
-                    self.instruction_stack.pop();
-                    let popped = self.group_stack.pop();
-                    if popped != Some(GroupType::Brace) {
-                        return Some(Err(ErrorKind::UnbalancedGroup(popped)));
-                    }
+            Some(Instruction::Substring(_)) => {
+                let Some(content) = self.current_string() else {
                     return self.next();
-                }
-                let mut chars = content.chars();
-                let next_char = chars.next().expect("the content is not empty");
+                };
+                let token = lex::token(content);
 
                 // TODO: Here we should just handle a token instead of the first char.
-                Some(match next_char {
+                let event = match token {
                     // TODO: Comments should be handled here.
-                    '.' | '0'..='9' => {
-                        let len = content
+                    Ok(Token::Character('0'..='9')) => {
+                        let mut len = content
                             .chars()
                             .skip(1)
-                            .take_while(|&c| c.is_ascii_digit() || c == '.')
+                            .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
                             .count()
                             + 1;
+
+                        if matches!(
+                            content.as_bytes()[len - 1],
+                            b'.' | b','
+                        ) {
+                            len -= 1;
+                        }
                         let (number, rest) = content.split_at(len);
                         *content = rest;
                         Ok(Event::Content(Content::Number(number)))
                     }
-                    '\\' => {
-                        *content = &content[1..];
-                        lex::rhs_control_sequence(content).and_then(|cs| self.handle_primitive(cs))
-                    }
-                    c => {
-                        *content = chars.as_str();
-                        self.handle_char_token(c)
-                    }
-                })
+                    Ok(Token::ControlSequence(cs)) => self.handle_primitive(cs),
+                    Ok(Token::Character(c)) => self.handle_char_token(c),
+                    Err(ErrorKind::EndOfInput) => return None,
+                    Err(e) => Err(e),
+                };
+                Some(event.map_err(|e| self.error_with_context(e)))
             }
             None => None,
         }
@@ -338,7 +347,7 @@ impl Display for ParseError<'_> {
         f.write_str("Error while parsing: ")?;
         self.error.fmt(f)?;
         if let Some((context, char_position)) = self.context {
-            f.write_str("\nContext: ")?;
+            f.write_str("\n --> Context: ")?;
             f.write_str(context)?;
             f.write_str("\n")?;
             f.write_fmt(format_args!("{:<1$}", "^", char_position))?;
@@ -347,19 +356,21 @@ impl Display for ParseError<'_> {
     }
 }
 
-type InnerResult<T> = std::result::Result<T, ErrorKind>;
+pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 
 #[derive(Debug, Error)]
-enum ErrorKind {
+pub(crate) enum ErrorKind {
     #[error("unbalanced group found, expected {}", .0.map_or(String::from("no group closing"), |t| t.to_string()))]
     UnbalancedGroup(Option<GroupType>),
     #[error(
-        "unexpected math `$` (math shift) character - this character is currently unsupported."
+        "unexpected math `$` (math shift) character - this character is currently unsupported"
     )]
     MathShift,
-    #[error("unexpected hash sign `#` character - this character can only be used in macro definitions.")]
+    #[error(
+        "unexpected hash sign `#` character - this character can only be used in macro definitions"
+    )]
     HashSign,
-    #[error("unexpected alignment character `&` - this character can only be used in tabular environments (not yet supported).")]
+    #[error("unexpected alignment character `&` - this character can only be used in tabular environments (not yet supported)")]
     AlignmentChar,
     #[error("unexpected end of input")]
     EndOfInput,
@@ -379,7 +390,7 @@ enum ErrorKind {
     ControlSequence,
     #[error("expected a number")]
     Number,
-    #[error("expected a character representing a number after '`'. found a non ascii character.")]
+    #[error("expected a character representing a number after '`'. found a non ascii character")]
     CharacterNumber,
     #[error("expected an argument")]
     Argument,
@@ -394,7 +405,6 @@ enum ErrorKind {
     #[error("Unknown primitive command found")]
     UnknownPrimitive,
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -411,7 +421,9 @@ mod tests {
     #[test]
     fn substr_instructions() {
         let parser = Parser::new("\\bar{y}");
-        let events = parser.collect::<InnerResult<Vec<_>>>().unwrap();
+        let events = parser
+            .collect::<Result<Vec<_>, ParseError<'static>>>()
+            .unwrap();
 
         println!("{events:?}");
 

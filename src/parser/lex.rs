@@ -1,5 +1,3 @@
-use std::mem::MaybeUninit;
-
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
 use super::{operator_table::is_delimiter, Argument, ErrorKind, InnerResult, Token};
@@ -420,8 +418,10 @@ pub fn one_optional_space(input: &mut &str) -> bool {
 /// Return the next token in the input.
 ///
 /// A token will never be whitespace, and will never be a `%` character.
+///
+/// When a token is a number character, it is not stripped from the input.
 pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
-    input.trim_start();
+    *input = input.trim_start();
     match input.chars().next() {
         Some('\\') => {
             *input = &input[1..];
@@ -431,6 +431,9 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
            let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
            *input = rest;
            token(input)
+        }
+        Some(digit@('0'..='9')) => {
+            Ok(Token::Character(digit))
         }
         Some(c) => {
             *input = &input[c.len_utf8()..];
