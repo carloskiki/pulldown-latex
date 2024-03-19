@@ -2,7 +2,7 @@
 ///
 ///
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ParserConfig {
+pub struct RenderConfig {
     /// See [`DisplayMode`].
     pub display_mode: DisplayMode,
     /// If true, the `mathml` generated includes an `<annotation>` element that contains the input
@@ -20,7 +20,7 @@ pub struct ParserConfig {
 }
 
 
-impl Default for ParserConfig {
+impl Default for RenderConfig {
     /// # Default Value
     /// ```rust
     /// # use pulldown_latex::{config::ParserConfig, DisplayMode};

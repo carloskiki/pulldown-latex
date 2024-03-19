@@ -3,7 +3,8 @@
 A pull parser for $\LaTeX$ parsing and `mathml` rendering.
 
 This project is inspired `Katex`, `Temml`, `MathJax`, etc. It is in its very early
-stages of development, and does not "work" yet for most practical use cases.
+stages of development, and works for a small subset of what `Katex` and the likes support.
+It is _not_ production ready and is mostly untested.
 
 ## Goals
 
@@ -14,7 +15,7 @@ is out of scope for this crate. Another consequence of this goal is that some pl
 are deprecated (e.g., `\atop`, `\over`, etc.) are not supported by this crate.
 
 __Closely resembling conventional LaTeX:__
-It is a goal for this crate to make efforts in generating aestethic equations. This means that
+It is a goal for this crate to make efforts in generating aesthetic equations. This means that
 the `mathml` output may be tweaked to make it resemble what `pdflatex`, `Katex` or `MathJax` outputs.
 
 ## Miscellaneous References & Tools
@@ -32,7 +33,6 @@ these versions specifically.
 
 ## TODOs
 
-- [ ] Bring in Either?
 - [ ] Have a correct implementation of all `amsmath` and `latex2e` math primitives.
 - [ ] Write comprehensive tests for the Parser.
 - [ ] Add support for structured math environments.
@@ -65,6 +65,7 @@ these versions specifically.
     Things like `\vskip`, `\vfil`, `\moveleft` etc.
 - `\hfil`, `\hfill`
 - `\eqno`, `\leqno`, and equation numbers in general.
+- `\over`, `\atop`, and all deprecated "fraction like" control sequences.
 
 ### Unsupported Katex/Temml Options
 
