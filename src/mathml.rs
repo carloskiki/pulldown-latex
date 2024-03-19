@@ -13,8 +13,6 @@ struct MathmlWriter<'a, I, W> {
     config: RenderConfig<'a>,
 }
 
-// TODO: Should we make css unit conversion produce a string directly?
-// TODO: Handle `FontStyle` choosed by the config.
 impl<'a, I, W, E> MathmlWriter<'a, I, W>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
@@ -90,13 +88,31 @@ where
                     self.writer.write_all(b"</mn>")
                 }
                 Content::Identifier(ident) => {
-                    self.writer.write_all(b"<mi>")?;
                     match ident {
-                        Identifier::Str(str) => self.writer.write_all(str.as_bytes())?,
+                        Identifier::Str(str) => {
+                            self.writer.write_all(b"<mi>")?;
+                            self.writer.write_all(str.as_bytes())?;
+                        }
                         Identifier::Char(content) => {
+                            let content = match (
+                                self.get_font()?,
+                                self.config.math_style.should_be_upright(content),
+                            ) {
+                                (Some(Font::UpRight), _) | (None, true) => {
+                                    self.writer.write_all(b"<mi mathvariant=\"normal\">")?;
+                                    content
+                                }
+                                (Some(font), _) => {
+                                    self.writer.write_all(b"<mi>")?;
+                                    font.map_char(content)
+                                }
+                                _ => {
+                                    self.writer.write_all(b"<mi>")?;
+                                    content
+                                }
+                            };
+
                             let buf = &mut [0u8; 4];
-                            // TODO: Handle the config of ISO vs. LaTeX vs. French vs. Upright
-                            let content = self.get_font()?.map_or(content, |v| v.map_char(content));
                             let bytes = content.encode_utf8(buf);
                             self.writer.write_all(bytes.as_bytes())?;
                         }
@@ -271,7 +287,11 @@ where
                 if let Some(width) = width {
                     write!(self.writer, "<mspace width=\"{}em\"", tex_to_css_em(width))?;
                     if width.0 < 0.0 {
-                        write!(self.writer, " style=\"margin-left: {}em\"", tex_to_css_em(width))?;
+                        write!(
+                            self.writer,
+                            " style=\"margin-left: {}em\"",
+                            tex_to_css_em(width)
+                        )?;
                     }
                 }
                 if let Some(height) = height {

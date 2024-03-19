@@ -94,6 +94,24 @@ pub enum MathStyle {
     Upright,
 }
 
+impl MathStyle {
+    /// Whether or not the style should __manually__ be set to upright for the given character.
+    ///
+    /// The mathml spec states that the default style for math variables is italic for all
+    /// characters, following the ISO 80000-2:2019 standard. If the style is set to something other
+    /// than `TeX`, then the style should be set to upright for some characters. This function
+    /// returns `true` if the style should be set to upright for the given character.
+    pub(crate) fn should_be_upright(self, c: char) -> bool {
+        match self {
+            MathStyle::TeX => !(c.is_lowercase() || c.is_ascii_uppercase()),
+            MathStyle::ISO => false,
+            MathStyle::French => !c.is_ascii_lowercase(),
+            MathStyle::Upright => true,
+        }
+    }
+    
+}
+
 /// How the math is displayed.
 ///
 /// Semantically, this affects the [`display`] attribute of the [`math`] in the mathml

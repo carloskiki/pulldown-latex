@@ -193,25 +193,6 @@ pub enum DimensionUnit {
     Mu,
 }
 
-impl Display for DimensionUnit {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(match self {
-            DimensionUnit::Em => "em",
-            DimensionUnit::Ex => "ex",
-            DimensionUnit::Pt => "pt",
-            DimensionUnit::Pc => "pc",
-            DimensionUnit::In => "in",
-            DimensionUnit::Bp => "bp",
-            DimensionUnit::Cm => "cm",
-            DimensionUnit::Mm => "mm",
-            DimensionUnit::Dd => "dd",
-            DimensionUnit::Cc => "cc",
-            DimensionUnit::Sp => "sp",
-            DimensionUnit::Mu => "mu",
-        })
-    }
-}
-
 /// Convert TeX units to CSS units.
 ///
 /// This is similar to the conversion table in the TeXbook p. 57, but is not exact.
