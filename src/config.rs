@@ -1,18 +1,21 @@
+//! Configuration options for the renderer.
+//! 
+//! The configuration of the `mathml` renderer is done through the [`RenderConfig`] struct.
 use std::fmt::Display;
 
-/// Configuration for the parser.
+/// Configuration for the `mathml` renderer.
 ///
-///
+/// The default value is: [`RenderConfig::default`].
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct RenderConfig<'a> {
     /// See [`DisplayMode`].
     pub display_mode: DisplayMode,
-    /// If true, the `mathml` generated includes an `<annotation>` element that contains the input
-    /// TeX string.
+    /// If Some, the `mathml` generated includes an `<annotation>` element that contains the
+    /// provided string. It is commonly used to include the LaTeX source code in the generated `mathml`.
     pub annotation: Option<&'a str>,
-    /// A RGB color. This option determines the color that unsupported commands and invalid LaTeX are rendered in.
+    /// A RGB color. This option determines the color in which errors and invalid LaTeX commands are rendered in.
     pub error_color: (u8, u8, u8),
-    /// If true, a namespace will be written into the <math> element.
+    /// If true, a namespace `xml` will be written into the <math> element.
     /// That namespace is xmlns="http://www.w3.org/1998/Math/MathML".
     /// Such a namespace is unnecessary for modern browsers but can be helpful for other user agents,
     /// such as Microsoft Word.
@@ -21,6 +24,15 @@ pub struct RenderConfig<'a> {
     pub math_style: MathStyle,
 }
 
+impl<'a> RenderConfig<'a> {
+    /// Create a new `RenderConfig` with the provided annotation, and default values for the rest of the fields.
+    pub fn with_annotation(annotation: &'a str) -> Self {
+        Self {
+            annotation: Some(annotation),
+            ..Self::default()
+        }
+    }
+}
 
 impl<'a> Default for RenderConfig<'a> {
     /// # Default Value

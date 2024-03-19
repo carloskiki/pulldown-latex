@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::{
-    attribute::{tex_to_css_units, Font},
+    attribute::{tex_to_css_em, Font},
     config::RenderConfig,
     event::{Content, Event, Identifier, Operator, Visual},
 };
@@ -34,33 +34,43 @@ where
     }
 
     fn write(mut self) -> io::Result<()> {
-        write!(self.writer, "<math display=\"{}\"", self.config.display_mode)?;
-        if self.config.xml {
-            self.writer.write_all(b" xmlns=\"http://www.w3.org/1998/Math/MathML\"")?;
-        }
-        self.writer.write_all(b">")?;
-        if self.config.annotation.is_some() {
-            self.writer.write_all(b"<semantics>")?;
-        }
-        
-        while let Some(event) = self.input.next() {
-            self.write_event(event)?;
-        }
-        if let Some(annotation) = self.config.annotation {
-            write!(self.writer, "<annotation encoding=\"application/x-tex\">{}</annotation>", annotation)?;
-            self.writer.write_all(b"</semantics>")?;
-        }
-        
-        Ok(())
-    }
-
-    fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
         // Safety: this function must only write valid utf-8 to the writer.
         // How is the writer used?:
         // - using `write_all` with a utf-8 string.
         // - uwing `write!` with a utf-8 string, and the parameters must all be valid utf-8 since
         //      they are formatted using the `Display` trait.
 
+        write!(
+            self.writer,
+            "<math display=\"{}\"",
+            self.config.display_mode
+        )?;
+        if self.config.xml {
+            self.writer
+                .write_all(b" xmlns=\"http://www.w3.org/1998/Math/MathML\"")?;
+        }
+        self.writer.write_all(b">")?;
+        if self.config.annotation.is_some() {
+            self.writer.write_all(b"<semantics>")?;
+        }
+
+        while let Some(event) = self.input.next() {
+            self.write_event(event)?;
+        }
+        if let Some(annotation) = self.config.annotation {
+            write!(
+                self.writer,
+                "<annotation encoding=\"application/x-tex\">{}</annotation>",
+                annotation
+            )?;
+            self.writer.write_all(b"</semantics>")?;
+        }
+
+        Ok(())
+    }
+
+    fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
+        // SAFETY: This function respects the invariants of the MathmlWriter
         match event {
             Ok(Event::Content(content)) => match content {
                 Content::Text(str) => {
@@ -109,17 +119,15 @@ where
                         write!(self.writer, " movablelimits=\"{}\"", moveable_limits)?;
                     }
                     if let Some(left_space) = left_space {
-                        let (left_space, unit) = tex_to_css_units(left_space);
-                        write!(self.writer, " lspace=\"{}{}\"", left_space, unit)?;
+                        write!(self.writer, " lspace=\"{}em\"", tex_to_css_em(left_space))?;
                     }
                     if let Some(right_space) = right_space {
-                        let (right_space, unit) = tex_to_css_units(right_space);
-                        write!(self.writer, " rspace=\"{}{}\"", right_space, unit)?;
+                        write!(self.writer, " rspace=\"{}em\"", tex_to_css_em(right_space))?;
                     }
                     if let Some(size) = size {
-                        let (size, unit) = tex_to_css_units(size);
-                        write!(self.writer, " minsize=\"{}{}\"", size, unit)?;
-                        write!(self.writer, " maxsize=\"{}{}\"", size, unit)?;
+                        let size = tex_to_css_em(size);
+                        write!(self.writer, " minsize=\"{}em\"", size)?;
+                        write!(self.writer, " maxsize=\"{}em\"", size)?;
                     }
                     self.writer.write_all(b">")?;
                     let buf = &mut [0u8; 4];
@@ -162,8 +170,7 @@ where
                     };
                     self.writer.write_all(b"<mfrac")?;
                     if let Some(dim) = dim {
-                        let (dim, unit) = tex_to_css_units(dim);
-                        write!(self.writer, " linethickness=\"{}{}\"", dim, unit)?;
+                        write!(self.writer, " linethickness=\"{}em\"", tex_to_css_em(dim))?;
                     }
                     self.write_event(first)?;
                     self.write_event(second)?;
@@ -262,19 +269,16 @@ where
                 depth,
             }) => {
                 if let Some(width) = width {
-                    let (width, unit) = tex_to_css_units(width);
-                    write!(self.writer, "<mspace width=\"{}{}\"", width, unit)?;
-                    if width < 0.0 {
-                        write!(self.writer, " style=\"margin-left: {}{}\"", width, unit)?;
+                    write!(self.writer, "<mspace width=\"{}em\"", tex_to_css_em(width))?;
+                    if width.0 < 0.0 {
+                        write!(self.writer, " style=\"margin-left: {}em\"", tex_to_css_em(width))?;
                     }
                 }
                 if let Some(height) = height {
-                    let (height, unit) = tex_to_css_units(height);
-                    write!(self.writer, " height=\"{}{}\"", height, unit)?;
+                    write!(self.writer, " height=\"{}em\"", tex_to_css_em(height))?;
                 }
                 if let Some(depth) = depth {
-                    let (depth, unit) = tex_to_css_units(depth);
-                    write!(self.writer, " depth=\"{}{}\"", depth, unit)?;
+                    write!(self.writer, " depth=\"{}em\"", tex_to_css_em(depth))?;
                 }
                 self.writer.write_all(b" />")
             }
@@ -310,7 +314,11 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders a
 /// string of MathML into the given string.
-pub fn push_html<'a, I, E>(string: &mut String, parser: I, config: RenderConfig<'a>) -> io::Result<()>
+pub fn push_html<'a, I, E>(
+    string: &mut String,
+    parser: I,
+    config: RenderConfig<'a>,
+) -> io::Result<()>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
     E: std::error::Error,

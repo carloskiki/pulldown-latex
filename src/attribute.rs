@@ -3,7 +3,6 @@ use std::fmt::Display;
 pub type Dimension = (f32, DimensionUnit);
 pub type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
 
-
 /// Fonts
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Font {
@@ -215,45 +214,40 @@ impl Display for DimensionUnit {
 
 /// Convert TeX units to CSS units.
 ///
-/// This makes use of the conversion table in the TeXbook, p. 57.
-/// Notably: TeX pt == 72.27 / 72.0 CSS pt
-// TODO: Use type constraints to differ css and TeX units.
-pub fn tex_to_css_units(dim: Dimension) -> Dimension {
+/// This is similar to the conversion table in the TeXbook p. 57, but is not exact.
+///
+/// The use of `em` and `mu` units are recommended, as they match exactly their definition. Using
+/// other units may result in unexpected sizing, as all dimensions are converted to `em` units when
+/// rendering.
+///
+/// This function uses the following conversion table:
+/// | TeX unit | css _em_ |
+/// | -------- | -------- |
+/// | pt       | 0.1      |
+/// | pc       | 1.2      |
+/// | bp       | 0.0996   |
+/// | dd       | 0.107    |
+/// | cc       | 1.07     |
+/// | sp       | 1.5e-6   |
+/// | mu       | 1/18     |
+/// | em       | 1        |
+/// | ex       | 0.4      |
+/// | in       | 6        |
+/// | cm       | 6/2.54   |
+/// | mm       | 6/25.4   |
+pub fn tex_to_css_em(dim: Dimension) -> f32 {
     match dim.1 {
-        DimensionUnit::Pt => (dim.0 * 72.27 / 72., DimensionUnit::Pt),
-        DimensionUnit::Pc => (dim.0 * 12. * 72.27 / 72., DimensionUnit::Pt),
-        DimensionUnit::Bp => (dim.0, DimensionUnit::Pt),
-        DimensionUnit::Dd => (dim.0 * 72.27 * 1238. / (1157. * 72.), DimensionUnit::Pt),
-        DimensionUnit::Cc => (
-            dim.0 * 12. * 72.27 * 1238. / (1157. * 72.),
-            DimensionUnit::Pt,
-        ),
-        DimensionUnit::Sp => (dim.0 * 72.27 / (72. * 65536.), DimensionUnit::Pt),
-        DimensionUnit::Mu => (dim.0 / 18., DimensionUnit::Em),
-        DimensionUnit::Em
-        | DimensionUnit::Ex
-        | DimensionUnit::In
-        | DimensionUnit::Cm
-        | DimensionUnit::Mm => dim,
+        DimensionUnit::Pt => dim.0 * 0.1,
+        DimensionUnit::Pc => dim.0 * 1.2,
+        DimensionUnit::Bp => dim.0 * 72. / 72.27 * 0.1,
+        DimensionUnit::Dd => dim.0 * 1238. / 1157. * 0.1,
+        DimensionUnit::Cc => dim.0 * 12. * 1238. / 1157. * 0.1,
+        DimensionUnit::Sp => dim.0 / 65536. * 0.1,
+        DimensionUnit::Mu => dim.0 / 18.,
+        DimensionUnit::Em => dim.0,
+        DimensionUnit::Ex => dim.0 * 0.4,
+        DimensionUnit::In => dim.0 * 6.,
+        DimensionUnit::Cm => dim.0 * 6. / 2.54,
+        DimensionUnit::Mm => dim.0 * 6. / 25.4,
     }
-}
-
-// Cat codes of TeX characters, as per TeXbook p. 37 and Appendix B.
-enum Category {
-    Escape, // never used?
-    Begin,
-    End,
-    MathShift,
-    AlignmentTab, // unit
-    EndOfLine,    // unit
-    Parameter,    // unit
-    Superscript,  // unit
-    Subscript,    // unit
-    Ignored,      // just don't emit them
-    Space,
-    Letter,
-    Other,
-    Active,
-    Comment,
-    Invalid,
 }
