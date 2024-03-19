@@ -1,6 +1,7 @@
 use crate::attribute::{Font, Dimension};
 
 #[derive(Debug, PartialEq)]
+/// All events that can be produced by the parser.
 pub enum Event<'a> {
     Content(Content<'a>),
     BeginGroup,
@@ -38,12 +39,14 @@ pub struct Operator {
 }
 
 #[derive(Debug, PartialEq, Eq)]
+/// An identifier can either be a single character, or a string (e.g., a command such as `sin`,
+/// `lim`, etc.).
 pub enum Identifier<'a> {
     Str(&'a str),
     Char(char)
 }
 
-/// Event that affect the following 2 events visually
+/// Change the visual representation of the following event(s)
 #[derive(Debug, PartialEq)]
 pub enum Visual {
     /// The following event is the content of the root
