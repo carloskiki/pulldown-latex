@@ -6,22 +6,22 @@ use crate::{
     event::{Content, Event, Identifier, Operator, Visual},
 };
 
-struct MathmlWriter<I, W> {
+struct MathmlWriter<'a, I, W> {
     input: I,
     writer: W,
     font_state: Vec<Option<Font>>,
-    config: RenderConfig,
+    config: RenderConfig<'a>,
 }
 
 // TODO: Should we make css unit conversion produce a string directly?
 // TODO: Handle `FontStyle` choosed by the config.
-impl<'a, I, W, E> MathmlWriter<I, W>
+impl<'a, I, W, E> MathmlWriter<'a, I, W>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
     W: io::Write,
     E: std::error::Error,
 {
-    fn new(input: I, writer: W, config: RenderConfig) -> Self {
+    fn new(input: I, writer: W, config: RenderConfig<'a>) -> Self {
         // Size of the buffer is arbitrary for performance guess.
         let mut font_state = Vec::with_capacity(16);
         font_state.push(None);
@@ -34,9 +34,23 @@ where
     }
 
     fn write(mut self) -> io::Result<()> {
+        write!(self.writer, "<math display=\"{}\"", self.config.display_mode)?;
+        if self.config.xml {
+            self.writer.write_all(b" xmlns=\"http://www.w3.org/1998/Math/MathML\"")?;
+        }
+        self.writer.write_all(b">")?;
+        if self.config.annotation.is_some() {
+            self.writer.write_all(b"<semantics>")?;
+        }
+        
         while let Some(event) = self.input.next() {
             self.write_event(event)?;
         }
+        if let Some(annotation) = self.config.annotation {
+            write!(self.writer, "<annotation encoding=\"application/x-tex\">{}</annotation>", annotation)?;
+            self.writer.write_all(b"</semantics>")?;
+        }
+        
         Ok(())
     }
 
@@ -296,7 +310,7 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders a
 /// string of MathML into the given string.
-pub fn push_html<'a, I, E>(string: &mut String, parser: I, config: RenderConfig) -> io::Result<()>
+pub fn push_html<'a, I, E>(string: &mut String, parser: I, config: RenderConfig<'a>) -> io::Result<()>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
     E: std::error::Error,
@@ -307,7 +321,7 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders the
 /// MathML into the given writer.
-pub fn write_html<'a, I, W, E>(writer: W, parser: I, config: RenderConfig) -> io::Result<()>
+pub fn write_html<'a, I, W, E>(writer: W, parser: I, config: RenderConfig<'a>) -> io::Result<()>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
     W: io::Write,

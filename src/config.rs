@@ -1,13 +1,15 @@
+use std::fmt::Display;
+
 /// Configuration for the parser.
 ///
 ///
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct RenderConfig {
+pub struct RenderConfig<'a> {
     /// See [`DisplayMode`].
     pub display_mode: DisplayMode,
     /// If true, the `mathml` generated includes an `<annotation>` element that contains the input
     /// TeX string.
-    pub annotate: bool,
+    pub annotation: Option<&'a str>,
     /// A RGB color. This option determines the color that unsupported commands and invalid LaTeX are rendered in.
     pub error_color: (u8, u8, u8),
     /// If true, a namespace will be written into the <math> element.
@@ -20,13 +22,13 @@ pub struct RenderConfig {
 }
 
 
-impl Default for RenderConfig {
+impl<'a> Default for RenderConfig<'a> {
     /// # Default Value
     /// ```rust
     /// # use pulldown_latex::{config::ParserConfig, DisplayMode};
     /// const DEFAULT: ParserConfig = ParserConfig {
     ///     display_mode: DisplayMode::Inline,
-    ///     annotate: false,
+    ///     annotate: None,
     ///     error_color: (178, 34, 34),
     ///     xml: false,
     ///     math_style: MathStyle::TeX,
@@ -36,7 +38,7 @@ impl Default for RenderConfig {
     fn default() -> Self {
         Self {
             display_mode: DisplayMode::Inline,
-            annotate: false,
+            annotation: None,
             error_color: (178, 34, 34),
             xml: false,
             math_style: MathStyle::TeX,
@@ -102,4 +104,13 @@ pub enum DisplayMode {
     /// The equation is centered on its own line
     /// and elements such as`\int` and `\sum` are displayed bigger.
     Block,
+}
+
+impl Display for DisplayMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            DisplayMode::Inline => f.write_str("inline"),
+            DisplayMode::Block => f.write_str("block"),
+        }
+    }
 }
