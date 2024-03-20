@@ -46,8 +46,9 @@ macro_rules! ensure_eq {
     };
 }
 
-// TODO: Every primitive must represent one and only one mathml node, we must ensure that it is
-// wrapped inside of a group. e.g., `\approxcoloncolon`, `\genfrac`, etc.
+// NOTE/TODO: what if there is something such as `a_\pi_\pi` would the current implementation parse
+// it normally since the subscript `pi` automatically parses another subscript? Yes, and this is a
+// problem!!!
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -58,11 +59,14 @@ impl<'a> Parser<'a> {
     /// - This function will panic if the `\` or `%` character is given
     pub(crate) fn handle_char_token(&mut self, token: char) -> InnerResult<Event<'a>> {
         Ok(match token {
-            // TODO: Check how we want to handle comments actually.
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
-            '_' => panic!("(internal error: please report) the `_` character should never be observed as a token"),
-            '^' => panic!("(internal error: please report) the `^` character should never be observed as a token"),
+            '_' => {
+                self.parse_suffix(true).map(|v| Event::Visual(v))?
+            },
+            '^' => {
+                self.parse_suffix(false).map(|v| Event::Visual(v))?
+            },
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
             '&' => return Err(ErrorKind::AlignmentChar),
@@ -553,8 +557,6 @@ impl<'a> Parser<'a> {
             // Fractions //
             ///////////////
             "frac" => {
-                // TODO: This does not handle the case where both arguments are separated across different
-                // instructions.
                 todo!()
             }
 
@@ -563,6 +565,9 @@ impl<'a> Parser<'a> {
             "approxeq" => self.operator(op!('≊')),
             "approxcolon" => {
                 let maybe_suffix = self.check_suffixes();
+                if maybe_suffix.is_some() {
+                    self.instruction_stack.push(Instruction::Event(Event::EndGroup));
+                }
                 self.instruction_stack
                     .push(Instruction::Event(Event::Content(Content::Operator(op! {
                         ':',
@@ -573,7 +578,7 @@ impl<'a> Parser<'a> {
                     {right_space: Some((0., DimensionUnit::Em))}
                 }));
                 if let Some(suffix) = maybe_suffix {
-                    self.instruction_stack.push(Instruction::Event(event));
+                    self.instruction_stack.extend([Instruction::Event(event), Instruction::Event(Event::BeginGroup)]);
                     suffix.map(|v| Event::Visual(v))
                 } else {
                     Ok(event)
@@ -581,6 +586,9 @@ impl<'a> Parser<'a> {
             }
             "approxcoloncolon" => {
                 let maybe_suffix = self.check_suffixes();
+                if maybe_suffix.is_some() {
+                    self.instruction_stack.push(Instruction::Event(Event::EndGroup));
+                }
                 self.instruction_stack.extend([
                     Instruction::Event(Event::Content(Content::Operator(
                         op! {':', {left_space: Some((0., DimensionUnit::Em))}},
@@ -598,7 +606,7 @@ impl<'a> Parser<'a> {
                     {right_space: Some((0., DimensionUnit::Em))}
                 }));
                 if let Some(suffix) = maybe_suffix {
-                    self.instruction_stack.push(Instruction::Event(event));
+                    self.instruction_stack.extend([Instruction::Event(event), Instruction::Event(Event::BeginGroup)]);
                     suffix.map(|v| Event::Visual(v))
                 } else {
                     Ok(event)

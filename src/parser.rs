@@ -134,71 +134,80 @@ impl<'a> Parser<'a> {
     ///
     /// This must be called when a suffix can be present on the element being parsed.
     fn check_suffixes(&mut self) -> Option<InnerResult<Visual>> {
-        let (mut subscript, mut superscript) = (None, None);
         let str = self.current_string()?;
         *str = str.trim_start();
         let suffix = str.chars().next().expect("current_string is not empty");
         match suffix {
             '^' => {
                 *str = &str[1..];
-                let Some(str) = self.current_string() else {
-                    return Some(Err(ErrorKind::EmptySuperscript));
-                };
-                match lex::argument(str) {
-                    Ok(arg) => superscript = Some(arg),
-                    Err(e) => return Some(Err(e)),
-                };
+                Some(self.parse_suffix(false))
             }
             '_' => {
                 *str = &str[1..];
-                let Some(str) = self.current_string() else {
-                    return Some(Err(ErrorKind::EmptySubscript));
-                };
-                match lex::argument(str) {
-                    Ok(arg) => subscript = Some(arg),
-                    Err(e) => return Some(Err(e)),
-                };
+                Some(self.parse_suffix(true))
             }
-            _ => return None,
+            _ => None,
+        }
+    }
+
+    fn parse_suffix(&mut self, is_subscript: bool) -> InnerResult<Visual> {
+        let (mut subscript, mut superscript) = (None, None);
+        if is_subscript {
+            let Some(str) = self.current_string() else {
+                return Err(ErrorKind::EmptySubscript);
+            };
+            match lex::argument(str) {
+                Ok(arg) => subscript = Some(arg),
+                Err(e) => return Err(e),
+            };
+        } else {
+            let Some(str) = self.current_string() else {
+                return Err(ErrorKind::EmptySuperscript);
+            };
+            match lex::argument(str) {
+                Ok(arg) => superscript = Some(arg),
+                Err(e) => return Err(e),
+            };
         };
+        
         if let Some(s) = self.current_string() {
             *s = s.trim_start();
             match s.chars().next().expect("current_string is not empty") {
                 '^' if superscript.is_none() => {
                     *s = &s[1..];
                     let Some(str) = self.current_string() else {
-                        return Some(Err(ErrorKind::EmptySuperscript));
+                        return Err(ErrorKind::EmptySuperscript);
                     };
                     match lex::argument(str) {
                         Ok(arg) => superscript = Some(arg),
-                        Err(e) => return Some(Err(e)),
+                        Err(e) => return Err(e),
                     };
                 }
                 '_' if subscript.is_none() => {
                     *s = &s[1..];
                     let Some(str) = self.current_string() else {
-                        return Some(Err(ErrorKind::EmptySubscript));
+                        return Err(ErrorKind::EmptySubscript);
                     };
                     match lex::argument(str) {
                         Ok(arg) => subscript = Some(arg),
-                        Err(e) => return Some(Err(e)),
+                        Err(e) => return Err(e),
                     };
                 }
-                '^' => return Some(Err(ErrorKind::DoubleSuperscript)),
-                '_' => return Some(Err(ErrorKind::DoubleSubscript)),
+                '^' => return Err(ErrorKind::DoubleSuperscript),
+                '_' => return Err(ErrorKind::DoubleSubscript),
                 _ => {}
             };
         };
 
         if let Some(Some(first_char)) = self.current_string().map(|s| s.chars().next()) {
             match first_char {
-                '^' => return Some(Err(ErrorKind::DoubleSuperscript)),
-                '_' => return Some(Err(ErrorKind::DoubleSubscript)),
+                '^' => return Err(ErrorKind::DoubleSuperscript),
+                '_' => return Err(ErrorKind::DoubleSubscript),
                 _ => {}
             };
         }
 
-        Some(match (subscript, superscript) {
+        match (subscript, superscript) {
             (Some(sub), Some(sup)) => self
                 .handle_argument(sup)
                 .and_then(|_| self.handle_argument(sub))
@@ -206,7 +215,7 @@ impl<'a> Parser<'a> {
             (None, Some(sup)) => self.handle_argument(sup).map(|_| Visual::Superscript),
             (Some(sub), None) => self.handle_argument(sub).map(|_| Visual::Subscript),
             (None, None) => unreachable!(),
-        })
+        }
     }
 
     fn handle_suffix(&mut self, event: Event<'a>) -> InnerResult<Event<'a>> {
@@ -313,10 +322,7 @@ impl<'a> Iterator for Parser<'a> {
                             .count()
                             + 1;
 
-                        if matches!(
-                            content.as_bytes()[len - 1],
-                            b'.' | b','
-                        ) {
+                        if matches!(content.as_bytes()[len - 1], b'.' | b',') {
                             len -= 1;
                         }
                         let (number, rest) = content.split_at(len);
@@ -413,19 +419,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_get_byte_index() {
-        todo!()
-    }
-
-    // Tests for event generation.
-    #[test]
     fn substr_instructions() {
         let parser = Parser::new("\\bar{y}");
         let events = parser
             .collect::<Result<Vec<_>, ParseError<'static>>>()
             .unwrap();
-
-        println!("{events:?}");
 
         assert_eq!(
             events,
@@ -442,6 +440,34 @@ mod tests {
                     right_space: None,
                     size: None,
                 })),
+            ]
+        );
+    }
+
+    #[test]
+    fn subscript_to_nothing() {
+        let parser = Parser::new("^{5+5}_2");
+        let events = parser
+            .collect::<Result<Vec<_>, ParseError<'static>>>()
+            .unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::SubSuperscript),
+                Event::Content(Content::Number("2")),
+                Event::BeginGroup,
+                Event::Content(Content::Number("5")),
+                Event::Content(Content::Operator(Operator {
+                    content: '+',
+                    stretchy: None,
+                    moveable_limits: None,
+                    left_space: None,
+                    right_space: None,
+                    size: None,
+                })),
+                Event::Content(Content::Number("5")),
+                Event::EndGroup,
             ]
         );
     }
