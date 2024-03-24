@@ -37,15 +37,15 @@ impl<'a> RenderConfig<'a> {
 impl<'a> Default for RenderConfig<'a> {
     /// # Default Value
     /// ```rust
-    /// # use pulldown_latex::{config::ParserConfig, DisplayMode};
-    /// const DEFAULT: ParserConfig = ParserConfig {
+    /// # use pulldown_latex::config::{RenderConfig, DisplayMode, MathStyle};
+    /// const DEFAULT: RenderConfig = RenderConfig {
     ///     display_mode: DisplayMode::Inline,
-    ///     annotate: None,
+    ///     annotation: None,
     ///     error_color: (178, 34, 34),
     ///     xml: false,
     ///     math_style: MathStyle::TeX,
     /// };
-    /// assert_eq!(ParserConfig::default(), DEFAULT);
+    /// assert_eq!(RenderConfig::default(), DEFAULT);
     /// ```
     fn default() -> Self {
         Self {

@@ -9,7 +9,7 @@ use crate::{
 use super::{
     lex,
     operator_table::{is_delimiter, is_operator},
-    Argument, GroupType, Instruction, Parser, ErrorKind, InnerResult,
+    Argument, ErrorKind, GroupType, InnerResult, Instruction, Parser,
 };
 
 /// Return a `Content::Identifier` event with the given content and font variant.
@@ -49,6 +49,16 @@ macro_rules! ensure_eq {
 // NOTE/TODO: what if there is something such as `a_\pi_\pi` would the current implementation parse
 // it normally since the subscript `pi` automatically parses another subscript? Yes, and this is a
 // problem!!!
+// How do we handle:
+// - `__`:  handle char returns an error.
+// - `_\frac{a}{b}`: Parse the base into the staging buffer, parse the superscript into the stack,
+// and parse the subscript into the staging buffer on top of the base. Then drain the subscript from
+// the staging buffer, and extend it to the stack, and then drain the base and extend it to the
+// stack.
+// - `\it _a`: In the `next` function, always parse the next token in the staging buffer, and then
+// always check for suffixes. This solves the issues with `\mathcal{...}_a` and etc.
+
+// TODO: have an handler for multi-event primitives, because they must be grouped.
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -57,16 +67,15 @@ impl<'a> Parser<'a> {
     ///
     /// ## Panics
     /// - This function will panic if the `\` or `%` character is given
-    pub(crate) fn handle_char_token(&mut self, token: char) -> InnerResult<Event<'a>> {
-        Ok(match token {
+    pub(crate) fn handle_char_token(
+        &mut self,
+        token: char,
+    ) -> InnerResult<()> {
+        let instruction = Instruction::Event(match token {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
-            '_' => {
-                self.parse_suffix(true).map(|v| Event::Visual(v))?
-            },
-            '^' => {
-                self.parse_suffix(false).map(|v| Event::Visual(v))?
-            },
+            '_' => return Err(ErrorKind::SubscriptAsToken),
+            '^' => return Err(ErrorKind::SuperscriptAsToken),
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
             '&' => return Err(ErrorKind::AlignmentChar),
@@ -84,23 +93,24 @@ impl<'a> Parser<'a> {
 
             c if is_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => Event::Content(Content::Operator(op!(c))),
+            '0'..='9' => Event::Content(Content::Number(Identifier::Char(token))),
             // TODO: handle every character correctly.
             c => Event::Content(ident!(c)),
-        })
+        });
+        self.stack().push(instruction);
+        Ok(())
     }
 
-    /// Handle a control sequence, returning a corresponding event.
-    ///
-    /// 1. If the control sequence is user defined, apply the corresponding definition.
-    /// 2. If the event is a primitive, apply the corresponding primitive.
-    /// 3. If the control sequence is not defined, return an error.
-    // TODO: change assert! to ensure!
-    pub(crate) fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<Event<'a>> {
-        match control_sequence {
+    /// Handle a supported control sequence, pushing instructions to the provided stack.
+    pub(crate) fn handle_primitive(
+        &mut self,
+        control_sequence: &'a str,
+    ) -> InnerResult<()> {
+        let event = match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
-            | "coth" | "dim" | "sin" | "tanh" => self.handle_suffix(Event::Content(
-                Content::Identifier(Identifier::Str(control_sequence)),
+            | "coth" | "dim" | "sin" | "tanh" => Event::Content(Content::Identifier(
+                Identifier::Str(control_sequence),
             )),
             // TODO: The following have `under` subscripts in display math: Pr sup liminf max inf gcd limsup min
 
@@ -198,21 +208,29 @@ impl<'a> Parser<'a> {
             // TODO: Make it so that there is a different between `\sym_` and `\math_` font
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" => self.font_group(Some(Font::Bold)),
-            "mathcal" | "symcal" | "mathup" | "symup" => self.font_group(Some(Font::Script)),
-            "mathit" | "symit" => self.font_group(Some(Font::Italic)),
-            "mathrm" | "symrm" => self.font_group(Some(Font::UpRight)),
-            "mathsf" | "symsf" | "mathsfup" | "symsfup" => self.font_group(Some(Font::SansSerif)),
-            "mathtt" | "symtt" => self.font_group(Some(Font::Monospace)),
-            "mathbb" | "symbb" => self.font_group(Some(Font::DoubleStruck)),
-            "mathfrak" | "symfrak" => self.font_group(Some(Font::Fraktur)),
-            "mathbfcal" | "symbfcal" => self.font_group(Some(Font::BoldScript)),
-            "mathsfit" | "symsfit" => self.font_group(Some(Font::SansSerifItalic)),
-            "mathbfit" | "symbfit" => self.font_group(Some(Font::BoldItalic)),
-            "mathbffrak" | "symbffrak" => self.font_group(Some(Font::BoldFraktur)),
-            "mathbfsfup" | "symbfsfup" => self.font_group(Some(Font::BoldSansSerif)),
-            "mathbfsfit" | "symbfsfit" => self.font_group(Some(Font::SansSerifBoldItalic)),
-            "mathnormal" | "symnormal" => self.font_group(None),
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => {
+                self.font_group(Some(Font::Bold))?
+            }
+            "mathcal" | "symcal" | "mathup" | "symup" => {
+                self.font_group(Some(Font::Script))?
+            }
+            "mathit" | "symit" => self.font_group(Some(Font::Italic))?,
+            "mathrm" | "symrm" => self.font_group(Some(Font::UpRight))?,
+            "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
+                self.font_group(Some(Font::SansSerif))?
+            }
+            "mathtt" | "symtt" => self.font_group(Some(Font::Monospace))?,
+            "mathbb" | "symbb" => self.font_group(Some(Font::DoubleStruck))?,
+            "mathfrak" | "symfrak" => self.font_group(Some(Font::Fraktur))?,
+            "mathbfcal" | "symbfcal" => self.font_group(Some(Font::BoldScript))?,
+            "mathsfit" | "symsfit" => self.font_group(Some(Font::SansSerifItalic))?,
+            "mathbfit" | "symbfit" => self.font_group(Some(Font::BoldItalic))?,
+            "mathbffrak" | "symbffrak" => self.font_group(Some(Font::BoldFraktur))?,
+            "mathbfsfup" | "symbfsfup" => self.font_group(Some(Font::BoldSansSerif))?,
+            "mathbfsfit" | "symbfsfit" => {
+                self.font_group(Some(Font::SansSerifBoldItalic))?
+            }
+            "mathnormal" | "symnormal" => self.font_group(None)?,
 
             //////////////////
             // Miscellanous //
@@ -230,12 +248,12 @@ impl<'a> Parser<'a> {
             //////////////////////////////
             // Sizes taken from `texzilla`
             // Big left and right seem to not care about which delimiter is used. i.e., \bigl) and \bigr) are the same.
-            "big" | "bigl" | "bigr" | "bigm" => self.em_sized_delim(1.2),
-            "Big" | "Bigl" | "Bigr" | "Bigm" => self.em_sized_delim(1.8),
-            "bigg" | "biggl" | "biggr" | "biggm" => self.em_sized_delim(2.4),
-            "Bigg" | "Biggl" | "Biggr" | "Biggm" => self.em_sized_delim(3.0),
+            "big" | "bigl" | "bigr" | "bigm" => self.em_sized_delim(1.2)?,
+            "Big" | "Bigl" | "Bigr" | "Bigm" => self.em_sized_delim(1.8)?,
+            "bigg" | "biggl" | "biggr" | "biggm" => self.em_sized_delim(2.4)?,
+            "Bigg" | "Biggl" | "Biggr" | "Biggm" => self.em_sized_delim(3.0)?,
 
-            // TODO: This does not work anymore we have to check how we want to handle this.
+            // TODO: Fix these 3 they do not work!!!
             "left" => {
                 let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
@@ -243,29 +261,26 @@ impl<'a> Parser<'a> {
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    self.instruction_stack
-                        .push(Instruction::Event(Event::Content(Content::Operator(op!(
-                            delimiter
-                        )))));
+                    self.stack().push(Instruction::Event(Event::Content(Content::Operator(op!(
+                        delimiter
+                    )))));
                 }
-                Ok(Event::BeginGroup)
+                Event::BeginGroup
             }
             "middle" => {
-                let delimiter =
-                    lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                self.handle_suffix(Event::Content(Content::Operator(op!(delimiter))))
+                let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+                Event::Content(Content::Operator(op!(delimiter)))
             }
             "right" => {
                 let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
-                    Ok(Event::EndGroup)
+                    Event::EndGroup
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    self.instruction_stack
-                        .push(Instruction::Event(Event::EndGroup));
-                    Ok(Event::Content(Content::Operator(op!(delimiter))))
+                    self.stack().push(Instruction::Event(Event::EndGroup));
+                    Event::Content(Content::Operator(op!(delimiter)))
                 }
             }
 
@@ -312,42 +327,42 @@ impl<'a> Parser<'a> {
             /////////////
             // Accents //
             /////////////
-            "acute" => self.accent(op!('´')),
-            "bar" | "overline" => self.accent(op!('‾')),
-            "underbar" | "underline" => self.underscript(op!('_')),
-            "breve" => self.accent(op!('˘')),
-            "check" => self.accent(op!('ˇ', {stretchy: Some(false)})),
-            "dot" => self.accent(op!('˙')),
-            "ddot" => self.accent(op!('¨')),
-            "grave" => self.accent(op!('`')),
-            "hat" => self.accent(op!('^', {stretchy: Some(false)})),
-            "tilde" => self.accent(op!('~', {stretchy: Some(false)})),
-            "vec" => self.accent(op!('→', {stretchy: Some(false)})),
-            "mathring" => self.accent(op!('˚')),
+            "acute" => self.accent(op!('´'))?,
+            "bar" | "overline" => self.accent(op!('‾'))?,
+            "underbar" | "underline" => self.underscript(op!('_'))?,
+            "breve" => self.accent(op!('˘'))?,
+            "check" => self.accent(op!('ˇ', {stretchy: Some(false)}))?,
+            "dot" => self.accent(op!('˙'))?,
+            "ddot" => self.accent(op!('¨'))?,
+            "grave" => self.accent(op!('`'))?,
+            "hat" => self.accent(op!('^', {stretchy: Some(false)}))?,
+            "tilde" => self.accent(op!('~', {stretchy: Some(false)}))?,
+            "vec" => self.accent(op!('→', {stretchy: Some(false)}))?,
+            "mathring" => self.accent(op!('˚'))?,
 
             // Arrows
-            "overleftarrow" => self.accent(op!('←')),
-            "underleftarrow" => self.underscript(op!('←')),
-            "overrightarrow" => self.accent(op!('→')),
-            "Overrightarrow" => self.accent(op!('⇒')),
-            "underrightarrow" => self.underscript(op!('→')),
-            "overleftrightarrow" => self.accent(op!('↔')),
-            "underleftrightarrow" => self.underscript(op!('↔')),
-            "overleftharpoon" => self.accent(op!('↼')),
-            "overrightharpoon" => self.accent(op!('⇀')),
+            "overleftarrow" => self.accent(op!('←'))?,
+            "underleftarrow" => self.underscript(op!('←'))?,
+            "overrightarrow" => self.accent(op!('→'))?,
+            "Overrightarrow" => self.accent(op!('⇒'))?,
+            "underrightarrow" => self.underscript(op!('→'))?,
+            "overleftrightarrow" => self.accent(op!('↔'))?,
+            "underleftrightarrow" => self.underscript(op!('↔'))?,
+            "overleftharpoon" => self.accent(op!('↼'))?,
+            "overrightharpoon" => self.accent(op!('⇀'))?,
 
             // Wide ops
-            "widecheck" => self.accent(op!('ˇ')),
-            "widehat" => self.accent(op!('^')),
-            "widetilde" => self.accent(op!('~')),
-            "wideparen" | "overparen" => self.accent(op!('⏜')),
+            "widecheck" => self.accent(op!('ˇ'))?,
+            "widehat" => self.accent(op!('^'))?,
+            "widetilde" => self.accent(op!('~'))?,
+            "wideparen" | "overparen" => self.accent(op!('⏜'))?,
 
             // Groups
-            "overgroup" => self.accent(op!('⏠')),
-            "undergroup" => self.underscript(op!('⏡')),
-            "overbrace" => self.accent(op!('⏞')),
-            "underbrace" => self.underscript(op!('⏟')),
-            "underparen" => self.underscript(op!('⏝')),
+            "overgroup" => self.accent(op!('⏠'))?,
+            "undergroup" => self.underscript(op!('⏡'))?,
+            "overbrace" => self.accent(op!('⏞'))?,
+            "underbrace" => self.underscript(op!('⏟'))?,
+            "underparen" => self.underscript(op!('⏝'))?,
 
             // Primes
             "prime" => self.operator(op!('′')),
@@ -361,71 +376,70 @@ impl<'a> Parser<'a> {
             /////////////
             // Spacing //
             /////////////
-            "," | "thinspace" => Ok(Event::Space {
+            "," | "thinspace" => Event::Space {
                 width: Some((3. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            ">" | ":" | "medspace" => Ok(Event::Space {
+            },
+            ">" | ":" | "medspace" => Event::Space {
                 width: Some((4. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            ";" | "thickspace" => Ok(Event::Space {
+            },
+            ";" | "thickspace" => Event::Space {
                 width: Some((5. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            "enspace" => Ok(Event::Space {
+            },
+            "enspace" => Event::Space {
                 width: Some((0.5, DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            "quad" => Ok(Event::Space {
+            },
+            "quad" => Event::Space {
                 width: Some((1., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            "qquad" => Ok(Event::Space {
+            },
+            "qquad" => Event::Space {
                 width: Some((2., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            "~" | "nobreakspace" => Ok(Event::Content(Content::Text("&nbsp;"))),
+            },
+            "~" | "nobreakspace" => Event::Content(Content::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
-                let dimension =
-                    lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
-                Ok(Event::Space {
+                let dimension = lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
+                Event::Space {
                     width: Some(dimension),
                     height: None,
                     depth: None,
-                })
+                }
             }
             "hskip" => {
                 let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
-                Ok(Event::Space {
+                Event::Space {
                     width: Some(glue.0),
                     height: None,
                     depth: None,
-                })
+                }
             }
             "mkern" => {
                 let dimension =
                     lex::math_dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
-                Ok(Event::Space {
+                Event::Space {
                     width: Some(dimension),
                     height: None,
                     depth: None,
-                })
+                }
             }
             "mskip" => {
                 let glue = lex::math_glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
-                Ok(Event::Space {
+                Event::Space {
                     width: Some(glue.0),
                     height: None,
                     depth: None,
-                })
+                }
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
@@ -434,28 +448,28 @@ impl<'a> Parser<'a> {
                     return Err(ErrorKind::DimensionArgument);
                 };
                 let glue = lex::glue(&mut argument)?;
-                Ok(Event::Space {
+                Event::Space {
                     width: Some(glue.0),
                     height: None,
                     depth: None,
-                })
+                }
             }
             // Negative spacing
-            "!" | "negthinspace" => Ok(Event::Space {
+            "!" | "negthinspace" => Event::Space {
                 width: Some((-3. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            "negmedspace" => Ok(Event::Space {
+            },
+            "negmedspace" => Event::Space {
                 width: Some((-4. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
-            "negthickspace" => Ok(Event::Space {
+            },
+            "negthickspace" => Event::Space {
                 width: Some((-5. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
-            }),
+            },
 
             ////////////////////////
             // Logic & Set Theory //
@@ -564,32 +578,22 @@ impl<'a> Parser<'a> {
             "approx" => self.operator(op!('≈')),
             "approxeq" => self.operator(op!('≊')),
             "approxcolon" => {
-                let maybe_suffix = self.check_suffixes();
-                if maybe_suffix.is_some() {
-                    self.instruction_stack.push(Instruction::Event(Event::EndGroup));
-                }
-                self.instruction_stack
-                    .push(Instruction::Event(Event::Content(Content::Operator(op! {
+                self.stack().extend([
+                    Instruction::Event(Event::EndGroup),
+                    Instruction::Event(Event::Content(Content::Operator(op! {
                         ':',
                         {left_space: Some((0., DimensionUnit::Em))}
-                    }))));
-                let event = Event::Content(Content::Operator(op! {
-                    '≈',
-                    {right_space: Some((0., DimensionUnit::Em))}
-                }));
-                if let Some(suffix) = maybe_suffix {
-                    self.instruction_stack.extend([Instruction::Event(event), Instruction::Event(Event::BeginGroup)]);
-                    suffix.map(|v| Event::Visual(v))
-                } else {
-                    Ok(event)
-                }
+                    }))),
+                    Instruction::Event(Event::Content(Content::Operator(op! {
+                        '≈',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    }))),
+                ]);
+                Event::BeginGroup
             }
             "approxcoloncolon" => {
-                let maybe_suffix = self.check_suffixes();
-                if maybe_suffix.is_some() {
-                    self.instruction_stack.push(Instruction::Event(Event::EndGroup));
-                }
-                self.instruction_stack.extend([
+                self.stack().extend([
+                    Instruction::Event(Event::EndGroup),
                     Instruction::Event(Event::Content(Content::Operator(
                         op! {':', {left_space: Some((0., DimensionUnit::Em))}},
                     ))),
@@ -600,17 +604,12 @@ impl<'a> Parser<'a> {
                             right_space: Some((0., DimensionUnit::Em))
                         }
                     }))),
+                    Instruction::Event(Event::Content(Content::Operator(op! {
+                        '≈',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    }))),
                 ]);
-                let event = Event::Content(Content::Operator(op! {
-                    '≈',
-                    {right_space: Some((0., DimensionUnit::Em))}
-                }));
-                if let Some(suffix) = maybe_suffix {
-                    self.instruction_stack.extend([Instruction::Event(event), Instruction::Event(Event::BeginGroup)]);
-                    suffix.map(|v| Event::Visual(v))
-                } else {
-                    Ok(event)
-                }
+                Event::BeginGroup
             }
             "backsim" => self.operator(op!('∽')),
             "backsimeq" => self.operator(op!('⋍')),
@@ -618,80 +617,75 @@ impl<'a> Parser<'a> {
             "between" => self.operator(op!('≬')),
 
             // Spacing
-            c if c.trim_start().is_empty() => Ok(Event::Content(Content::Text("&nbsp;"))),
+            c if c.trim_start().is_empty() => Event::Content(Content::Text("&nbsp;")),
 
-            _ => Err(ErrorKind::UnknownPrimitive),
-        }
+            _ => return Err(ErrorKind::UnknownPrimitive),
+        };
+        self.stack().push(Instruction::Event(event));
+        Ok(())
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
     fn em_sized_delim(&mut self, size: f32) -> InnerResult<Event<'a>> {
         let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-        self.handle_suffix(Event::Content(Content::Operator(
+        Ok(Event::Content(Content::Operator(
             op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
         )))
     }
 
     /// Override the `font_state` to the given font variant, and return the next event.
-    fn font_override(&mut self, font: Font) -> InnerResult<Event<'a>> {
-        Ok(Event::FontChange(Some(font)))
+    fn font_override(&mut self, font: Font) -> Event<'a> {
+        Event::FontChange(Some(font))
     }
 
     /// Override the `font_state` for the argument to the command.
-    fn font_group(&mut self, font: Option<Font>) -> InnerResult<Event<'a>> {
+    fn font_group(
+        &mut self,
+        font: Option<Font>,
+    ) -> InnerResult<Event<'a>> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         self.handle_argument(argument)?;
         // Kind of silly, we could inline `handle_argument` here and not push the
         // BeginGroup
-        self.instruction_stack.pop();
-        self.instruction_stack
-            .push(Instruction::Event(Event::FontChange(font)));
+        let stack = self.stack();
+        stack.pop();
+        stack.extend([Instruction::Event(Event::FontChange(font))]);
         Ok(Event::BeginGroup)
     }
 
     /// Accent commands. parse the argument, and overset the accent.
-    fn accent(&mut self, accent: Operator) -> InnerResult<Event<'a>> {
+    fn accent(
+        &mut self,
+        accent: Operator,
+    ) -> InnerResult<Event<'a>> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-        let maybe_suffix = self.check_suffixes();
-        self.instruction_stack
-            .push(Instruction::Event(Event::Content(Content::Operator(
-                accent,
-            ))));
+        self.stack().push(Instruction::Event(Event::Content(Content::Operator(
+            accent,
+        ))));
         self.handle_argument(argument)?;
-        let event = Event::Visual(Visual::Overscript);
-        if let Some(visual) = maybe_suffix {
-            self.instruction_stack.push(Instruction::Event(event));
-            visual.map(|v| Event::Visual(v))
-        } else {
-            Ok(event)
-        }
+        Ok(Event::Visual(Visual::Overscript))
     }
 
     /// Underscript commands. parse the argument, and underset the accent.
-    fn underscript(&mut self, content: Operator) -> InnerResult<Event<'a>> {
+    fn underscript(
+        &mut self,
+        content: Operator,
+    ) -> InnerResult<Event<'a>> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-        let maybe_suffix = self.check_suffixes();
-        self.instruction_stack
-            .push(Instruction::Event(Event::Content(Content::Operator(
-                content,
-            ))));
+        self.stack().push(Instruction::Event(Event::Content(Content::Operator(
+            content,
+        ))));
 
         self.handle_argument(argument)?;
-        let event = Event::Visual(Visual::Underscript);
-        if let Some(visual) = maybe_suffix {
-            self.instruction_stack.push(Instruction::Event(event));
-            visual.map(|v| Event::Visual(v))
-        } else {
-            Ok(event)
-        }
+        Ok(Event::Visual(Visual::Underscript))
     }
 
-    fn ident(&mut self, ident: char) -> InnerResult<Event<'a>> {
-        self.handle_suffix(Event::Content(Content::Identifier(Identifier::Char(ident))))
+    fn ident(&mut self, ident: char) -> Event<'a> {
+        Event::Content(Content::Identifier(Identifier::Char(ident)))
     }
 
-    fn operator(&mut self, operator: Operator) -> InnerResult<Event<'a>> {
-        self.handle_suffix(Event::Content(Content::Operator(operator)))
+    fn operator(&mut self, operator: Operator) -> Event<'a> {
+        Event::Content(Content::Operator(operator))
     }
 }
 

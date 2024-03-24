@@ -76,15 +76,24 @@ where
                     self.writer.write_all(str.as_bytes())?;
                     self.writer.write_all(b"</mtext>")
                 }
-                Content::Number(content) => {
+                Content::Number(ident) => {
                     self.writer.write_all(b"<mn>")?;
                     let buf = &mut [0u8; 4];
-                    content.chars().try_for_each(|c| {
-                        let content = self.get_font()?.map_or(c, |v| v.map_char(c));
-                        let bytes = content.encode_utf8(buf);
-                        self.writer.write_all(bytes.as_bytes())?;
-                        Ok::<(), io::Error>(())
-                    })?;
+                    match ident {
+                        Identifier::Str(content) => {
+                            content.chars().try_for_each(|c| {
+                                let content = self.get_font()?.map_or(c, |v| v.map_char(c));
+                                let bytes = content.encode_utf8(buf);
+                                self.writer.write_all(bytes.as_bytes())?;
+                                Ok::<(), io::Error>(())
+                            })?;
+                        },
+                        Identifier::Char(c) => {
+                            let content = self.get_font()?.map_or(c, |v| v.map_char(c));
+                            let bytes = content.encode_utf8(buf);
+                            self.writer.write_all(bytes.as_bytes())?;
+                        },
+                    }
                     self.writer.write_all(b"</mn>")
                 }
                 Content::Identifier(ident) => {

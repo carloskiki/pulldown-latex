@@ -1,6 +1,6 @@
 use crate::attribute::{Font, Dimension};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 /// All events that can be produced by the parser.
 pub enum Event<'a> {
     Content(Content<'a>),
@@ -20,15 +20,15 @@ pub enum Event<'a> {
 }
 
 /// Base events that produce `mathml` nodes
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Content<'a> {
     Text(&'a str),
-    Number(&'a str),
+    Number(Identifier<'a>),
     Identifier(Identifier<'a>),
     Operator(Operator),
 }
 
-#[derive(Debug, Default, PartialEq)]
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
 pub struct Operator {
     pub content: char,
     pub stretchy: Option<bool>,
@@ -38,7 +38,7 @@ pub struct Operator {
     pub size: Option<Dimension>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 /// An identifier can either be a single character, or a string (e.g., a command such as `sin`,
 /// `lim`, etc.).
 pub enum Identifier<'a> {
@@ -47,7 +47,7 @@ pub enum Identifier<'a> {
 }
 
 /// Change the visual representation of the following event(s)
-#[derive(Debug, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Visual {
     /// The following event is the content of the root
     SquareRoot,
