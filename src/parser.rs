@@ -112,10 +112,6 @@ pub struct Parser<'a> {
     /// This is used to keep track of the current group level, and to ensure that the group being
     /// closed is the one that was opened last.
     pub(crate) group_stack: Vec<GroupType>,
-
-    /// Whether or not we should be currently using the staging stack. Otherwise we use the
-    /// instruction stack.
-    use_stage: bool,
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
@@ -130,7 +126,6 @@ impl<'a> Parser<'a> {
             instruction_stack,
             staging_stack,
             group_stack,
-            use_stage: false,
         }
     }
 
@@ -157,14 +152,14 @@ impl<'a> Parser<'a> {
     /// Handles the superscript and/or subscript following what was parsed previously.
     fn check_suffixes(&mut self) -> InnerResult<()> {
         let mut subscript_first = false;
-        let staging_index = self.staging_stack.len();
+        let first_suffix_start = self.staging_stack.len();
         let Some(str) = self.current_string() else {
             return Ok(())
         };
         *str = str.trim_start();
         
         let suffix = str.chars().next().expect("current_string is not empty");
-        let use_stage = match suffix {
+        match suffix {
             '^' => {},
             '_' => {
                 subscript_first = true;
@@ -172,7 +167,6 @@ impl<'a> Parser<'a> {
             _ => return Ok(()),
         };
         *str = &str[1..];
-        
         let str = self.current_string().ok_or_else(|| {
             if subscript_first {
                 ErrorKind::EmptySubscript
@@ -180,45 +174,54 @@ impl<'a> Parser<'a> {
                 ErrorKind::EmptySuperscript
             }
         })?;
+        
         let arg = lex::argument(str)?;
         self.handle_argument(arg)?;
+        let second_suffix_start = self.staging_stack.len();
         if let Some(str) = self.current_string() {
             let next_char = str.chars().next().expect("current_string is not empty");
-            if (next_char == '_' && !subscript) || (next_char == '^' && subscript) {
+            if (next_char == '_' && !subscript_first) || (next_char == '^' && subscript_first) {
                 *str = &str[1..];
                 let str = self.current_string().ok_or_else(|| {
-                    if subscript {
-                        ErrorKind::EmptySubscript
-                    } else {
+                    if subscript_first {
                         ErrorKind::EmptySuperscript
+                    } else {
+                        ErrorKind::EmptySubscript
                     }
                 })?;
                 let arg = lex::argument(str)?;
-                self.use_stage = !self.use_stage;
                 self.handle_argument(arg)?;
             }
         };
+
+        if second_suffix_start == self.staging_stack.len() {
+            self.instruction_stack.extend(self.staging_stack.drain(first_suffix_start..));
+            if subscript_first {
+                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::Subscript)));
+            } else {
+                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::Superscript)));
+            };
+        } else {
+            let mut suffixes = self.staging_stack.drain(first_suffix_start..).rev();
+            if subscript_first {
+                // Double reverse shenanigans as a guess to optimize the code. Probably not worth it.
+                let subscript_len =  second_suffix_start - first_suffix_start;
+                self.instruction_stack.extend(suffixes.by_ref().take(subscript_len).rev());
+                self.instruction_stack.extend(suffixes.rev());
+                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::SubSuperscript)));
+            } else {
+                self.instruction_stack.extend(suffixes.rev());
+                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::SubSuperscript)));
+            }
+        }
         
-        if both || subscript {
-            self.instruction_stack.extend(self.staging_stack.drain(staging_index..));
-        }
-        match (both, subscript) {
-            (true, _) => self.staging_stack.push(Instruction::Event(Event::Visual(Visual::SubSuperscript))),
-            (false, true) => self.staging_stack.push(Instruction::Event(Event::Visual(Visual::Subscript))),
-            (false, false) => self.staging_stack.push(Instruction::Event(Event::Visual(Visual::Superscript))),
-        }
-        self.use_stage = true;
         Ok(())
 
     }
 
     /// Get which stack should be used for the outputing of the operation.
     fn stack(&mut self) -> &mut Vec<Instruction<'a>> {
-        if self.use_stage {
             &mut self.staging_stack
-        } else {
-            &mut self.instruction_stack
-        }
     }
 
     
@@ -302,7 +305,6 @@ impl<'a> Iterator for Parser<'a> {
                 }))
             }
             Some(Instruction::Substring(_)) => {
-                self.use_stage = true;
                 let Some(content) = self.current_string() else {
                     return self.next();
                 };
@@ -476,7 +478,7 @@ mod tests {
 
     #[test]
     fn subsuperscript() {
-        let parser = Parser::new(r"\epsilon^{5+5}_2");
+        let parser = Parser::new(r"a^{1+3}_2");
         let events = parser.inspect(|e| println!("{:?}", e))
             .collect::<Result<Vec<_>, ParseError<'static>>>().unwrap();
 
@@ -484,10 +486,10 @@ mod tests {
             events,
             vec![
                 Event::Visual(Visual::SubSuperscript),
-                Event::Content(Content::Identifier(Identifier::Char('ϵ'))),
+                Event::Content(Content::Identifier(Identifier::Char('a'))),
                 Event::Content(Content::Number(Identifier::Char('2'))),
                 Event::BeginGroup,
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Content(Content::Number(Identifier::Char('1'))),
                 Event::Content(Content::Operator(Operator {
                     content: '+',
                     stretchy: None,
@@ -496,7 +498,7 @@ mod tests {
                     right_space: None,
                     size: None,
                 })),
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Content(Content::Number(Identifier::Char('3'))),
                 Event::EndGroup,
             ]
         );
