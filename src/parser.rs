@@ -98,14 +98,11 @@ pub struct Parser<'a> {
     /// is the next event to be outputed.
     instruction_stack: Vec<Instruction<'a>>,
 
-    /// This stack serves as a staging area when parsing a command.
+    /// This buffer serves as a staging area when parsing a command.
     ///
-    /// When a token is parsed, it is first pushed to this stack, then we check for suffixes
-    /// (superscript, and subscript), and then we push the event to the instruction stack.
-    ///
-    /// Instructions are stored backward in this stack, in the sense that the next event to be popped
-    /// is the next event to be outputed.
-    staging_stack: Vec<Instruction<'a>>,
+    /// When a token is parsed, it is first pushed to this stack, then suffixes are checked
+    /// (superscript, and subscript), and then the event is moved from the buffer to the instruction stack.
+    buffer: Vec<Instruction<'a>>,
 
     /// The level of the current group.
     ///
@@ -115,16 +112,18 @@ pub struct Parser<'a> {
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
+// TODO: Make it so that the staging thing is a buffer, so primitive handling does not have to be
+//      done in reverse.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
         instruction_stack.push(Instruction::Substring(input));
-        let staging_stack = Vec::with_capacity(16);
+        let buffer = Vec::with_capacity(16);
         let group_stack = Vec::with_capacity(16);
         Self {
             input,
             instruction_stack,
-            staging_stack,
+            buffer,
             group_stack,
         }
     }
@@ -177,6 +176,7 @@ impl<'a> Parser<'a> {
         
         let arg = lex::argument(str)?;
         self.handle_argument(arg)?;
+        dbg!(&self);
         let second_suffix_start = self.staging_stack.len();
         if let Some(str) = self.current_string() {
             let next_char = str.chars().next().expect("current_string is not empty");
@@ -191,8 +191,16 @@ impl<'a> Parser<'a> {
                 })?;
                 let arg = lex::argument(str)?;
                 self.handle_argument(arg)?;
+            } else if next_char == '_' || next_char == '^' {
+                return Err(if subscript_first {
+                    ErrorKind::DoubleSubscript
+                } else {
+                    ErrorKind::DoubleSuperscript
+                });
             }
         };
+
+        dbg!(&self);
 
         if second_suffix_start == self.staging_stack.len() {
             self.instruction_stack.extend(self.staging_stack.drain(first_suffix_start..));
@@ -205,6 +213,7 @@ impl<'a> Parser<'a> {
             let mut suffixes = self.staging_stack.drain(first_suffix_start..).rev();
             if subscript_first {
                 // Double reverse shenanigans as a guess to optimize the code. Probably not worth it.
+                // TODO: fix this once reversal is done.
                 let subscript_len =  second_suffix_start - first_suffix_start;
                 self.instruction_stack.extend(suffixes.by_ref().take(subscript_len).rev());
                 self.instruction_stack.extend(suffixes.rev());
@@ -219,12 +228,6 @@ impl<'a> Parser<'a> {
 
     }
 
-    /// Get which stack should be used for the outputing of the operation.
-    fn stack(&mut self) -> &mut Vec<Instruction<'a>> {
-            &mut self.staging_stack
-    }
-
-    
     /// Parse an arugment and pushes the argument to the stack surrounded by a
     /// group: [..., EndGroup, Argument, BeginGroup], when the argument is a subgroup.
     /// Otherwise, it pushes the argument to the stack ungrouped.
@@ -561,6 +564,29 @@ mod tests {
                 Event::EndGroup,
             ]
         )
+    }
+
+    #[test]
+    fn fraction() {
+        let parser = Parser::new(r"\frac{1}{2}_2^4");
+        let events = parser
+            .collect::<Result<Vec<_>, ParseError<'static>>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::SubSuperscript),
+                Event::Visual(Visual::Fraction(None)),
+                Event::BeginGroup,
+                Event::Content(Content::Number(Identifier::Char('1'))),
+                Event::EndGroup,
+                Event::BeginGroup,
+                Event::Content(Content::Number(Identifier::Char('2'))),
+                Event::EndGroup,
+                Event::Content(Content::Number(Identifier::Char('2'))),
+                Event::Content(Content::Number(Identifier::Char('4'))),
+            ]
+        );
     }
 }
 // Token parsing procedure, as per TeXbook p. 46-47.
