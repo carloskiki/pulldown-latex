@@ -46,20 +46,7 @@ macro_rules! ensure_eq {
     };
 }
 
-// NOTE/TODO: what if there is something such as `a_\pi_\pi` would the current implementation parse
-// it normally since the subscript `pi` automatically parses another subscript? Yes, and this is a
-// problem!!!
-// How do we handle:
-// - `__`:  handle char returns an error.
-// - `_\frac{a}{b}`: Parse the base into the staging buffer, parse the superscript into the stack,
-// and parse the subscript into the staging buffer on top of the base. Then drain the subscript from
-// the staging buffer, and extend it to the stack, and then drain the base and extend it to the
-// stack.
-// - `\it _a`: In the `next` function, always parse the next token in the staging buffer, and then
-// always check for suffixes. This solves the issues with `\mathcal{...}_a` and etc.
-
-// TODO: Have an handler for multi-event primitives, because they must be grouped.
-// TODO: Most of hepler methods such as `operator` or `ident` could be implemented as normal functions.
+// NOTE: Currently, things like `\it_a` do not error.
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -95,7 +82,7 @@ impl<'a> Parser<'a> {
             // TODO: handle every character correctly.
             c => Event::Content(ident!(c)),
         });
-        self.stack().push(instruction);
+        self.buffer.push(instruction);
         Ok(())
     }
 
@@ -192,34 +179,32 @@ impl<'a> Parser<'a> {
             // Font state changes //
             ////////////////////////
             // LaTeX native absolute font changes (old behavior a.k.a NFSS 1)
-            "bf" => self.font_override(Font::Bold),
-            "cal" => self.font_override(Font::Script),
-            "it" => self.font_override(Font::Italic),
-            "rm" => self.font_override(Font::UpRight),
-            "sf" => self.font_override(Font::SansSerif),
-            "tt" => self.font_override(Font::Monospace),
+            "bf" => font_override(Font::Bold),
+            "cal" => font_override(Font::Script),
+            "it" => font_override(Font::Italic),
+            "rm" => font_override(Font::UpRight),
+            "sf" => font_override(Font::SansSerif),
+            "tt" => font_override(Font::Monospace),
             // amsfonts font changes (old behavior a.k.a NFSS 1)
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // TODO: Make it so that there is a different between `\sym_` and `\math_` font
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" => self.font_group(Some(Font::Bold))?,
-            "mathcal" | "symcal" | "mathup" | "symup" => self.font_group(Some(Font::Script))?,
-            "mathit" | "symit" => self.font_group(Some(Font::Italic))?,
-            "mathrm" | "symrm" => self.font_group(Some(Font::UpRight))?,
-            "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
-                self.font_group(Some(Font::SansSerif))?
-            }
-            "mathtt" | "symtt" => self.font_group(Some(Font::Monospace))?,
-            "mathbb" | "symbb" => self.font_group(Some(Font::DoubleStruck))?,
-            "mathfrak" | "symfrak" => self.font_group(Some(Font::Fraktur))?,
-            "mathbfcal" | "symbfcal" => self.font_group(Some(Font::BoldScript))?,
-            "mathsfit" | "symsfit" => self.font_group(Some(Font::SansSerifItalic))?,
-            "mathbfit" | "symbfit" => self.font_group(Some(Font::BoldItalic))?,
-            "mathbffrak" | "symbffrak" => self.font_group(Some(Font::BoldFraktur))?,
-            "mathbfsfup" | "symbfsfup" => self.font_group(Some(Font::BoldSansSerif))?,
-            "mathbfsfit" | "symbfsfit" => self.font_group(Some(Font::SansSerifBoldItalic))?,
-            "mathnormal" | "symnormal" => self.font_group(None)?,
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => return self.font_group(Some(Font::Bold)),
+            "mathcal" | "symcal" | "mathup" | "symup" => return self.font_group(Some(Font::Script)),
+            "mathit" | "symit" => return self.font_group(Some(Font::Italic)),
+            "mathrm" | "symrm" => return self.font_group(Some(Font::UpRight)),
+            "mathsf" | "symsf" | "mathsfup" | "symsfup" => return self.font_group(Some(Font::SansSerif)),
+            "mathtt" | "symtt" => return self.font_group(Some(Font::Monospace)),
+            "mathbb" | "symbb" => return self.font_group(Some(Font::DoubleStruck)),
+            "mathfrak" | "symfrak" => return self.font_group(Some(Font::Fraktur)),
+            "mathbfcal" | "symbfcal" => return self.font_group(Some(Font::BoldScript)),
+            "mathsfit" | "symsfit" => return self.font_group(Some(Font::SansSerifItalic)),
+            "mathbfit" | "symbfit" => return self.font_group(Some(Font::BoldItalic)),
+            "mathbffrak" | "symbffrak" => return self.font_group(Some(Font::BoldFraktur)),
+            "mathbfsfup" | "symbfsfup" => return self.font_group(Some(Font::BoldSansSerif)),
+            "mathbfsfit" | "symbfsfit" => return self.font_group(Some(Font::SansSerifBoldItalic)),
+            "mathnormal" | "symnormal" => return self.font_group(None),
 
             //////////////////
             // Miscellanous //
@@ -237,20 +222,21 @@ impl<'a> Parser<'a> {
             //////////////////////////////
             // Sizes taken from `texzilla`
             // Big left and right seem to not care about which delimiter is used. i.e., \bigl) and \bigr) are the same.
-            "big" | "bigl" | "bigr" | "bigm" => self.em_sized_delim(1.2)?,
-            "Big" | "Bigl" | "Bigr" | "Bigm" => self.em_sized_delim(1.8)?,
-            "bigg" | "biggl" | "biggr" | "biggm" => self.em_sized_delim(2.4)?,
-            "Bigg" | "Biggl" | "Biggr" | "Biggm" => self.em_sized_delim(3.0)?,
+            "big" | "bigl" | "bigr" | "bigm" => return self.em_sized_delim(1.2),
+            "Big" | "Bigl" | "Bigr" | "Bigm" => return self.em_sized_delim(1.8),
+            "bigg" | "biggl" | "biggr" | "biggm" => return self.em_sized_delim(2.4),
+            "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
 
             // TODO: Fix these 3 they do not work!!!
             "left" => {
+                todo!();
                 let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    self.stack()
+                    self.buffer
                         .push(Instruction::Event(Event::Content(Content::Operator(op!(
                             delimiter
                         )))));
@@ -259,9 +245,10 @@ impl<'a> Parser<'a> {
             }
             "middle" => {
                 let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                Event::Content(Content::Operator(op!(delimiter)))
+                operator(op!(delimiter))
             }
             "right" => {
+                todo!();
                 let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
@@ -269,7 +256,7 @@ impl<'a> Parser<'a> {
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    self.stack().push(Instruction::Event(Event::EndGroup));
+                    self.buffer.push(Instruction::Event(Event::EndGroup));
                     Event::Content(Content::Operator(op!(delimiter)))
                 }
             }
@@ -317,35 +304,35 @@ impl<'a> Parser<'a> {
             /////////////
             // Accents //
             /////////////
-            "acute" => self.accent(op!('´'))?,
-            "bar" | "overline" => self.accent(op!('‾'))?,
-            "underbar" | "underline" => self.underscript(op!('_'))?,
-            "breve" => self.accent(op!('˘'))?,
-            "check" => self.accent(op!('ˇ', {stretchy: Some(false)}))?,
-            "dot" => self.accent(op!('˙'))?,
-            "ddot" => self.accent(op!('¨'))?,
-            "grave" => self.accent(op!('`'))?,
-            "hat" => self.accent(op!('^', {stretchy: Some(false)}))?,
-            "tilde" => self.accent(op!('~', {stretchy: Some(false)}))?,
-            "vec" => self.accent(op!('→', {stretchy: Some(false)}))?,
-            "mathring" => self.accent(op!('˚'))?,
+            "acute" => return self.accent(op!('´')),
+            "bar" | "overline" => return self.accent(op!('‾')),
+            "underbar" | "underline" => return self.underscript(op!('_')),
+            "breve" => return self.accent(op!('˘')),
+            "check" => return self.accent(op!('ˇ', {stretchy: Some(false)})),
+            "dot" => return self.accent(op!('˙')),
+            "ddot" => return self.accent(op!('¨')),
+            "grave" => return self.accent(op!('`')),
+            "hat" => return self.accent(op!('^', {stretchy: Some(false)})),
+            "tilde" => return self.accent(op!('~', {stretchy: Some(false)})),
+            "vec" => return self.accent(op!('→', {stretchy: Some(false)})),
+            "mathring" => return self.accent(op!('˚')),
 
             // Arrows
-            "overleftarrow" => self.accent(op!('←'))?,
-            "underleftarrow" => self.underscript(op!('←'))?,
-            "overrightarrow" => self.accent(op!('→'))?,
-            "Overrightarrow" => self.accent(op!('⇒'))?,
-            "underrightarrow" => self.underscript(op!('→'))?,
-            "overleftrightarrow" => self.accent(op!('↔'))?,
-            "underleftrightarrow" => self.underscript(op!('↔'))?,
-            "overleftharpoon" => self.accent(op!('↼'))?,
-            "overrightharpoon" => self.accent(op!('⇀'))?,
+            "overleftarrow" => return self.accent(op!('←')),
+            "underleftarrow" => return self.underscript(op!('←')),
+            "overrightarrow" => return self.accent(op!('→')),
+            "Overrightarrow" => return self.accent(op!('⇒')),
+            "underrightarrow" => return self.underscript(op!('→')),
+            "overleftrightarrow" => return self.accent(op!('↔')),
+            "underleftrightarrow" => return self.underscript(op!('↔')),
+            "overleftharpoon" => return self.accent(op!('↼')),
+            "overrightharpoon" => return self.accent(op!('⇀')),
 
             // Wide ops
-            "widecheck" => self.accent(op!('ˇ'))?,
-            "widehat" => self.accent(op!('^'))?,
-            "widetilde" => self.accent(op!('~'))?,
-            "wideparen" | "overparen" => self.accent(op!('⏜'))?,
+            "widecheck" => return self.accent(op!('ˇ')),
+            "widehat" => return self.accent(op!('^')),
+            "widetilde" => return self.accent(op!('~')),
+            "wideparen" | "overparen" => return self.accent(op!('⏜')),
 
             // Groups
             "overgroup" => return self.accent(op!('⏠')),
@@ -615,7 +602,7 @@ impl<'a> Parser<'a> {
 
             _ => return Err(ErrorKind::UnknownPrimitive),
         };
-        self.stack().push(Instruction::Event(event));
+        self.buffer.push(Instruction::Event(event));
         Ok(())
     }
 

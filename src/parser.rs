@@ -54,7 +54,7 @@ pub enum Argument<'a> {
     Group(&'a str),
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub(crate) enum Instruction<'a> {
     /// Send the event
     Event(Event<'a>),
@@ -112,8 +112,6 @@ pub struct Parser<'a> {
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
-// TODO: Make it so that the staging thing is a buffer, so primitive handling does not have to be
-//      done in reverse.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
@@ -149,21 +147,21 @@ impl<'a> Parser<'a> {
     }
 
     /// Handles the superscript and/or subscript following what was parsed previously.
-    fn check_suffixes(&mut self) -> InnerResult<()> {
+    fn check_suffixes(&mut self) -> InnerResult<Option<Visual>> {
         let mut subscript_first = false;
-        let first_suffix_start = self.staging_stack.len();
+        let first_suffix_start = self.buffer.len();
         let Some(str) = self.current_string() else {
-            return Ok(())
+            return Ok(None);
         };
         *str = str.trim_start();
-        
+
         let suffix = str.chars().next().expect("current_string is not empty");
         match suffix {
-            '^' => {},
+            '^' => {}
             '_' => {
                 subscript_first = true;
             }
-            _ => return Ok(()),
+            _ => return Ok(None),
         };
         *str = &str[1..];
         let str = self.current_string().ok_or_else(|| {
@@ -173,11 +171,10 @@ impl<'a> Parser<'a> {
                 ErrorKind::EmptySuperscript
             }
         })?;
-        
+
         let arg = lex::argument(str)?;
         self.handle_argument(arg)?;
-        dbg!(&self);
-        let second_suffix_start = self.staging_stack.len();
+        let second_suffix_start = self.buffer.len();
         if let Some(str) = self.current_string() {
             let next_char = str.chars().next().expect("current_string is not empty");
             if (next_char == '_' && !subscript_first) || (next_char == '^' && subscript_first) {
@@ -200,32 +197,34 @@ impl<'a> Parser<'a> {
             }
         };
 
-        dbg!(&self);
+        let second_suffix_end = self.buffer.len();
 
-        if second_suffix_start == self.staging_stack.len() {
-            self.instruction_stack.extend(self.staging_stack.drain(first_suffix_start..));
-            if subscript_first {
-                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::Subscript)));
+        Ok(
+            if !subscript_first && second_suffix_start != second_suffix_end {
+                self.instruction_stack.extend(
+                    self.buffer[first_suffix_start..second_suffix_start]
+                        .iter()
+                        .rev(),
+                );
+                self.instruction_stack.extend(
+                    self.buffer
+                        .drain(first_suffix_start..)
+                        .skip(second_suffix_start - first_suffix_start)
+                        .rev(),
+                );
+                Some(Visual::SubSuperscript)
             } else {
-                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::Superscript)));
-            };
-        } else {
-            let mut suffixes = self.staging_stack.drain(first_suffix_start..).rev();
-            if subscript_first {
-                // Double reverse shenanigans as a guess to optimize the code. Probably not worth it.
-                // TODO: fix this once reversal is done.
-                let subscript_len =  second_suffix_start - first_suffix_start;
-                self.instruction_stack.extend(suffixes.by_ref().take(subscript_len).rev());
+                let suffixes = self.buffer.drain(first_suffix_start..);
                 self.instruction_stack.extend(suffixes.rev());
-                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::SubSuperscript)));
-            } else {
-                self.instruction_stack.extend(suffixes.rev());
-                self.staging_stack.push(Instruction::Event(Event::Visual(Visual::SubSuperscript)));
-            }
-        }
-        
-        Ok(())
-
+                if second_suffix_start != second_suffix_end {
+                    Some(Visual::SubSuperscript)
+                } else if subscript_first {
+                    Some(Visual::Subscript)
+                } else {
+                    Some(Visual::Superscript)
+                }
+            },
+        )
     }
 
     /// Parse an arugment and pushes the argument to the stack surrounded by a
@@ -240,12 +239,11 @@ impl<'a> Parser<'a> {
                 };
             }
             Argument::Group(group) => {
-                self.stack()
-                    .push(Instruction::Event(Event::EndGroup));
                 self.group_stack.push(GroupType::Brace);
-                self.stack().extend([
-                    Instruction::Substring(group),
+                self.buffer.extend([
                     Instruction::Event(Event::BeginGroup),
+                    Instruction::Substring(group),
+                    Instruction::Event(Event::EndGroup),
                 ]);
             }
         };
@@ -314,56 +312,65 @@ impl<'a> Iterator for Parser<'a> {
 
                 // 1. Parse the next token and output everything to the staging stack.
                 let token = lex::token(content);
-                let maybe_err = match token {
-                    Ok(Token::Character(first_num @ ('0'..='9'))) => {
-                        let mut len = content
-                            .chars()
-                            .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
-                            .count()
-                            + 1;
-                        if len == 1 {
-                            self.staging_stack.push(Instruction::Event(Event::Content(Content::Number(Identifier::Char(
-                                first_num,
-                            )))));
-                            Ok(())
-                        } else {
-                            // Safety: we know the previous character is '0'..='9' in the content
-                            // substring, so we can extend the `content` string to include it back.
-                            unsafe {
-                                let new_len = content.len() + 1;
-                                let start_ptr = content.as_bytes().as_ptr().offset(-1);
-                                let new_content = std::str::from_utf8_unchecked(
-                                    std::slice::from_raw_parts(start_ptr, new_len),
-                                );
-                                *content = new_content;
+                let maybe_err =
+                    match token {
+                        Ok(Token::Character(first_num @ ('0'..='9'))) => {
+                            let mut len = content
+                                .chars()
+                                .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
+                                .count()
+                                + 1;
+                            if len == 1 {
+                                self.buffer.push(Instruction::Event(Event::Content(
+                                    Content::Number(Identifier::Char(first_num)),
+                                )));
+                                Ok(())
+                            } else {
+                                // Safety: we know the previous character is '0'..='9' in the content
+                                // substring, so we can extend the `content` string to include it back.
+                                unsafe {
+                                    let new_len = content.len() + 1;
+                                    let start_ptr = content.as_bytes().as_ptr().offset(-1);
+                                    let new_content = std::str::from_utf8_unchecked(
+                                        std::slice::from_raw_parts(start_ptr, new_len),
+                                    );
+                                    *content = new_content;
+                                }
+                                if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                                    len -= 1;
+                                }
+                                let (number, rest) = content.split_at(len);
+                                *content = rest;
+                                self.buffer.push(Instruction::Event(Event::Content(
+                                    Content::Number(Identifier::Str(number)),
+                                )));
+                                Ok(())
                             }
-                            if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                                len -= 1;
-                            }
-                            let (number, rest) = content.split_at(len);
-                            *content = rest;
-                            self.staging_stack.push(Instruction::Event(Event::Content(Content::Number(Identifier::Str(number)))));
-                            Ok(())
                         }
-                    }
-                    // TODO: when expanding a user defined macro, we do not want to check for
-                    // suffixes.
-                    Ok(Token::ControlSequence(cs)) => self.handle_primitive(cs),
-                    Ok(Token::Character(c)) => self.handle_char_token(c),
-                    Err(ErrorKind::EndOfInput) => return None,
-                    Err(e) => Err(e),
-                };
+                        // TODO: when expanding a user defined macro, we do not want to check for
+                        // suffixes.
+                        Ok(Token::ControlSequence(cs)) => self.handle_primitive(cs),
+                        Ok(Token::Character(c)) => self.handle_char_token(c),
+                        Err(ErrorKind::EndOfInput) => return None,
+                        Err(e) => Err(e),
+                    };
                 if let Err(err) = maybe_err {
                     return Some(Err(self.error_with_context(err)));
                 };
 
                 // 2. Check for suffixes, to complete the atom.
-                if let Err(err) = self.check_suffixes() {
-                    return Some(Err(self.error_with_context(err)));
+                let suffix = match self.check_suffixes() {
+                    Err(err) => return Some(Err(self.error_with_context(err))),
+                    Ok(suffix) => suffix,
                 };
-                
+
                 // 3. Drain the staging stack to the instruction stack.
-                self.instruction_stack.extend(self.staging_stack.drain(..));
+                self.instruction_stack.extend(self.buffer.drain(..).rev());
+                if let Some(suffix) = suffix {
+                    self.instruction_stack
+                        .push(Instruction::Event(Event::Visual(suffix)));
+                }
+
                 self.next()
             }
             None => None,
@@ -482,8 +489,10 @@ mod tests {
     #[test]
     fn subsuperscript() {
         let parser = Parser::new(r"a^{1+3}_2");
-        let events = parser.inspect(|e| println!("{:?}", e))
-            .collect::<Result<Vec<_>, ParseError<'static>>>().unwrap();
+        let events = parser
+            .inspect(|e| println!("{:?}", e))
+            .collect::<Result<Vec<_>, ParseError<'static>>>()
+            .unwrap();
 
         assert_eq!(
             events,
@@ -510,7 +519,8 @@ mod tests {
     fn subscript_torture() {
         let parser = Parser::new(r"a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}");
         let events = parser
-            .collect::<Result<Vec<_>, ParseError<'static>>>().unwrap();
+            .collect::<Result<Vec<_>, ParseError<'static>>>()
+            .unwrap();
 
         assert_eq!(
             events,
@@ -570,7 +580,8 @@ mod tests {
     fn fraction() {
         let parser = Parser::new(r"\frac{1}{2}_2^4");
         let events = parser
-            .collect::<Result<Vec<_>, ParseError<'static>>>().unwrap();
+            .collect::<Result<Vec<_>, ParseError<'static>>>()
+            .unwrap();
 
         assert_eq!(
             events,
