@@ -1,5 +1,3 @@
-use std::fmt::Display;
-
 pub type Dimension = (f32, DimensionUnit);
 pub type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
 

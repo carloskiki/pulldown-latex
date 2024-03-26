@@ -129,18 +129,20 @@ impl<'a> Parser<'a> {
     /// Get the current string we are parsing.
     ///
     /// This function guarantees that the string returned is not empty.
-    fn current_string(&mut self) -> Option<&mut &'a str> {
+    fn current_string(&mut self) -> InnerResult<Option<&mut &'a str>> {
         let Some(Instruction::Substring(content)) = self.instruction_stack.last() else {
-            return None;
+            return Ok(None);
         };
         if content.is_empty() {
             self.instruction_stack.pop();
-            // TODO: Here we need to check if the popped group is a GroupType::Brace and if not we error
-            self.group_stack.pop();
+            let group = self.group_stack.pop();
+            if group != Some(GroupType::Brace) {
+                return Err(ErrorKind::UnbalancedGroup(None));
+            }
             self.current_string()
         } else {
             match self.instruction_stack.last_mut() {
-                Some(Instruction::Substring(content)) => Some(content),
+                Some(Instruction::Substring(content)) => Ok(Some(content)),
                 _ => unreachable!(),
             }
         }
@@ -150,13 +152,15 @@ impl<'a> Parser<'a> {
     fn check_suffixes(&mut self) -> InnerResult<Option<Visual>> {
         let mut subscript_first = false;
         let first_suffix_start = self.buffer.len();
-        let Some(str) = self.current_string() else {
+        let Some(str) = self.current_string()? else {
             return Ok(None);
         };
         *str = str.trim_start();
 
-        let suffix = str.chars().next().expect("current_string is not empty");
-        match suffix {
+        let Some(next_char) = str.chars().next() else {
+            return Ok(None);
+        };
+        match next_char {
             '^' => {}
             '_' => {
                 subscript_first = true;
@@ -164,7 +168,7 @@ impl<'a> Parser<'a> {
             _ => return Ok(None),
         };
         *str = &str[1..];
-        let str = self.current_string().ok_or_else(|| {
+        let str = self.current_string()?.ok_or_else(|| {
             if subscript_first {
                 ErrorKind::EmptySubscript
             } else {
@@ -175,11 +179,11 @@ impl<'a> Parser<'a> {
         let arg = lex::argument(str)?;
         self.handle_argument(arg)?;
         let second_suffix_start = self.buffer.len();
-        if let Some(str) = self.current_string() {
+        if let Some(str) = self.current_string()? {
             let next_char = str.chars().next().expect("current_string is not empty");
             if (next_char == '_' && !subscript_first) || (next_char == '^' && subscript_first) {
                 *str = &str[1..];
-                let str = self.current_string().ok_or_else(|| {
+                let str = self.current_string()?.ok_or_else(|| {
                     if subscript_first {
                         ErrorKind::EmptySuperscript
                     } else {
@@ -306,10 +310,12 @@ impl<'a> Iterator for Parser<'a> {
                 }))
             }
             Some(Instruction::Substring(_)) => {
-                let Some(content) = self.current_string() else {
-                    return self.next();
+                let content =match self.current_string() {
+                    Ok(Some(content)) => content,
+                    Ok(None) => return self.next(),
+                    Err(err) => return Some(Err(self.error_with_context(err))),
                 };
-
+                
                 // 1. Parse the next token and output everything to the staging stack.
                 let token = lex::token(content);
                 let maybe_err =
@@ -452,6 +458,8 @@ pub(crate) enum ErrorKind {
     SuperscriptAsToken,
     #[error("unknown primitive command found")]
     UnknownPrimitive,
+    #[error("control sequence in text mode")]
+    TextModeControlSequence,
 }
 
 #[cfg(test)]

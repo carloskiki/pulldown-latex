@@ -1,7 +1,7 @@
 use pulldown_latex::{mathml::push_html, parser::Parser};
 
 static INPUT_LATEX: &str = r#"
-\forall \epsilon > 0, \exists \delta > 0,
+\forall \epsilon > 0, \exists \delta > 0, \text{s.t.}
 \forall x \in \mathbb{R} \qquad |x - c| < \delta \implies |f(x) - L| < \epsilon.
 "#;
 

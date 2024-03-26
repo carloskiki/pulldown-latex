@@ -63,6 +63,7 @@ where
             )?;
             self.writer.write_all(b"</semantics>")?;
         }
+        self.writer.write_all(b"</math>")?;
 
         Ok(())
     }
@@ -71,9 +72,14 @@ where
         // SAFETY: This function respects the invariants of the MathmlWriter
         match event {
             Ok(Event::Content(content)) => match content {
-                Content::Text(str) => {
+                Content::Text(ident) => {
                     self.writer.write_all(b"<mtext>")?;
-                    self.writer.write_all(str.as_bytes())?;
+                    match ident {
+                        Identifier::Str(s) => self.writer.write_all(s.as_bytes())?,
+                        Identifier::Char(c) => self
+                            .writer
+                            .write_all(c.encode_utf8(&mut [0u8; 4]).as_bytes())?,
+                    }
                     self.writer.write_all(b"</mtext>")
                 }
                 Content::Number(ident) => {
@@ -87,12 +93,12 @@ where
                                 self.writer.write_all(bytes.as_bytes())?;
                                 Ok::<(), io::Error>(())
                             })?;
-                        },
+                        }
                         Identifier::Char(c) => {
                             let content = self.get_font()?.map_or(c, |v| v.map_char(c));
                             let bytes = content.encode_utf8(buf);
                             self.writer.write_all(bytes.as_bytes())?;
-                        },
+                        }
                     }
                     self.writer.write_all(b"</mn>")
                 }

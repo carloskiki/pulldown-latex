@@ -22,7 +22,7 @@ pub enum Event<'a> {
 /// Base events that produce `mathml` nodes
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Content<'a> {
-    Text(&'a str),
+    Text(Identifier<'a>),
     Number(Identifier<'a>),
     Identifier(Identifier<'a>),
     Operator(Operator),

@@ -12,15 +12,6 @@ use super::{
     Argument, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
 };
 
-/// Return a `Content::Identifier` event with the given content and font variant.
-///
-/// If self is not provided, the font variant is set to `None`.
-macro_rules! ident {
-    ($content:expr) => {
-        Content::Identifier(Identifier::Char($content))
-    };
-}
-
 /// Return an `Operator` event with the given content and default modifiers.
 macro_rules! op {
     ($content:expr) => {
@@ -46,7 +37,7 @@ macro_rules! ensure_eq {
     };
 }
 
-// NOTE: Currently, things like `\it_a` do not error.
+// NOTE/TODO: Currently, things like `\it_a` do not error.
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -69,18 +60,15 @@ impl<'a> Parser<'a> {
                 Event::BeginGroup
             },
             '}' => {
-                let grouping = self.group_stack.pop().ok_or(ErrorKind::UnbalancedGroup(None))?;
-                ensure_eq!(grouping, GroupType::Brace, ErrorKind::UnbalancedGroup(Some(grouping)));
+                ensure_eq!(self.group_stack.pop(), Some(GroupType::Brace), ErrorKind::UnbalancedGroup(Some(GroupType::Brace)));
                 Event::EndGroup
             },
-            // TODO: check for double and triple primes
             '\'' => Event::Content(Content::Operator(op!('′'))),
 
             c if is_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => Event::Content(Content::Operator(op!(c))),
             '0'..='9' => Event::Content(Content::Number(Identifier::Char(token))),
-            // TODO: handle every character correctly.
-            c => Event::Content(ident!(c)),
+            c => ident(c),
         });
         self.buffer.push(instruction);
         Ok(())
@@ -187,14 +175,19 @@ impl<'a> Parser<'a> {
             "tt" => font_override(Font::Monospace),
             // amsfonts font changes (old behavior a.k.a NFSS 1)
             // unicode-math font changes (old behavior a.k.a NFSS 1)
-            // TODO: Make it so that there is a different between `\sym_` and `\math_` font
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" => return self.font_group(Some(Font::Bold)),
-            "mathcal" | "symcal" | "mathup" | "symup" => return self.font_group(Some(Font::Script)),
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => {
+                return self.font_group(Some(Font::Bold))
+            }
+            "mathcal" | "symcal" | "mathup" | "symup" => {
+                return self.font_group(Some(Font::Script))
+            }
             "mathit" | "symit" => return self.font_group(Some(Font::Italic)),
             "mathrm" | "symrm" => return self.font_group(Some(Font::UpRight)),
-            "mathsf" | "symsf" | "mathsfup" | "symsfup" => return self.font_group(Some(Font::SansSerif)),
+            "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
+                return self.font_group(Some(Font::SansSerif))
+            }
             "mathtt" | "symtt" => return self.font_group(Some(Font::Monospace)),
             "mathbb" | "symbb" => return self.font_group(Some(Font::DoubleStruck)),
             "mathfrak" | "symfrak" => return self.font_group(Some(Font::Fraktur)),
@@ -206,17 +199,6 @@ impl<'a> Parser<'a> {
             "mathbfsfit" | "symbfsfit" => return self.font_group(Some(Font::SansSerifBoldItalic)),
             "mathnormal" | "symnormal" => return self.font_group(None),
 
-            //////////////////
-            // Miscellanous //
-            //////////////////
-            "#" | "%" | "&" | "$" | "_" => ident(
-                control_sequence
-                    .chars()
-                    .next()
-                    .expect("the control sequence contains one of the matched characters"),
-            ),
-            "|" => operator(op!('∥', {stretchy: Some(false)})),
-
             //////////////////////////////
             // Delimiter size modifiers //
             //////////////////////////////
@@ -227,37 +209,45 @@ impl<'a> Parser<'a> {
             "bigg" | "biggl" | "biggr" | "biggm" => return self.em_sized_delim(2.4),
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
 
-            // TODO: Fix these 3 they do not work!!!
             "left" => {
-                todo!();
-                let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
+                let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
+                    Event::BeginGroup
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    self.buffer
-                        .push(Instruction::Event(Event::Content(Content::Operator(op!(
-                            delimiter
-                        )))));
+                        lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+                    self.buffer.extend([
+                        Instruction::Event(Event::BeginGroup),
+                        Instruction::Event(Event::Content(Content::Operator(op!(delimiter)))),
+                    ]);
+                    self.group_stack.push(GroupType::LeftRight);
+                    return Ok(());
                 }
-                Event::BeginGroup
             }
             "middle" => {
-                let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+                let delimiter =
+                    lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
                 operator(op!(delimiter))
             }
             "right" => {
-                todo!();
-                let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
+                let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     Event::EndGroup
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    self.buffer.push(Instruction::Event(Event::EndGroup));
-                    Event::Content(Content::Operator(op!(delimiter)))
+                        lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+                    self.buffer.extend([
+                        Instruction::Event(Event::Content(Content::Operator(op!(delimiter)))),
+                        Instruction::Event(Event::EndGroup),
+                    ]);
+                    ensure_eq!(
+                        self.group_stack.pop(),
+                        Some(GroupType::LeftRight),
+                        ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight))
+                    );
+                    return Ok(());
                 }
             }
 
@@ -383,10 +373,11 @@ impl<'a> Parser<'a> {
                 height: None,
                 depth: None,
             },
-            "~" | "nobreakspace" => Event::Content(Content::Text("&nbsp;")),
+            "~" | "nobreakspace" => Event::Content(Content::Text(Identifier::Str("&nbsp;"))),
             // Variable spacing
             "kern" => {
-                let dimension = lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
+                let dimension =
+                    lex::dimension(self.current_string()?.ok_or(ErrorKind::Dimension)?)?;
                 Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -394,7 +385,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "hskip" => {
-                let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
+                let glue = lex::glue(self.current_string()?.ok_or(ErrorKind::Glue)?)?;
                 Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -403,7 +394,7 @@ impl<'a> Parser<'a> {
             }
             "mkern" => {
                 let dimension =
-                    lex::math_dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
+                    lex::math_dimension(self.current_string()?.ok_or(ErrorKind::Dimension)?)?;
                 Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -411,7 +402,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "mskip" => {
-                let glue = lex::math_glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
+                let glue = lex::math_glue(self.current_string()?.ok_or(ErrorKind::Glue)?)?;
                 Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -420,7 +411,7 @@ impl<'a> Parser<'a> {
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?
                 else {
                     return Err(ErrorKind::DimensionArgument);
                 };
@@ -550,9 +541,9 @@ impl<'a> Parser<'a> {
             "frac" => {
                 self.buffer
                     .push(Instruction::Event(Event::Visual(Visual::Fraction(None))));
-                let first_arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let first_arg = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
                 self.handle_argument(first_arg)?;
-                let second_arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let second_arg = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
                 self.handle_argument(second_arg)?;
                 return Ok(());
             }
@@ -597,8 +588,45 @@ impl<'a> Parser<'a> {
             "backslash" => ident('\\'),
             "between" => operator(op!('≬')),
 
+            ///////////////////
+            // Miscellaneous //
+            ///////////////////
+            "#" | "%" | "&" | "$" | "_" => ident(
+                control_sequence
+                    .chars()
+                    .next()
+                    .expect("the control sequence contains one of the matched characters"),
+            ),
+            "|" => operator(op!('∥', {stretchy: Some(false)})),
+            "text" => {
+                let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+                self.buffer
+                    .push(Instruction::Event(Event::Content(Content::Text(
+                        match argument {
+                            Argument::Token(Token::Character(c)) => Identifier::Char(c),
+                            Argument::Group(inner) => Identifier::Str(inner),
+                            _ => return Err(ErrorKind::TextModeControlSequence),
+                        },
+                    ))));
+                return Ok(());
+            }
+            "begingroup" => {
+                self.group_stack.push(GroupType::BeginGroup);
+                Event::BeginGroup
+            }
+            "endgroup" => {
+                ensure_eq!(
+                    self.group_stack.pop(),
+                    Some(GroupType::BeginGroup),
+                    ErrorKind::UnbalancedGroup(Some(GroupType::BeginGroup))
+                );
+                Event::EndGroup
+            }
+
             // Spacing
-            c if c.trim_start().is_empty() => Event::Content(Content::Text("&nbsp;")),
+            c if c.trim_start().is_empty() => {
+                Event::Content(Content::Text(Identifier::Str("&nbsp;")))
+            }
 
             _ => return Err(ErrorKind::UnknownPrimitive),
         };
@@ -607,17 +635,16 @@ impl<'a> Parser<'a> {
     }
 
     /// Handle a control sequence that outputs more than one event.
-    fn multi_event<const N: usize>(&mut self, events: [Event<'a>; N]) -> InnerResult<()> {
+    fn multi_event<const N: usize>(&mut self, events: [Event<'a>; N]) {
         self.buffer.push(Instruction::Event(Event::BeginGroup));
         self.buffer
             .extend(events.iter().map(|event| Instruction::Event(*event)));
         self.buffer.push(Instruction::Event(Event::EndGroup));
-        Ok(())
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
     fn em_sized_delim(&mut self, size: f32) -> InnerResult<()> {
-        let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+        let delimiter = lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(
                 op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
@@ -627,7 +654,7 @@ impl<'a> Parser<'a> {
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
         self.buffer.extend([
             Instruction::Event(Event::BeginGroup),
             Instruction::Event(Event::FontChange(font)),
@@ -649,7 +676,7 @@ impl<'a> Parser<'a> {
 
     /// Accent commands. parse the argument, and overset the accent.
     fn accent(&mut self, accent: Operator) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
         self.buffer
             .push(Instruction::Event(Event::Visual(Visual::Overscript)));
         self.handle_argument(argument)?;
@@ -662,7 +689,7 @@ impl<'a> Parser<'a> {
 
     /// Underscript commands. parse the argument, and underset the accent.
     fn underscript(&mut self, content: Operator) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
         self.buffer
             .push(Instruction::Event(Event::Visual(Visual::Underscript)));
         self.handle_argument(argument)?;
@@ -690,38 +717,10 @@ fn operator(operator: Operator) -> Event<'static> {
     Event::Content(Content::Operator(operator))
 }
 
-// Fonts are handled by the renderer using groups.
-// In font group, a group is opened, the font state is set, and the argument is parsed.
-// In frac, always use groups for safety.
-// In accent, always use groups for safety.
-// Everywhere, we can't go wrong using groups.
-//
-//
-// Expanded macros are owned strings, and to fetch the context of an error, we use the previous
-// string in the stack. INVARIANT: an expanded macro must always have a source that is its neigbour
-// in the stack. That is because macro expansion does not output anything other than the expanded
-// macro to the top of the stack. Example: [... (Other stuff), &'a str (source), String (macro), String (macro)]
-//
-//
-// Comments must be checked when parsing an argument, but are left in the string in order to have a
-// continuous string.
-
 // TODO implementations:
-// `*` ending commands
-// `begingroup` and `endgroup`: https://tex.stackexchange.com/a/191533
 // `sc` (small caps) font: https://tug.org/texinfohtml/latex2e.html#index-_005csc
 // `bmod`, `pod`, `pmod`, `centerdot`
-
-// Unimplemented primitives:
-// `sl` (slanted) font: https://tug.org/texinfohtml/latex2e.html#index-_005csl
-// `bbit` (double-struck italic) font
-// `symliteral` wtf is this? (in unicode-math)
-
-// Currently unhandled:
 // - `relax`
-// - `kern`, `mkern`
-// - `hskip`
-// - `\ ` (control space)
 // - `raise`, `lower`
 // - `char`
 // - `hbox`, `mbox`?
@@ -731,5 +730,8 @@ fn operator(operator: Operator) -> Event<'static> {
 // - `limits`, `nolimits` (only after Op)
 // - `mathchoice` (TeXbook p. 151)
 // - `displaystyle`, `textstyle`, `scriptstyle`, `scriptscriptstyle`
-// - `over`, `atop`
-// - `allowbreak`
+
+// Unimplemented primitives:
+// `sl` (slanted) font: https://tug.org/texinfohtml/latex2e.html#index-_005csl
+// `bbit` (double-struck italic) font
+// `symliteral` wtf is this? (in unicode-math)
