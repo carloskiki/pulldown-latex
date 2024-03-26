@@ -349,7 +349,7 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders a
 /// string of MathML into the given string.
-pub fn push_html<'a, I, E>(
+pub fn push_mathml<'a, I, E>(
     string: &mut String,
     parser: I,
     config: RenderConfig<'a>,
@@ -364,7 +364,7 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders the
 /// MathML into the given writer.
-pub fn write_html<'a, I, W, E>(writer: W, parser: I, config: RenderConfig<'a>) -> io::Result<()>
+pub fn write_mathml<'a, I, W, E>(writer: W, parser: I, config: RenderConfig<'a>) -> io::Result<()>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
     W: io::Write,

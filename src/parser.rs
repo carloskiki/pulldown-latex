@@ -117,7 +117,8 @@ impl<'a> Parser<'a> {
         let mut instruction_stack = Vec::with_capacity(64);
         instruction_stack.push(Instruction::Substring(input));
         let buffer = Vec::with_capacity(16);
-        let group_stack = Vec::with_capacity(16);
+        let mut group_stack = Vec::with_capacity(16);
+        group_stack.push(GroupType::Brace);
         Self {
             input,
             instruction_stack,
@@ -137,7 +138,7 @@ impl<'a> Parser<'a> {
             self.instruction_stack.pop();
             let group = self.group_stack.pop();
             if group != Some(GroupType::Brace) {
-                return Err(ErrorKind::UnbalancedGroup(None));
+                return Err(ErrorKind::UnbalancedGroup(Some(GroupType::Brace)));
             }
             self.current_string()
         } else {

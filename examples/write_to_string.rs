@@ -1,4 +1,4 @@
-use pulldown_latex::{mathml::push_html, parser::Parser};
+use pulldown_latex::{mathml::push_mathml, parser::Parser};
 
 static INPUT_LATEX: &str = r#"
 \forall \epsilon > 0, \exists \delta > 0, \text{s.t.}
@@ -10,7 +10,7 @@ fn main() {
     let mut mathml = String::new();
     let config = Default::default();
     
-    match push_html(&mut mathml, parser, config) {
+    match push_mathml(&mut mathml, parser, config) {
         Ok(()) => println!("{}", mathml),
         Err(e) => eprintln!("Error while rendering: {}", e),
     }
