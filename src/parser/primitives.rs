@@ -93,11 +93,9 @@ impl<'a> Parser<'a> {
             "gamma" => ident('γ'),
             "delta" => ident('δ'),
             "epsilon" => ident('ϵ'),
-            "varepsilon" => ident('ε'),
             "zeta" => ident('ζ'),
             "eta" => ident('η'),
             "theta" => ident('θ'),
-            "vartheta" => ident('ϑ'),
             "iota" => ident('ι'),
             "kappa" => ident('κ'),
             "lambda" => ident('λ'),
@@ -105,18 +103,15 @@ impl<'a> Parser<'a> {
             "nu" => ident('ν'),
             "xi" => ident('ξ'),
             "pi" => ident('π'),
-            "varpi" => ident('ϖ'),
             "rho" => ident('ρ'),
-            "varrho" => ident('ϱ'),
             "sigma" => ident('σ'),
-            "varsigma" => ident('ς'),
             "tau" => ident('τ'),
             "upsilon" => ident('υ'),
             "phi" => ident('φ'),
-            "varphi" => ident('ϕ'),
             "chi" => ident('χ'),
             "psi" => ident('ψ'),
             "omega" => ident('ω'),
+            "omicron" => ident('ο'),
             // Uppercase Greek letters
             "Alpha" => ident('Α'),
             "Beta" => ident('Β'),
@@ -141,12 +136,35 @@ impl<'a> Parser<'a> {
             "Chi" => ident('Χ'),
             "Psi" => ident('Ψ'),
             "Omega" => ident('Ω'),
+            "Omicron" => ident('Ο'),
+            // Lowercase Greek Variants
+            "varepsilon" => ident('ε'),
+            "vartheta" => ident('ϑ'),
+            "varkappa" => ident('ϰ'),
+            "varrho" => ident('ϱ'),
+            "varsigma" => ident('ς'),
+            "varpi" => ident('ϖ'),
+            "varphi" => ident('ϕ'),
+            // Uppercase Greek Variants
+            "varGamma" => ident('𝛤'),
+            "varDelta" => ident('𝛥'),
+            "varTheta" => ident('𝛩'),
+            "varLambda" => ident('𝛬'),
+            "varXi" => ident('𝛯'),
+            "varPi" => ident('𝛱'),
+            "varSigma" => ident('𝛴'),
+            "varUpsilon" => ident('𝛶'),
+            "varPhi" => ident('𝛷'),
+            "varPsi" => ident('𝛹'),
+            "varOmega" => ident('𝛺'),
+
             // Hebrew letters
             "aleph" => ident('ℵ'),
             "beth" => ident('ℶ'),
             "gimel" => ident('ℷ'),
             "daleth" => ident('ℸ'),
             // Other symbols
+            "digamma" => ident('ϝ'),
             "eth" => ident('ð'),
             "ell" => ident('ℓ'),
             "nabla" => ident('∇'),
@@ -454,7 +472,7 @@ impl<'a> Parser<'a> {
             "supset" => operator(op!('⊃')),
             "mapsto" => operator(op!('↦')),
             "implies" => operator(op!('⟹')),
-            "in" => operator(op!('∈')),
+            "in" | "isin" => operator(op!('∈')),
             "mid" => operator(op!('∣')),
             "to" => operator(op!('→')),
             "impliedby" => operator(op!('⟸')),
@@ -535,6 +553,274 @@ impl<'a> Parser<'a> {
             "with" => operator(op!('&')),
             "intercal" => operator(op!('⊺')),
             "wr" => operator(op!('≀')),
+            "circledvert" => operator(op!('⦶')),
+            "blackhourglass" => operator(op!('⧗')),
+            "circlehbar" => operator(op!('⦵')),
+            "operp" => operator(op!('⦹')),
+            "boxast" => operator(op!('⧆')),
+            "concavediamond" => operator(op!('⟡')),
+            "boxbox" => operator(op!('⧈')),
+            "concavediamondtickleft" => operator(op!('⟢')),
+            "oslash" => operator(op!('⊘')),
+            "boxcircle" => operator(op!('⧇')),
+            "concavediamondtickright" => operator(op!('⟣')),
+            "diamond" => operator(op!('⋄')),
+            "Otimes" => operator(op!('⨷')),
+            "hourglass" => operator(op!('⧖')),
+            "otimeshat" => operator(op!('⨶')),
+            "triangletimes" => operator(op!('⨻')),
+            "lozengeminus" => operator(op!('⟠')),
+            "star" => operator(op!('⋆')),
+            "obar" => operator(op!('⌽')),
+            "triangle" | "vartriangle" => operator(op!('△')),
+            "obslash" => operator(op!('⦸')),
+            "triangleminus" => operator(op!('⨺')),
+            "odiv" => operator(op!('⨸')),
+            "triangleplus" => operator(op!('⨹')),
+            "circledequal" => operator(op!('⊜')),
+            "ogreaterthan" => operator(op!('⧁')),
+            "whitesquaretickleft" => operator(op!('⟤')),
+            "circledparallel" => operator(op!('⦷')),
+            "olessthan" => operator(op!('⧀')),
+            "whitesquaretickright" => operator(op!('⟥')),
+
+            ///////////////
+            // Relations //
+            ///////////////
+            "approx" => operator(op!('≈')),
+            "eqdef" => operator(op!('≝')),
+            "lt" => operator(op!('<')),
+            "stareq" => operator(op!('≛')),
+            "approxeq" => operator(op!('≊')),
+            "eqsim" => operator(op!('≂')),
+            "measeq" => operator(op!('≞')),
+            "Subset" => operator(op!('⋐')),
+            "arceq" => operator(op!('≘')),
+            "eqslantgtr" => operator(op!('⪖')),
+            "eqslantless" => operator(op!('⪕')),
+            "models" => operator(op!('⊨')),
+            "subseteq" => operator(op!('⊆')),
+            "backcong" => operator(op!('≌')),
+            "equiv" => operator(op!('≡')),
+            "multimap" => operator(op!('⊸')),
+            "subseteqq" => operator(op!('⫅')),
+            "fallingdotseq" => operator(op!('≒')),
+            "multimapboth" => operator(op!('⧟')),
+            "succ" => operator(op!('≻')),
+            "backsim" => operator(op!('∽')),
+            "frown" => operator(op!('⌢')),
+            "multimapinv" => operator(op!('⟜')),
+            "succapprox" => operator(op!('⪸')),
+            "backsimeq" => operator(op!('⋍')),
+            "ge" => operator(op!('≥')),
+            "origof" => operator(op!('⊶')),
+            "succcurlyeq" => operator(op!('≽')),
+            "between" => operator(op!('≬')),
+            "geq" => operator(op!('≥')),
+            "owns" => operator(op!('∋')),
+            "succsim" => operator(op!('≿')),
+            "Bumpeq" => operator(op!('≏')),
+            "geqslant" => operator(op!('⩾')),
+            "perp" => operator(op!('⟂')),
+            "Supset" => operator(op!('⋑')),
+            "circeq" => operator(op!('≗')),
+            "gg" => operator(op!('≫')),
+            "Perp" => operator(op!('⫫')),
+           	"ggg" => operator(op!('⋙')),
+            "pitchfork" => operator(op!('⋔')),
+            "supseteq" => operator(op!('⊇')),
+            "gggtr" => operator(op!('⋙')),
+            "prec" => operator(op!('≺')),
+            "supseteqq" => operator(op!('⫆')),
+            "gt" => operator(op!('>')),
+            "precapprox" => operator(op!('⪷')),
+            "thickapprox" => operator(op!('≈')),
+            "gtrapprox" => operator(op!('⪆')),
+            "preccurlyeq" => operator(op!('≼')),
+            "thicksim" => operator(op!('∼')),
+            "gtreqless" => operator(op!('⋛')),
+            "preceq" => operator(op!('⪯')),
+            "trianglelefteq" => operator(op!('⊴')),
+            "coloneqq" | "colonequals" => operator(op!('≔')),
+            "gtreqqless" => operator(op!('⪌')),
+            "precsim" => operator(op!('≾')),
+            "triangleq" => operator(op!('≜')),
+            "Coloneqq" | "coloncolonequals" => operator(op!('⩴')),
+            "gtrless" => operator(op!('≷')),
+            "propto" => operator(op!('∝')),
+            "trianglerighteq" => operator(op!('⊵')),
+            "gtrsim" => operator(op!('≳')),
+            "questeq" => operator(op!('≟')),
+            "varpropto" => operator(op!('∝')),
+            "imageof" => operator(op!('⊷')),
+            "cong" => operator(op!('≅')),
+            "risingdotseq" => operator(op!('≓')),
+            "vartriangleleft" => operator(op!('⊲')),
+            "curlyeqprec" => operator(op!('⋞')),
+            "scoh" => operator(op!('⌢')),
+            "vartriangleright" => operator(op!('⊳')),
+            "curlyeqsucc" => operator(op!('⋟')),
+            "le" => operator(op!('≤')),
+            // "shortmid" => operator(op!('∣')),
+            // "shortparallel" => operator(op!('∥')),
+            "vdash" => operator(op!('⊢')),
+            "dashv" => operator(op!('⊣')),
+            "leq" => operator(op!('≤')),
+            "vDash" => operator(op!('⊨')),
+            "dblcolon" | "coloncolon" => operator(op!('∷')),
+            "leqq" => operator(op!('≦')),
+            "sim" => operator(op!('∼')),
+            "Vdash" => operator(op!('⊩')),
+            "doteq" => operator(op!('≐')),
+            "leqslant" => operator(op!('⩽')),
+            "simeq" => operator(op!('≃')),
+            "Dash" => operator(op!('⊫')),
+            "Doteq" => operator(op!('≑')),
+            "lessapprox" => operator(op!('⪅')),
+            "sincoh" => operator(op!('⌣')),
+            "Vvdash" => operator(op!('⊪')),
+            "doteqdot" => operator(op!('≑')),
+            "lesseqgtr" => operator(op!('⋚')),
+            "smallfrown" => operator(op!('⌢')),
+            "veeeq" => operator(op!('≚')),
+            "eqeq" => operator(op!('⩵')),
+            "lesseqqgtr" => operator(op!('⪋')),
+            // "smallsmile" => operator(op!('⌣')),
+            "wedgeq" => operator(op!('≙')),
+            // Negated relations
+            "gnapprox" => operator(op!('⪊')),
+            "ngeqslant" => operator(op!('≱')),
+            "nsubset" => operator(op!('⊄')),
+            "nVdash" => operator(op!('⊮')),
+            "gneq" => operator(op!('⪈')),
+            "ngtr" => operator(op!('≯')),
+            "nsubseteq" => operator(op!('⊈')),
+            "precnapprox" => operator(op!('⪹')),
+            "gneqq" => operator(op!('≩')),
+            "nleq" => operator(op!('≰')),
+            "nsubseteqq" => operator(op!('⊈')),
+            "precneqq" => operator(op!('⪵')),
+            "gnsim" => operator(op!('⋧')),
+            "nleqq" => operator(op!('≰')),
+            "nsucc" => operator(op!('⊁')),
+            "precnsim" => operator(op!('⋨')),
+            "nleqslant" => operator(op!('≰')),
+            "nsucceq" => operator(op!('⋡')),
+            "subsetneq" => operator(op!('⊊')),
+            "lnapprox" => operator(op!('⪉')),
+            "nless" => operator(op!('≮')),
+            "nsupset" => operator(op!('⊅')),
+            "subsetneqq" => operator(op!('⫋')),
+            "lneq" => operator(op!('⪇')),
+            "nmid" => operator(op!('∤')),
+            "nsupseteq" => operator(op!('⊉')),
+            "succnapprox" => operator(op!('⪺')),
+            "lneqq" => operator(op!('≨')),
+            "notin" => operator(op!('∉')),
+            "nsupseteqq" => operator(op!('⊉')),
+            "succneqq" => operator(op!('⪶')),
+            "lnsim" => operator(op!('⋦')),
+            "ntriangleleft" => operator(op!('⋪')),
+            "succnsim" => operator(op!('⋩')),
+            "nparallel" => operator(op!('∦')),
+            "ntrianglelefteq" => operator(op!('⋬')),
+            "supsetneq" => operator(op!('⊋')),
+            "ncong" => operator(op!('≆')),
+            "nprec" => operator(op!('⊀')),
+            "ntriangleright" => operator(op!('⋫')),
+            "supsetneqq" => operator(op!('⫌')),
+            "ne" => operator(op!('≠')),
+            "npreceq" => operator(op!('⋠')),
+            "ntrianglerighteq" => operator(op!('⋭')),
+            "neq" => operator(op!('≠')),
+            "nshortmid" => operator(op!('∤')),
+            "nvdash" => operator(op!('⊬')),
+            "ngeq" => operator(op!('≱')),
+            "nshortparallel" => operator(op!('∦')),
+            "nvDash" => operator(op!('⊭')),
+            "varsupsetneq" => operator(op!('⊋')),
+            "ngeqq" => operator(op!('≱')),
+            "nsim" => operator(op!('≁')),
+            "nVDash" => operator(op!('⊯')),
+            // "varsupsetneqq" => operator(op!('⫌︀')),
+            // "varsubsetneqq" => operator(op!('⫋︀')),
+            // "varsubsetneq" => operator(op!('⊊︀')),
+            // "gvertneqq" => operator(op!('≩︀')),
+            // "lvertneqq" => operator(op!('≨︀')),
+            
+            ////////////
+            // Arrows //
+            ////////////
+            "circlearrowleft" => operator(op!('↺')),
+            "Leftrightarrow" => operator(op!('⇔')),
+            "restriction" => operator(op!('↾')),
+            "circlearrowright" => operator(op!('↻')),
+            "leftrightarrows" => operator(op!('⇆')),
+            "rightarrow" => operator(op!('→')),
+            "curvearrowleft" => operator(op!('↶')),
+            "leftrightharpoons" => operator(op!('⇋')),
+            "Rightarrow" => operator(op!('⇒')),
+            "curvearrowright" => operator(op!('↷')),
+            "leftrightsquigarrow" => operator(op!('↭')),
+            "rightarrowtail" => operator(op!('↣')),
+            "dashleftarrow" => operator(op!('⇠')),
+            "Lleftarrow" => operator(op!('⇚')),
+            "rightharpoondown" => operator(op!('⇁')),
+            "dashrightarrow" => operator(op!('⇢')),
+            "longleftarrow" => operator(op!('⟵')),
+            "rightharpoonup" => operator(op!('⇀')),
+            "downarrow" => operator(op!('↓')),
+            "Longleftarrow" => operator(op!('⟸')),
+            "rightleftarrows" => operator(op!('⇄')),
+            "Downarrow" => operator(op!('⇓')),
+            "longleftrightarrow" => operator(op!('⟷')),
+            "rightleftharpoons" => operator(op!('⇌')),
+            "downdownarrows" => operator(op!('⇊')),
+            "Longleftrightarrow" => operator(op!('⟺')),
+            "rightrightarrows" => operator(op!('⇉')),
+            "downharpoonleft" => operator(op!('⇃')),
+            "longmapsto" => operator(op!('⟼')),
+            "rightsquigarrow" => operator(op!('⇝')),
+            "downharpoonright" => operator(op!('⇂')),
+            "longrightarrow" => operator(op!('⟶')),
+            "Rrightarrow" => operator(op!('⇛')),
+            "Longrightarrow" => operator(op!('⟹')),
+            "Rsh" => operator(op!('↱')),
+            "hookleftarrow" => operator(op!('↩')),
+            "looparrowleft" => operator(op!('↫')),
+            "searrow" => operator(op!('↘')),
+            "hookrightarrow" => operator(op!('↪')),
+            "looparrowright" => operator(op!('↬')),
+            "swarrow" => operator(op!('↙')),
+            "Lsh" => operator(op!('↰')),
+            "mapsfrom" => operator(op!('↤')),
+            "twoheadleftarrow" => operator(op!('↞')),
+            "twoheadrightarrow" => operator(op!('↠')),
+            "leadsto" => operator(op!('⇝')),
+            "nearrow" => operator(op!('↗')),
+            "uparrow" => operator(op!('↑')),
+            "leftarrow" => operator(op!('←')),
+            "nleftarrow" => operator(op!('↚')),
+            "Uparrow" => operator(op!('⇑')),
+            "Leftarrow" => operator(op!('⇐')),
+            "nLeftarrow" => operator(op!('⇍')),
+            "updownarrow" => operator(op!('↕')),
+            "leftarrowtail" => operator(op!('↢')),
+            "nleftrightarrow" => operator(op!('↮')),
+            "Updownarrow" => operator(op!('⇕')),
+            "leftharpoondown" => operator(op!('↽')),
+            "nLeftrightarrow" => operator(op!('⇎')),
+            "upharpoonleft" => operator(op!('↿')),
+            "leftharpoonup" => operator(op!('↼')),
+            "nrightarrow" => operator(op!('↛')),
+            "upharpoonright" => operator(op!('↾')),
+            "leftleftarrows" => operator(op!('⇇')),
+            "nRightarrow" => operator(op!('⇏')),
+            "upuparrows" => operator(op!('⇈')),
+            "leftrightarrow" => operator(op!('↔')),
+            "nwarrow" => operator(op!('↖')),
+                
+            
             ///////////////
             // Fractions //
             ///////////////
@@ -549,9 +835,7 @@ impl<'a> Parser<'a> {
             }
 
             "angle" => ident('∠'),
-            "approx" => operator(op!('≈')),
-            "approxeq" => operator(op!('≊')),
-            "aPproxcolon" => {
+            "approxcolon" => {
                 self.multi_event([
                     Event::Content(Content::Operator(op! {
                         '≈',
@@ -559,6 +843,19 @@ impl<'a> Parser<'a> {
                     })),
                     Event::Content(Content::Operator(op! {
                         ':',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "colonapprox" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '≈',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
                 ]);
@@ -583,10 +880,94 @@ impl<'a> Parser<'a> {
                 ]);
                 return Ok(());
             }
-            "backsim" => operator(op!('∽')),
-            "backsimeq" => operator(op!('⋍')),
+            "Colonapprox" | "coloncolonapprox" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '≈',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "coloneq" | "colonminus" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '-',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "Coloneq" | "coloncolonminus" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '-',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "colonsim" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '∼',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "Colonsim" | "coloncolonsim" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '∼',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            
             "backslash" => ident('\\'),
-            "between" => operator(op!('≬')),
 
             ///////////////////
             // Miscellaneous //

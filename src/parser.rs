@@ -311,12 +311,12 @@ impl<'a> Iterator for Parser<'a> {
                 }))
             }
             Some(Instruction::Substring(_)) => {
-                let content =match self.current_string() {
+                let mut content = match self.current_string() {
                     Ok(Some(content)) => content,
                     Ok(None) => return self.next(),
                     Err(err) => return Some(Err(self.error_with_context(err))),
                 };
-                
+
                 // 1. Parse the next token and output everything to the staging stack.
                 let token = lex::token(content);
                 let maybe_err =
@@ -337,21 +337,21 @@ impl<'a> Iterator for Parser<'a> {
                                 // substring, so we can extend the `content` string to include it back.
                                 unsafe {
                                     let new_len = content.len() + 1;
-                                    let start_ptr = content.as_bytes().as_ptr().offset(-1);
-                                    let new_content = std::str::from_utf8_unchecked(
-                                        std::slice::from_raw_parts(start_ptr, new_len),
-                                    );
-                                    *content = new_content;
+                                    let start_ptr = content.as_ptr().offset(-1);
+                                    let new_content_bytes = std::slice::from_raw_parts(start_ptr, new_len);
+                                    let new_content_str = &mut std::str::from_utf8_unchecked(new_content_bytes);
+                                    content = new_content_str;
+                                    
+                                    if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                                        len -= 1;
+                                    }
+                                    let (number, rest) = content.split_at(len);
+                                    *content = rest;
+                                    self.buffer.push(Instruction::Event(Event::Content(
+                                        Content::Number(Identifier::Str(number)),
+                                    )));
+                                    Ok(())
                                 }
-                                if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                                    len -= 1;
-                                }
-                                let (number, rest) = content.split_at(len);
-                                *content = rest;
-                                self.buffer.push(Instruction::Event(Event::Content(
-                                    Content::Number(Identifier::Str(number)),
-                                )));
-                                Ok(())
                             }
                         }
                         // TODO: when expanding a user defined macro, we do not want to check for
@@ -606,6 +606,20 @@ mod tests {
                 Event::Content(Content::Number(Identifier::Char('2'))),
                 Event::Content(Content::Number(Identifier::Char('4'))),
             ]
+        );
+    }
+
+    // For mir
+    #[test]
+    fn multidigit_number() {
+        let parser = Parser::new("123");
+        let events = parser
+            .collect::<Result<Vec<_>, ParseError<'static>>>()
+            .unwrap();
+
+        assert_eq!(
+            events,
+            vec![Event::Content(Content::Number(Identifier::Str("123")))]
         );
     }
 }
