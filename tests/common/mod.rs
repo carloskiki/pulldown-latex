@@ -6,6 +6,9 @@ macro_rules! round_trip {
             use pulldown_latex::{parser::Parser, mathml::write_mathml};
             let _ = crate::common::show_errors(Parser::new($input)).unwrap();
             let parser = Parser::new($input);
+            let events = parser.collect::<Result<Vec<_>, _>>().unwrap();
+            println!("{:#?}", events);
+            let parser = Parser::new($input);
             write_mathml(std::io::sink(), parser, Default::default()).unwrap();
         }
     };

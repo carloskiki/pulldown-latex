@@ -282,12 +282,13 @@ impl<'a> Parser<'a> {
         //   of the size of `T`.
         //   => this is true, as both pointers are `u8` pointers.
         // * The distance between the pointers, **in bytes**, cannot overflow an `isize`.
-        //   => this is true, as the distance is always positive.
+        //   => this is obvious as the size of a string should not overflow an `isize`.
         // * The distance being in bounds cannot rely on "wrapping around" the address space.
-        //   => this is true, as the distance is always positive.
+        //   => this is true, a `str` does not rely on this behavior either.
         let distance = unsafe { curr_ptr.offset_from(initial_byte_ptr) } as usize;
-        let start = distance.saturating_sub(15) as usize;
-        let end = self.input.len().min(distance + 15);
+        let start = floor_char_boundary(self.input, distance.saturating_sub(15));
+        let end = floor_char_boundary(self.input, distance + 15);
+
         ParseError {
             context: Some((&self.input[start..end], distance - start)),
             error: kind,
@@ -388,9 +389,10 @@ impl Display for ParseError<'_> {
         f.write_str("Error while parsing: ")?;
         self.error.fmt(f)?;
         if let Some((context, char_position)) = self.context {
+            let context = context.replace('\n', " ");
             f.write_str("\n --> Context: ")?;
             const PREFIX_LEN: usize = 14;
-            f.write_str(context)?;
+            f.write_str(&context)?;
             f.write_str("\n")?;
             f.write_fmt(format_args!("{:>1$}", "^", char_position + PREFIX_LEN))?;
         }
@@ -616,6 +618,22 @@ mod tests {
         );
     }
 }
+
+pub fn floor_char_boundary(str: &str, index: usize) -> usize {
+    if index >= str.len() {
+        str.len()
+    } else {
+        let lower_bound = index.saturating_sub(3);
+        let new_index = str.as_bytes()[lower_bound..=index].iter().rposition(|b| {
+            // This is bit magic equivalent to: b < 128 || b >= 192
+            (*b as i8) >= -0x40
+        });
+
+        // SAFETY: we know that the character boundary will be within four bytes
+        unsafe { lower_bound + new_index.unwrap_unchecked() }
+    }
+}
+
 // Token parsing procedure, as per TeXbook p. 46-47.
 //
 // This is roughly what the lexer implementation will look like for text mode.

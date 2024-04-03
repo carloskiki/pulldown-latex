@@ -168,7 +168,7 @@ impl<'a> Parser<'a> {
             "eth" => ident('ð'),
             "ell" => ident('ℓ'),
             "nabla" => ident('∇'),
-            "partial" => ident('⅁'),
+            "partial" => ident('∂'),
             "Finv" => ident('Ⅎ'),
             "Game" => ident('ℷ'),
             "hbar" | "hslash" => ident('ℏ'),
@@ -227,10 +227,13 @@ impl<'a> Parser<'a> {
             "bigg" | "biggl" | "biggr" | "biggm" => return self.em_sized_delim(2.4),
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
 
+            // TODO: Bug here. We need to parse everything within the left/right group as a
+            // substring (i think). because otherwise it fucks with the subscript of the delims.
             "left" => {
                 let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
+                    self.group_stack.push(GroupType::LeftRight);
                     Event::BeginGroup
                 } else {
                     let delimiter =
@@ -252,6 +255,11 @@ impl<'a> Parser<'a> {
                 let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
+                    ensure_eq!(
+                        self.group_stack.pop(),
+                        Some(GroupType::LeftRight),
+                        ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight))
+                    );
                     Event::EndGroup
                 } else {
                     let delimiter =
@@ -1049,6 +1057,7 @@ impl<'a> Parser<'a> {
             }
             Argument::Group(group) => {
                 self.buffer.push(Instruction::Substring(group));
+                self.group_stack.push(GroupType::Brace);
             }
         };
         self.buffer.push(Instruction::Event(Event::EndGroup));
