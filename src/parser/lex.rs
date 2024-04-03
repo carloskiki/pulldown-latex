@@ -185,7 +185,7 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
 /// A control sequence can be of the form `\controlsequence`, or `\#` (control symbol).
 pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
     if input.is_empty() {
-        return Err(ErrorKind::EndOfInput);
+        return Err(ErrorKind::EmptyControlSequence);
     }
 
     let len = input
@@ -432,6 +432,28 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
         }
         Some(c) => {
             *input = &input[c.len_utf8()..];
+            Ok(Token::Character(c))
+        }
+        None => Err(ErrorKind::EndOfInput),
+    }
+}
+
+/// Special token parsing that does not consume single character tokens.
+///
+/// This is only used in the algorithm for reading the next token in the `Parser`.
+pub fn token_char_check<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
+    *input = input.trim_start();
+    match input.chars().next() {
+        Some('\\') => {
+            *input = &input[1..];
+            Ok(Token::ControlSequence(rhs_control_sequence(input)?))
+        },
+        Some('%') => {
+           let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
+           *input = rest;
+           token(input)
+        }
+        Some(c) => {
             Ok(Token::Character(c))
         }
         None => Err(ErrorKind::EndOfInput),

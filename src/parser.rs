@@ -299,7 +299,7 @@ impl<'a> Iterator for Parser<'a> {
     type Item = Result<Event<'a>, ParseError<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.instruction_stack.last_mut() {
+        match self.instruction_stack.last() {
             Some(Instruction::Event(_)) => {
                 let event = self
                     .instruction_stack
@@ -311,56 +311,47 @@ impl<'a> Iterator for Parser<'a> {
                 }))
             }
             Some(Instruction::Substring(_)) => {
-                let mut content = match self.current_string() {
+                let content = match self.current_string() {
                     Ok(Some(content)) => content,
                     Ok(None) => return self.next(),
                     Err(err) => return Some(Err(self.error_with_context(err))),
                 };
 
                 // 1. Parse the next token and output everything to the staging stack.
-                let token = lex::token(content);
-                let maybe_err =
-                    match token {
-                        Ok(Token::Character(first_num @ ('0'..='9'))) => {
-                            let mut len = content
-                                .chars()
-                                .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
-                                .count()
-                                + 1;
-                            if len == 1 {
-                                self.buffer.push(Instruction::Event(Event::Content(
-                                    Content::Number(Identifier::Char(first_num)),
-                                )));
-                                Ok(())
-                            } else {
-                                // Safety: we know the previous character is '0'..='9' in the content
-                                // substring, so we can extend the `content` string to include it back.
-                                unsafe {
-                                    let new_len = content.len() + 1;
-                                    let start_ptr = content.as_ptr().offset(-1);
-                                    let new_content_bytes = std::slice::from_raw_parts(start_ptr, new_len);
-                                    let new_content_str = &mut std::str::from_utf8_unchecked(new_content_bytes);
-                                    content = new_content_str;
-                                    
-                                    if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                                        len -= 1;
-                                    }
-                                    let (number, rest) = content.split_at(len);
-                                    *content = rest;
-                                    self.buffer.push(Instruction::Event(Event::Content(
-                                        Content::Number(Identifier::Str(number)),
-                                    )));
-                                    Ok(())
-                                }
-                            }
+                let token = lex::token_char_check(content);
+                let maybe_err = match token {
+                    Ok(Token::Character(first_num @ ('0'..='9'))) => {
+                        let mut len = content
+                            .chars()
+                            .skip(1)
+                            .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
+                            .count()
+                            + 1;
+                        if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                            len -= 1;
                         }
-                        // TODO: when expanding a user defined macro, we do not want to check for
-                        // suffixes.
-                        Ok(Token::ControlSequence(cs)) => self.handle_primitive(cs),
-                        Ok(Token::Character(c)) => self.handle_char_token(c),
-                        Err(ErrorKind::EndOfInput) => return None,
-                        Err(e) => Err(e),
-                    };
+                        let (number, rest) = content.split_at(len);
+                        *content = rest;
+                        self.buffer
+                            .push(Instruction::Event(Event::Content(Content::Number(
+                                if len == 1 {
+                                    Identifier::Char(first_num)
+                                } else {
+                                    Identifier::Str(number)
+                                },
+                            ))));
+                        Ok(())
+                    }
+                    // TODO: when expanding a user defined macro, we do not want to check for
+                    // suffixes.
+                    Ok(Token::ControlSequence(cs)) => self.handle_primitive(cs),
+                    Ok(Token::Character(c)) => {
+                        *content = &content[c.len_utf8()..];
+                        self.handle_char_token(c)
+                    }
+                    Err(ErrorKind::EndOfInput) => return None,
+                    Err(e) => Err(e),
+                };
                 if let Err(err) = maybe_err {
                     return Some(Err(self.error_with_context(err)));
                 };
@@ -461,6 +452,8 @@ pub(crate) enum ErrorKind {
     UnknownPrimitive,
     #[error("control sequence in text mode")]
     TextModeControlSequence,
+    #[error("enpty control sequence")]
+    EmptyControlSequence,
 }
 
 #[cfg(test)]
