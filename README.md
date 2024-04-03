@@ -34,6 +34,7 @@ these versions specifically.
 ## TODOs
 
 - [ ] Document the algorithm behind the Parser.
+- [ ] Cargo Mutants
 - [ ] Have a correct implementation of all `amsmath` and `latex2e` math primitives.
 - [ ] Write comprehensive tests for the Parser.
 - [ ] Add support for structured math environments.
