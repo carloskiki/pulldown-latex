@@ -1,6 +1,6 @@
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{operator_table::is_delimiter, Argument, ErrorKind, InnerResult, Token};
+use super::{operator_table::is_delimiter, Argument, ErrorKind, GroupType, InnerResult, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -12,7 +12,7 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
     let control_sequence = control_sequence(input)?;
     let (parameter_text, rest) = input.split_once('{').ok_or(ErrorKind::EndOfInput)?;
     *input = rest;
-    let replacement_text = group_content(input)?;
+    let replacement_text = group_content(input, "{", "}")?;
 
     Ok((control_sequence, parameter_text, replacement_text))
 }
@@ -22,7 +22,7 @@ pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
 
     if input.starts_with('{') {
         *input = &input[1..];
-        let content = group_content(input)?;
+        let content = group_content(input, "{", "}")?;
         Ok(Argument::Group(content))
     } else {
         Ok(Argument::Token(token(input)?))
@@ -33,49 +33,91 @@ pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
 ///
 /// The output is the content within the group without the surrounding `{}`. This content is
 /// guaranteed to be balanced.
-pub fn group_content<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
-    let mut escaped = false;
-    let mut in_comment = false;
-    // In this case `Err` is the desired result.
-    let end_index = input
-        .char_indices()
-        .try_fold(0usize, |balance, (index, c)| match c {
-            _ if in_comment => {
-                if c == '\n' {
-                    in_comment = false;
-                }
-                Ok(balance)
-            }
-            '{' if !escaped => Ok(balance + 1),
-            '}' if !escaped => {
-                if balance == 0 {
-                    Err(index)
-                } else {
-                    Ok(balance - 1)
-                }
-            }
-            '\\' => {
-                // Makes it so that two backslashes in a row don't escape the next character.
-                escaped = !escaped;
-                Ok(balance)
-            }
-            '%' if !escaped => {
-                in_comment = true;
-                Ok(balance)
-            }
-            _ => {
-                escaped = false;
-                Ok(balance)
-            }
-        });
+// Changed in favor of a more general implementation.
+// pub fn group_content<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
+//     let mut escaped = false;
+//     let mut in_comment = false;
+//     // In this case `Err` is the desired result.
+//     let end_index = input
+//         .char_indices()
+//         .try_fold(0usize, |balance, (index, c)| match c {
+//             _ if in_comment => {
+//                 if c == '\n' {
+//                     in_comment = false;
+//                 }
+//                 Ok(balance)
+//             }
+//             '{' if !escaped => Ok(balance + 1),
+//             '}' if !escaped => {
+//                 if balance == 0 {
+//                     Err(index)
+//                 } else {
+//                     Ok(balance - 1)
+//                 }
+//             }
+//             '\\' => {
+//                 // Makes it so that two backslashes in a row don't escape the next character.
+//                 escaped = !escaped;
+//                 Ok(balance)
+//             }
+//             '%' if !escaped => {
+//                 in_comment = true;
+//                 Ok(balance)
+//             }
+//             _ => {
+//                 escaped = false;
+//                 Ok(balance)
+//             }
+//         });
+//
+//     if let Err(end_index) = end_index {
+//         let (argument, rest) = input.split_at(end_index);
+//         *input = &rest[1..];
+//         Ok(argument)
+//     } else {
+//         // TODO: The group is not balanced, so it should not be EndOfInput.
+//         Err(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)))
+//     }
+// }
 
-    if let Err(end_index) = end_index {
-        let (argument, rest) = input.split_at(end_index);
-        *input = &rest[1..];
-        Ok(argument)
-    } else {
-        Err(ErrorKind::EndOfInput)
+pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerResult<&'a str> {
+    let mut escaped = false;
+    let mut index = 0;
+    let mut depth = 0u32;
+    let bytes = input.as_bytes();
+    while escaped || depth > 0 || !bytes[index..].starts_with(end.as_bytes()) {
+        if index + end.len() > input.len() {
+            return Err(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)));
+        } 
+        if !escaped && bytes[index..].starts_with(start.as_bytes()) {
+            depth += 1;
+            index += start.len();
+            continue;
+        } 
+        if !escaped && bytes[index..].starts_with(end.as_bytes()) {
+            if depth.checked_sub(1).is_none() {
+                break;
+            }
+            depth -= 1;
+            index += end.len();
+            continue;
+        }
+        match bytes[index] {
+            b'\\' => escaped = !escaped,
+            b'%' if !escaped => {
+                let rest_pos = bytes[index..]
+                    .iter()
+                    .position(|&c| c == b'\n')
+                    .unwrap_or(bytes.len());
+                index += rest_pos;
+            }
+            _ => escaped = false,
+        }
+        index += 1;
     }
+    let (argument, rest) = input.split_at(index);
+    *input = &rest[end.len()..];
+    Ok(argument)
 }
 
 /// Converts a control sequence or character into its corresponding delimiter unicode
@@ -141,7 +183,9 @@ pub fn delimiter(input: &mut &str) -> InnerResult<char> {
 /// Parse the right-hand side of a `futurelet` assignment (TeXBook p. 273).
 ///
 /// Returns the control sequence and both following tokens.
-pub fn futurelet_assignment<'a>(input: &mut &'a str) -> InnerResult<(&'a str, Token<'a>, Token<'a>)> {
+pub fn futurelet_assignment<'a>(
+    input: &mut &'a str,
+) -> InnerResult<(&'a str, Token<'a>, Token<'a>)> {
     let control_sequence = control_sequence(input)?;
 
     let token1 = token(input)?;
@@ -424,11 +468,11 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
         Some('\\') => {
             *input = &input[1..];
             Ok(Token::ControlSequence(rhs_control_sequence(input)?))
-        },
+        }
         Some('%') => {
-           let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
-           *input = rest;
-           token(input)
+            let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
+            *input = rest;
+            token(input)
         }
         Some(c) => {
             *input = &input[c.len_utf8()..];
@@ -447,15 +491,13 @@ pub fn token_char_check<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
         Some('\\') => {
             *input = &input[1..];
             Ok(Token::ControlSequence(rhs_control_sequence(input)?))
-        },
+        }
         Some('%') => {
-           let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
-           *input = rest;
-           token(input)
+            let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
+            *input = rest;
+            token(input)
         }
-        Some(c) => {
-            Ok(Token::Character(c))
-        }
+        Some(c) => Ok(Token::Character(c)),
         None => Err(ErrorKind::EndOfInput),
     }
 }
@@ -566,7 +608,7 @@ mod tests {
     fn group_content() {
         let mut input =
             "this { { is a test } to see if { the content parsing { of this } } } works }";
-        let content = lex::group_content(&mut input).unwrap();
+        let content = lex::group_content(&mut input, "{", "}").unwrap();
         assert_eq!(
             content,
             "this { { is a test } to see if { the content parsing { of this } } } works "

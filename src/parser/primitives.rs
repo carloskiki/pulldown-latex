@@ -227,14 +227,11 @@ impl<'a> Parser<'a> {
             "bigg" | "biggl" | "biggr" | "biggm" => return self.em_sized_delim(2.4),
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
 
-            // TODO: Bug here. We need to parse everything within the left/right group as a
-            // substring (i think). because otherwise it fucks with the subscript of the delims.
             "left" => {
                 let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
-                    self.group_stack.push(GroupType::LeftRight);
-                    Event::BeginGroup
+                    self.buffer.push(Instruction::Event(Event::BeginGroup));
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
@@ -242,9 +239,30 @@ impl<'a> Parser<'a> {
                         Instruction::Event(Event::BeginGroup),
                         Instruction::Event(Event::Content(Content::Operator(op!(delimiter)))),
                     ]);
-                    self.group_stack.push(GroupType::LeftRight);
-                    return Ok(());
                 }
+
+                let curr_str = self
+                    .current_string()?
+                    .ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)))?;
+                let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
+                let delim = if let Some(rest) = curr_str.strip_prefix('.') {
+                    *curr_str = rest;
+                    None
+                } else {
+                    let delimiter =
+                        lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+                    Some(Event::Content(Content::Operator(op!(delimiter))))
+                };
+                
+                self.group_stack.push(GroupType::LeftRight);
+                self.buffer
+                    .push(Instruction::Substring(group_content, GroupType::LeftRight));
+                if let Some(delim) = delim {
+                    self.buffer.push(Instruction::Event(delim));
+                }
+                self.buffer.push(Instruction::Event(Event::EndGroup));
+                
+                return Ok(());
             }
             "middle" => {
                 let delimiter =
@@ -252,29 +270,7 @@ impl<'a> Parser<'a> {
                 operator(op!(delimiter))
             }
             "right" => {
-                let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
-                if let Some(rest) = curr_str.strip_prefix('.') {
-                    *curr_str = rest;
-                    ensure_eq!(
-                        self.group_stack.pop(),
-                        Some(GroupType::LeftRight),
-                        ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight))
-                    );
-                    Event::EndGroup
-                } else {
-                    let delimiter =
-                        lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
-                    self.buffer.extend([
-                        Instruction::Event(Event::Content(Content::Operator(op!(delimiter)))),
-                        Instruction::Event(Event::EndGroup),
-                    ]);
-                    ensure_eq!(
-                        self.group_stack.pop(),
-                        Some(GroupType::LeftRight),
-                        ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight))
-                    );
-                    return Ok(());
-                }
+                return Err(ErrorKind::UnbalancedGroup(None));
             }
 
             ///////////////////
@@ -634,7 +630,7 @@ impl<'a> Parser<'a> {
             "circeq" => operator(op!('≗')),
             "gg" => operator(op!('≫')),
             "Perp" => operator(op!('⫫')),
-           	"ggg" => operator(op!('⋙')),
+            "ggg" => operator(op!('⋙')),
             "pitchfork" => operator(op!('⋔')),
             "supseteq" => operator(op!('⊇')),
             "gggtr" => operator(op!('⋙')),
@@ -755,7 +751,7 @@ impl<'a> Parser<'a> {
             // "varsubsetneq" => operator(op!('⊊︀')),
             // "gvertneqq" => operator(op!('≩︀')),
             // "lvertneqq" => operator(op!('≨︀')),
-            
+
             ////////////
             // Arrows //
             ////////////
@@ -827,8 +823,7 @@ impl<'a> Parser<'a> {
             "upuparrows" => operator(op!('⇈')),
             "leftrightarrow" => operator(op!('↔')),
             "nwarrow" => operator(op!('↖')),
-                
-            
+
             ///////////////
             // Fractions //
             ///////////////
@@ -974,7 +969,7 @@ impl<'a> Parser<'a> {
                 ]);
                 return Ok(());
             }
-            
+
             "backslash" => ident('\\'),
 
             ///////////////////
@@ -1056,7 +1051,8 @@ impl<'a> Parser<'a> {
                 };
             }
             Argument::Group(group) => {
-                self.buffer.push(Instruction::Substring(group));
+                self.buffer
+                    .push(Instruction::Substring(group, GroupType::Brace));
                 self.group_stack.push(GroupType::Brace);
             }
         };

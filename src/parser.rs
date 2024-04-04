@@ -59,7 +59,7 @@ pub(crate) enum Instruction<'a> {
     /// Send the event
     Event(Event<'a>),
     /// Parse the substring
-    Substring(&'a str),
+    Substring(&'a str, GroupType),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -115,7 +115,7 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
-        instruction_stack.push(Instruction::Substring(input));
+        instruction_stack.push(Instruction::Substring(input, GroupType::Brace));
         let buffer = Vec::with_capacity(16);
         let mut group_stack = Vec::with_capacity(16);
         group_stack.push(GroupType::Brace);
@@ -131,19 +131,19 @@ impl<'a> Parser<'a> {
     ///
     /// This function guarantees that the string returned is not empty.
     fn current_string(&mut self) -> InnerResult<Option<&mut &'a str>> {
-        let Some(Instruction::Substring(content)) = self.instruction_stack.last() else {
+        let Some(Instruction::Substring(content, group_type)) = self.instruction_stack.last()
+        else {
             return Ok(None);
         };
         if content.is_empty() {
-            self.instruction_stack.pop();
-            let group = self.group_stack.pop();
-            if group != Some(GroupType::Brace) {
+            if self.group_stack.pop() != Some(*group_type) {
                 return Err(ErrorKind::UnbalancedGroup(Some(GroupType::Brace)));
             }
+            self.instruction_stack.pop();
             self.current_string()
         } else {
             match self.instruction_stack.last_mut() {
-                Some(Instruction::Substring(content)) => Ok(Some(content)),
+                Some(Instruction::Substring(content, _)) => Ok(Some(content)),
                 _ => unreachable!(),
             }
         }
@@ -169,12 +169,10 @@ impl<'a> Parser<'a> {
             _ => return Ok(None),
         };
         *str = &str[1..];
-        let str = self.current_string()?.ok_or_else(|| {
-            if subscript_first {
-                ErrorKind::EmptySubscript
-            } else {
-                ErrorKind::EmptySuperscript
-            }
+        let str = self.current_string()?.ok_or(if subscript_first {
+            ErrorKind::EmptySubscript
+        } else {
+            ErrorKind::EmptySuperscript
         })?;
 
         let arg = lex::argument(str)?;
@@ -184,12 +182,10 @@ impl<'a> Parser<'a> {
             let next_char = str.chars().next().expect("current_string is not empty");
             if (next_char == '_' && !subscript_first) || (next_char == '^' && subscript_first) {
                 *str = &str[1..];
-                let str = self.current_string()?.ok_or_else(|| {
-                    if subscript_first {
-                        ErrorKind::EmptySuperscript
-                    } else {
-                        ErrorKind::EmptySubscript
-                    }
+                let str = self.current_string()?.ok_or(if subscript_first {
+                    ErrorKind::EmptySuperscript
+                } else {
+                    ErrorKind::EmptySubscript
                 })?;
                 let arg = lex::argument(str)?;
                 self.handle_argument(arg)?;
@@ -247,7 +243,7 @@ impl<'a> Parser<'a> {
                 self.group_stack.push(GroupType::Brace);
                 self.buffer.extend([
                     Instruction::Event(Event::BeginGroup),
-                    Instruction::Substring(group),
+                    Instruction::Substring(group, GroupType::Brace),
                     Instruction::Event(Event::EndGroup),
                 ]);
             }
@@ -261,7 +257,7 @@ impl<'a> Parser<'a> {
             Instruction::Event(_) => None,
             // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
             // of the inputed string, when macros are supported.
-            Instruction::Substring(s) => Some(s.as_ptr()),
+            Instruction::Substring(s, _) => Some(s.as_ptr()),
         }) else {
             return ParseError {
                 context: None,
@@ -300,6 +296,8 @@ impl<'a> Iterator for Parser<'a> {
     type Item = Result<Event<'a>, ParseError<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
+        dbg!(&self);
+        
         match self.instruction_stack.last() {
             Some(Instruction::Event(_)) => {
                 let event = self
@@ -311,7 +309,7 @@ impl<'a> Iterator for Parser<'a> {
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::Substring(_)) => {
+            Some(Instruction::Substring(_, _)) => {
                 let content = match self.current_string() {
                     Ok(Some(content)) => content,
                     Ok(None) => return self.next(),
