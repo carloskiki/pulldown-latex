@@ -1,5 +1,5 @@
 mod lex;
-pub mod operator_table;
+pub mod tables;
 mod primitives;
 mod state;
 

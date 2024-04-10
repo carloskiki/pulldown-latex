@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     lex,
-    operator_table::{is_delimiter, is_operator},
+    tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator},
     Argument, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
 };
 
@@ -62,7 +62,7 @@ impl<'a> Parser<'a> {
             },
             '\'' => Event::Content(Content::Operator(op!('′'))),
 
-            c if is_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
+            c if is_char_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => Event::Content(Content::Operator(op!(c))),
             '0'..='9' => Event::Content(Content::Number(Identifier::Char(token))),
             c => ident(c),
@@ -183,6 +183,92 @@ impl<'a> Parser<'a> {
             "Angstrom" => ident('Å'),
             "backepsilon" => ident('϶'),
 
+            ///////////////////////////
+            // Symbols & Punctuation //
+            ///////////////////////////
+            // TODO: Handle dots operators correctly
+            "dots" => operator(op!('…')),
+            "cdots" => operator(op!('⋯')),
+            "ddots" => operator(op!('⋱')),
+            "ldots" => operator(op!('…')),
+            "vdots" => operator(op!('⋮')),
+            "iddots" => operator(op!('⋰')),
+            "dotsb" => operator(op!('⋯')),
+            "dotsc" => operator(op!('…')),
+            "dotsi" => operator(op!('⋯')),
+            "dotsm" => operator(op!('⋯')),
+            "dotso" => operator(op!('…')),
+            "idotsin" => operator(op!('⋯')),
+            "mathellipsis" => operator(op!('…')),
+            "infty" => ident('∞'),
+            "checkmark" => ident('✓'),
+            "ballotx" => ident('✗'),
+            "dagger" | "dag" => ident('†'),
+            "ddagger" | "ddag" => ident('‡'),
+            "angle" => ident('∠'),
+            "measuredangle" => ident('∡'),
+            "lq" => ident('‘'),
+            "Box" => ident('□'),
+            "sphericalangle" => ident('∢'),
+            "square" => ident('□'),
+            "top" => ident('⊤'),
+            "rq" => ident('′'),
+            "blacksquare" => ident('■'),
+            "bot" => ident('⊥'),
+            "triangledown" => ident('▽'),
+            "Bot" => ident('⫫'),
+            "triangleleft" => ident('◃'),
+            "triangleright" => ident('▹'),
+            "cent" => ident('¢'),
+            "colon" => ident(':'),
+            "bigtriangledown" => ident('▽'),
+            "pounds" | "mathsterling" => ident('£'),
+            "bigtriangleup" => ident('△'),
+            "blacktriangle" => ident('▲'),
+            "blacktriangledown" => ident('▼'),
+            "yen" => ident('¥'),
+            "blacktriangleleft" => ident('◀'),
+            "euro" => ident('€'),
+            "blacktriangleright" => ident('▶'),
+            "Diamond" => ident('◊'),
+            "degree" => ident('°'),
+            "lozenge" => ident('◊'),
+            "blacklozenge" => ident('⧫'),
+            "mho" => ident('℧'),
+            "bigstar" => ident('★'),
+            "diagdown" => ident('╲'),
+            "maltese" => ident('✠'),
+            "diagup" => ident('╱'),
+            "P" => ident('¶'),
+            "clubsuit" => ident('♣'),
+            "varclubsuit" => ident('♧'),
+            "S" => ident('§'),
+            "diamondsuit" => ident('♢'),
+            "vardiamondsuit" => ident('♦'),
+            "copyright" => ident('©'),
+            "heartsuit" => ident('♡'),
+            "varheartsuit" => ident('♥'),
+            "circledR" => ident('®'),
+            "spadesuit" => ident('♠'),
+            "varspadesuit" => ident('♤'),
+            "circledS" => ident('Ⓢ'),
+            "female" => ident('♀'),
+            "male" => ident('♂'),
+            "astrosun" => ident('☉'),
+            "sun" => ident('☼'),
+            "leftmoon" => ident('☾'),
+            "rightmoon" => ident('☽'),
+            "smiley" => ident('☺'),
+            "Earth" => ident('⊕'),
+            "flat" => ident('♭'),
+            "standardstate" => ident('⦵'),
+            "natural" => ident('♮'),
+            "sharp" => ident('♯'),
+            "permil" => ident('‰'),
+            "QED" => ident('∎'),
+            "lightning" => ident('↯'),
+            "diameter" => ident('⌀'),
+
             ////////////////////////
             // Font state changes //
             ////////////////////////
@@ -220,7 +306,7 @@ impl<'a> Parser<'a> {
             "mathnormal" | "symnormal" => return self.font_group(None),
 
             //////////////////////////////
-            // Delimiter size modifiers //
+            // Delimiters size modifiers //
             //////////////////////////////
             // Sizes taken from `texzilla`
             // Big left and right seem to not care about which delimiter is used. i.e., \bigl) and \bigr) are the same.
@@ -288,8 +374,6 @@ impl<'a> Parser<'a> {
             "bigoplus" => self.big_operator(op!('⨁', {deny_movable_limits: true}), true),
             "bigotimes" => self.big_operator(op!('⨂', {deny_movable_limits: true}), true),
             "bigodot" => self.big_operator(op!('⨀', {deny_movable_limits: true}), true),
-            "bigsqcup" => self.big_operator(op!('⨆', {deny_movable_limits: true}), true),
-            "bigsqcap" => self.big_operator(op!('⨅', {deny_movable_limits: true}), true),
             "bigsqcup" => self.big_operator(op!('⨆', {deny_movable_limits: true}), true),
             "bigsqcap" => self.big_operator(op!('⨅', {deny_movable_limits: true}), true),
             "bigtimes" => self.big_operator(op!('⨉', {deny_movable_limits: true}), true),
@@ -502,6 +586,7 @@ impl<'a> Parser<'a> {
             "cdot" => operator(op!('⋅')),
             "centerdot" => operator(op!('·')),
             "circ" => operator(op!('∘')),
+            "bullet" => operator(op!('∙')),
             "circledast" => operator(op!('⊛')),
             "circledcirc" => operator(op!('⊚')),
             "circleddash" => operator(op!('⊝')),
@@ -843,7 +928,6 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
 
-            "angle" => ident('∠'),
             "approxcolon" => {
                 self.multi_event([
                     Event::Content(Content::Operator(op! {
@@ -1000,8 +1084,14 @@ impl<'a> Parser<'a> {
                     ))));
                 return Ok(());
             }
+            // TODO: This shit
             "begingroup" => Event::BeginGroup,
             "endgroup" => Event::EndGroup,
+
+            // Delimiters
+            cs if control_sequence_delimiter_map(cs).is_some() => {
+                operator(op!(control_sequence_delimiter_map(cs).unwrap(), {stretchy: Some(false)}))
+            }
 
             // Spacing
             c if c.trim_start().is_empty() => {
@@ -1057,11 +1147,10 @@ impl<'a> Parser<'a> {
     /// Accent commands. parse the argument, and overset the accent.
     fn accent(&mut self, accent: Operator) -> InnerResult<()> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-        self.buffer
-            .push(Instruction::Event(Event::Script {
-                ty: ScriptType::Superscript,
-                position: ScriptPosition::AboveBelow,
-            }));
+        self.buffer.push(Instruction::Event(Event::Script {
+            ty: ScriptType::Superscript,
+            position: ScriptPosition::AboveBelow,
+        }));
         self.handle_argument(argument)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(
@@ -1073,11 +1162,10 @@ impl<'a> Parser<'a> {
     /// Underscript commands. parse the argument, and underset the accent.
     fn underscript(&mut self, content: Operator) -> InnerResult<()> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-        self.buffer
-            .push(Instruction::Event(Event::Script {
-                ty: ScriptType::Subscript,
-                position: ScriptPosition::AboveBelow,
-            }));
+        self.buffer.push(Instruction::Event(Event::Script {
+            ty: ScriptType::Subscript,
+            position: ScriptPosition::AboveBelow,
+        }));
         self.handle_argument(argument)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(

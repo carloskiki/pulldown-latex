@@ -1,3 +1,5 @@
+// TODO: Consider using `phf`s for this
+
 #[rustfmt::skip]
 static OPERATOR_TABLE: &[(u16, u16)] = &[
     (33, 34), (37, 47), (58, 59), (63, 64), (91, 96),
@@ -85,7 +87,7 @@ pub fn is_operator(c: char) -> bool {
 // }
 
 #[rustfmt::skip]
-pub fn is_delimiter(c: char) -> bool {
+pub fn is_char_delimiter(c: char) -> bool {
     matches!(
         c,
           '(' | ')' | '⦇' | '⦈' | '⟮' | '⟯'
@@ -94,5 +96,61 @@ pub fn is_delimiter(c: char) -> bool {
         | '⌊' | '⌋' | '⌈' | '⌉' | '┌' | '┐'
         | '└' | '┘' | '⎰' | '⎱' | '|' | '‖'
         | '↑' | '⇑' | '↓' | '⇓' | '↕' | '⇕'
+        | '/'
     )
+}
+
+/// Returns the matching delimiter for the given control sequence, if it exists.
+pub fn control_sequence_delimiter_map(cs: &str) -> Option<char> {
+    Some(match cs {
+        "lparen" => '(',
+        "rparen" => ')',
+        "llparenthesis" => '⦇',
+        "rrparenthesis" => '⦈',
+        "lgroup" => '⟮',
+        "rgroup" => '⟯',
+
+        "lbrack" => '[',
+        "rbrack" => ']',
+        "lBrack" => '⟦',
+        "rBrack" => '⟧',
+
+        "{" | "lbrace" => '{',
+        "}" | "rbrace" => '}',
+        "lBrace" => '⦃',
+        "rBrace" => '⦄',
+
+        "langle" => '⟨',
+        "rangle" => '⟩',
+        "lAngle" => '⟪',
+        "rAngle" => '⟫',
+        "llangle" => '⦉',
+        "rrangle" => '⦊',
+
+        "lfloor" => '⌊',
+        "rfloor" => '⌋',
+        "lceil" => '⌈',
+        "rceil" => '⌉',
+        "ulcorner" => '┌',
+        "urcorner" => '┐',
+        "llcorner" => '└',
+        "lrcorner" => '┘',
+
+        "lmoustache" => '⎰',
+        "rmoustache" => '⎱',
+        "backslash" => '\\',
+
+        "vert" => '|',
+        "|"
+        | "Vert"
+        | "lVert"
+        | "rVert" => '‖',
+        "uparrow" => '↑',
+        "Uparrow" => '⇑',
+        "downarrow" => '↓',
+        "Downarrow" => '⇓',
+        "updownarrow" => '↕',
+        "Updownarrow" => '⇕',
+        _ => return None,
+    })
 }

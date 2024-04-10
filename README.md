@@ -34,12 +34,11 @@ these versions specifically.
 ## TODOs
 
 ### To Test
-- [ ] Moving limits `\limits`, `\nolimits`
+- [ ] Moving suffixes: `\limits`, `\nolimits`.
 
 - [ ] Document the algorithm behind the Parser.
 - [ ] Cargo Mutants
 - [ ] Have a correct implementation of all `amsmath` and `latex2e` math primitives.
-- [ ] Write comprehensive tests for the Parser.
 - [ ] Add support for structured math environments.
 
 ## Unsupported Plain-TeX & LaTeX behavior

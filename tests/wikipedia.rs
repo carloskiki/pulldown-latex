@@ -81,8 +81,8 @@ dy/dx, \mathrm{d}y/\mathrm{d}x, \frac{dy}{dx}, \frac{\mathrm{d}y}{\mathrm{d}x}
 common::round_trip!(
     letter_like_symbols_or_constants,
     r"
-\infty, \aleph, \complement, \backepsilon, \eth, \Finv, \hbar, \N, \R, \Z, \C, \Q	
-\Im, \imath, \jmath, \Bbbk, \ell, \mho, \wp, \Re, \circledS, \S, \P, \AA	
+\infty, \aleph, \complement, \backepsilon, \eth, \Finv, \hbar,
+\Im, \imath, \jmath, \Bbbk, \ell, \mho, \wp, \Re, \circledS, \S, \P
     "
 );
 

@@ -1,6 +1,6 @@
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{operator_table::is_delimiter, Argument, ErrorKind, GroupType, InnerResult, Token};
+use super::{tables::{control_sequence_delimiter_map, is_char_delimiter}, Argument, ErrorKind, GroupType, InnerResult, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -128,54 +128,8 @@ pub fn delimiter(input: &mut &str) -> InnerResult<char> {
     *input = input.trim_start();
     let maybe_delim = token(input)?;
     match maybe_delim {
-        Token::ControlSequence("lparen") => Ok('('),
-        Token::ControlSequence("rparen") => Ok(')'),
-        Token::ControlSequence("llparenthesis") => Ok('⦇'),
-        Token::ControlSequence("rrparenthesis") => Ok('⦈'),
-        Token::ControlSequence("lgroup") => Ok('⟮'),
-        Token::ControlSequence("rgroup") => Ok('⟯'),
-
-        Token::ControlSequence("lbrack") => Ok('['),
-        Token::ControlSequence("rbrack") => Ok(']'),
-        Token::ControlSequence("lBrack") => Ok('⟦'),
-        Token::ControlSequence("rBrack") => Ok('⟧'),
-
-        Token::ControlSequence("{") | Token::ControlSequence("lbrace") => Ok('{'),
-        Token::ControlSequence("}") | Token::ControlSequence("rbrace") => Ok('}'),
-        Token::ControlSequence("lBrace") => Ok('⦃'),
-        Token::ControlSequence("rBrace") => Ok('⦄'),
-
-        Token::ControlSequence("langle") => Ok('⟨'),
-        Token::ControlSequence("rangle") => Ok('⟩'),
-        Token::ControlSequence("lAngle") => Ok('⟪'),
-        Token::ControlSequence("rAngle") => Ok('⟫'),
-        Token::ControlSequence("llangle") => Ok('⦉'),
-        Token::ControlSequence("rrangle") => Ok('⦊'),
-
-        Token::ControlSequence("lfloor") => Ok('⌊'),
-        Token::ControlSequence("rfloor") => Ok('⌋'),
-        Token::ControlSequence("lceil") => Ok('⌈'),
-        Token::ControlSequence("rceil") => Ok('⌉'),
-        Token::ControlSequence("ulcorner") => Ok('┌'),
-        Token::ControlSequence("urcorner") => Ok('┐'),
-        Token::ControlSequence("llcorner") => Ok('└'),
-        Token::ControlSequence("lrcorner") => Ok('┘'),
-
-        Token::ControlSequence("lmoustache") => Ok('⎰'),
-        Token::ControlSequence("rmoustache") => Ok('⎱'),
-
-        Token::Character('/') => Ok('/'),
-        Token::ControlSequence("backslash") => Ok('\\'),
-
-        Token::ControlSequence("vert") => Ok('|'),
-        Token::ControlSequence("|") | Token::ControlSequence("Vert") => Ok('‖'),
-        Token::ControlSequence("uparrow") => Ok('↑'),
-        Token::ControlSequence("Uparrow") => Ok('⇑'),
-        Token::ControlSequence("downarrow") => Ok('↓'),
-        Token::ControlSequence("Downarrow") => Ok('⇓'),
-        Token::ControlSequence("updownarrow") => Ok('↕'),
-        Token::ControlSequence("Updownarrow") => Ok('⇕'),
-        Token::Character(c) if is_delimiter(c) => Ok(c),
+        Token::ControlSequence(cs) => control_sequence_delimiter_map(cs).ok_or(ErrorKind::Delimiter),
+        Token::Character(c) if is_char_delimiter(c) => Ok(c),
         _ => Err(ErrorKind::Delimiter),
     }
 }
