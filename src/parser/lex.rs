@@ -88,12 +88,12 @@ pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerRe
     while escaped || depth > 0 || !bytes[index..].starts_with(end.as_bytes()) {
         if index + end.len() > input.len() {
             return Err(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)));
-        } 
+        }
         if !escaped && bytes[index..].starts_with(start.as_bytes()) {
             depth += 1;
             index += start.len();
             continue;
-        } 
+        }
         if !escaped && bytes[index..].starts_with(end.as_bytes()) {
             if depth.checked_sub(1).is_none() {
                 break;

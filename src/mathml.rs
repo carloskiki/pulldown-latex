@@ -2,8 +2,8 @@ use std::io;
 
 use crate::{
     attribute::{tex_to_css_em, Font},
-    config::RenderConfig,
-    event::{Content, Event, Identifier, Operator, Visual},
+    config::{DisplayMode, RenderConfig},
+    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, Visual},
 };
 
 struct MathmlWriter<'a, I, W> {
@@ -137,7 +137,7 @@ where
                 Content::Operator(Operator {
                     content,
                     stretchy,
-                    moveable_limits,
+                    deny_movable_limits,
                     left_space,
                     right_space,
                     size,
@@ -146,8 +146,8 @@ where
                     if let Some(stretchy) = stretchy {
                         write!(self.writer, " stretchy=\"{}\"", stretchy)?;
                     }
-                    if let Some(moveable_limits) = moveable_limits {
-                        write!(self.writer, " movablelimits=\"{}\"", moveable_limits)?;
+                    if deny_movable_limits {
+                        self.writer.write_all(b" movablelimits=\"false\"")?;
                     }
                     if let Some(left_space) = left_space {
                         write!(self.writer, " lspace=\"{}em\"", tex_to_css_em(left_space))?;
@@ -217,83 +217,97 @@ where
                     self.write_event(argument)?;
                     self.writer.write_all(b"</msqrt>")
                 }
-                Visual::Subscript => {
-                    let (Some(base), Some(subscript)) = (self.input.next(), self.input.next())
-                    else {
-                        return Err(io::Error::other(
-                            "expected two components after a `Subscript` event",
-                        ));
-                    };
-                    self.writer.write_all(b"<msub>")?;
-                    self.write_event(base)?;
-                    self.write_event(subscript)?;
-                    self.writer.write_all(b"</msub>")
-                }
-                Visual::Superscript => {
-                    let (Some(base), Some(superscript)) = (self.input.next(), self.input.next())
-                    else {
-                        return Err(io::Error::other(
-                            "expected two components after a `Superscript` event",
-                        ));
-                    };
-                    self.writer.write_all(b"<msup>")?;
-                    self.write_event(base)?;
-                    self.write_event(superscript)?;
-                    self.writer.write_all(b"</msup>")
-                }
-                Visual::SubSuperscript => {
-                    let (Some(base), Some(subscript), Some(superscript)) =
-                        (self.input.next(), self.input.next(), self.input.next())
-                    else {
-                        return Err(io::Error::other(
-                            "expected three components after a `SubSuperscript` event",
-                        ));
-                    };
-                    self.writer.write_all(b"<msubsup>")?;
-                    self.write_event(base)?;
-                    self.write_event(subscript)?;
-                    self.write_event(superscript)?;
-                    self.writer.write_all(b"</msubsup>")
-                }
-                Visual::Overscript => {
-                    let (Some(base), Some(overscript)) = (self.input.next(), self.input.next())
-                    else {
-                        return Err(io::Error::other(
-                            "expected two components after a `Overscript` event",
-                        ));
-                    };
-                    self.writer.write_all(b"<mover>")?;
-                    self.write_event(base)?;
-                    self.write_event(overscript)?;
-                    self.writer.write_all(b"</mover>")
-                }
-                Visual::Underscript => {
-                    let (Some(base), Some(underscript)) = (self.input.next(), self.input.next())
-                    else {
-                        return Err(io::Error::other(
-                            "expected two components after a `Underscript` event",
-                        ));
-                    };
-                    self.writer.write_all(b"<munder>")?;
-                    self.write_event(base)?;
-                    self.write_event(underscript)?;
-                    self.writer.write_all(b"</munder>")
-                }
-                Visual::UnderOverscript => {
-                    let (Some(base), Some(underscript), Some(overscript)) =
-                        (self.input.next(), self.input.next(), self.input.next())
-                    else {
-                        return Err(io::Error::other(
-                            "expected three components after a `UnderOverscript` event",
-                        ));
-                    };
-                    self.writer.write_all(b"<munderover>")?;
-                    self.write_event(base)?;
-                    self.write_event(underscript)?;
-                    self.write_event(overscript)?;
-                    self.writer.write_all(b"</munderover>")
-                }
             },
+
+            Ok(Event::Script {
+                ty,
+                position,
+            }) => {
+                let above_below = match position {
+                    ScriptPosition::Right => false,
+                    ScriptPosition::AboveBelow => true,
+                    ScriptPosition::Movable => self.config.display_mode == DisplayMode::Block,
+                };
+                match (ty, above_below) {
+                    (ScriptType::Subscript, false) => {
+                        let (Some(base), Some(subscript)) = (self.input.next(), self.input.next())
+                        else {
+                            return Err(io::Error::other(
+                                "expected two components after a `Subscript` event",
+                            ));
+                        };
+                        self.writer.write_all(b"<msub>")?;
+                        self.write_event(base)?;
+                        self.write_event(subscript)?;
+                        self.writer.write_all(b"</msub>")
+                    }
+                    (ScriptType::Superscript, false) => {
+                        let (Some(base), Some(superscript)) = (self.input.next(), self.input.next())
+                        else {
+                            return Err(io::Error::other(
+                                "expected two components after a `Superscript` event",
+                            ));
+                        };
+                        self.writer.write_all(b"<msup>")?;
+                        self.write_event(base)?;
+                        self.write_event(superscript)?;
+                        self.writer.write_all(b"</msup>")
+                    }
+                    (ScriptType::SubSuperscript, false) => {
+                        let (Some(base), Some(subscript), Some(superscript)) =
+                            (self.input.next(), self.input.next(), self.input.next())
+                        else {
+                            return Err(io::Error::other(
+                                "expected three components after a `SubSuperscript` event",
+                            ));
+                        };
+                        self.writer.write_all(b"<msubsup>")?;
+                        self.write_event(base)?;
+                        self.write_event(subscript)?;
+                        self.write_event(superscript)?;
+                        self.writer.write_all(b"</msubsup>")
+                    }
+                    (ScriptType::Subscript, true) => {
+                        let (Some(base), Some(underscript)) = (self.input.next(), self.input.next())
+                        else {
+                            return Err(io::Error::other(
+                                "expected two components after a `Underscript` event",
+                            ));
+                        };
+                        self.writer.write_all(b"<munder>")?;
+                        self.write_event(base)?;
+                        self.write_event(underscript)?;
+                        self.writer.write_all(b"</munder>")
+                    }
+                    (ScriptType::Superscript, true) => {
+                        let (Some(base), Some(overscript)) = (self.input.next(), self.input.next())
+                        else {
+                            return Err(io::Error::other(
+                                "expected two components after a `Overscript` event",
+                            ));
+                        };
+                        self.writer.write_all(b"<mover>")?;
+                        self.write_event(base)?;
+                        self.write_event(overscript)?;
+                        self.writer.write_all(b"</mover>")
+                    }
+                    (ScriptType::SubSuperscript, true) => {
+                        let (Some(base), Some(underscript), Some(overscript)) =
+                            (self.input.next(), self.input.next(), self.input.next())
+                        else {
+                            return Err(io::Error::other(
+                                "expected three components after a `UnderOverscript` event",
+                            ));
+                        };
+                        self.writer.write_all(b"<munderover>")?;
+                        self.write_event(base)?;
+                        self.write_event(underscript)?;
+                        self.write_event(overscript)?;
+                        self.writer.write_all(b"</munderover>")
+                    }
+                }
+            }
+            
             Ok(Event::Space {
                 width,
                 height,

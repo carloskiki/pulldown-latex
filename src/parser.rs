@@ -1,12 +1,15 @@
 mod lex;
 pub mod operator_table;
 mod primitives;
+mod state;
 
 use std::fmt::{Display, Write};
 
 use thiserror::Error;
 
-use crate::event::{Content, Event, Identifier, Visual};
+use crate::event::{Content, Event, Identifier, ScriptPosition, ScriptType};
+
+use self::state::ParserState;
 
 // FOR NOW:
 // - Do not bother about macros, because they will be solvable.
@@ -59,7 +62,7 @@ pub(crate) enum Instruction<'a> {
     /// Send the event
     Event(Event<'a>),
     /// Parse the substring
-    Substring(&'a str, GroupType),
+    Substring(&'a str),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -104,56 +107,69 @@ pub struct Parser<'a> {
     /// (superscript, and subscript), and then the event is moved from the buffer to the instruction stack.
     buffer: Vec<Instruction<'a>>,
 
-    /// The level of the current group.
-    ///
-    /// This is used to keep track of the current group level, and to ensure that the group being
-    /// closed is the one that was opened last.
-    pub(crate) group_stack: Vec<GroupType>,
+    /// The current state of the parser
+    state: ParserState,
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
-        instruction_stack.push(Instruction::Substring(input, GroupType::Brace));
+        instruction_stack.push(Instruction::Substring(input));
         let buffer = Vec::with_capacity(16);
-        let mut group_stack = Vec::with_capacity(16);
-        group_stack.push(GroupType::Brace);
         Self {
             input,
             instruction_stack,
             buffer,
-            group_stack,
+            state: ParserState::default(),
         }
     }
 
     /// Get the current string we are parsing.
     ///
     /// This function guarantees that the string returned is not empty.
-    fn current_string(&mut self) -> InnerResult<Option<&mut &'a str>> {
-        let Some(Instruction::Substring(content, group_type)) = self.instruction_stack.last()
-        else {
-            return Ok(None);
-        };
-        if content.is_empty() {
-            if self.group_stack.pop() != Some(*group_type) {
-                return Err(ErrorKind::UnbalancedGroup(Some(GroupType::Brace)));
+    fn current_string(&mut self) -> Option<&mut &'a str> {
+        match self.instruction_stack.last()? {
+            Instruction::Event(_) => None,
+            Instruction::Substring("") => {
+                self.instruction_stack.pop();
+                self.current_string()
             }
-            self.instruction_stack.pop();
-            self.current_string()
-        } else {
-            match self.instruction_stack.last_mut() {
-                Some(Instruction::Substring(content, _)) => Ok(Some(content)),
+            Instruction::Substring(_) => self.instruction_stack.last_mut().map(|i| match i {
+                Instruction::Substring(s) => s,
                 _ => unreachable!(),
-            }
+            }),
         }
     }
 
     /// Handles the superscript and/or subscript following what was parsed previously.
-    fn check_suffixes(&mut self) -> InnerResult<Option<Visual>> {
+    ///
+    /// Follows the design decisions described in [`design/suffixes.md`].
+    fn check_suffixes(&mut self) -> InnerResult<Option<Event<'a>>> {
+        let mut script_position = if self.state.above_below_suffix_default {
+            ScriptPosition::Movable
+        } else {
+            ScriptPosition::Right
+        };
+        
+        if self.state.allow_suffix_modifiers {
+            while let Some(str) = self.current_string() {
+                *str = str.trim_start();
+                if str.starts_with(r"\limits") {
+                    *str = &str[7..];
+                    script_position = ScriptPosition::AboveBelow;
+                } else if str.starts_with(r"\nolimits") {
+                    *str = &str[9..];
+                    script_position = ScriptPosition::Right;
+                } else {
+                    break;
+                }
+            }
+        }
+
         let mut subscript_first = false;
         let first_suffix_start = self.buffer.len();
-        let Some(str) = self.current_string()? else {
+        let Some(str) = self.current_string() else {
             return Ok(None);
         };
         *str = str.trim_start();
@@ -169,7 +185,7 @@ impl<'a> Parser<'a> {
             _ => return Ok(None),
         };
         *str = &str[1..];
-        let str = self.current_string()?.ok_or(if subscript_first {
+        let str = self.current_string().ok_or(if subscript_first {
             ErrorKind::EmptySubscript
         } else {
             ErrorKind::EmptySuperscript
@@ -178,11 +194,11 @@ impl<'a> Parser<'a> {
         let arg = lex::argument(str)?;
         self.handle_argument(arg)?;
         let second_suffix_start = self.buffer.len();
-        if let Some(str) = self.current_string()? {
+        if let Some(str) = self.current_string() {
             let next_char = str.chars().next().expect("current_string is not empty");
             if (next_char == '_' && !subscript_first) || (next_char == '^' && subscript_first) {
                 *str = &str[1..];
-                let str = self.current_string()?.ok_or(if subscript_first {
+                let str = self.current_string().ok_or(if subscript_first {
                     ErrorKind::EmptySuperscript
                 } else {
                     ErrorKind::EmptySubscript
@@ -197,35 +213,36 @@ impl<'a> Parser<'a> {
                 });
             }
         };
-
         let second_suffix_end = self.buffer.len();
 
-        Ok(
-            if !subscript_first && second_suffix_start != second_suffix_end {
-                self.instruction_stack.extend(
-                    self.buffer[first_suffix_start..second_suffix_start]
-                        .iter()
-                        .rev(),
-                );
-                self.instruction_stack.extend(
-                    self.buffer
-                        .drain(first_suffix_start..)
-                        .skip(second_suffix_start - first_suffix_start)
-                        .rev(),
-                );
-                Some(Visual::SubSuperscript)
+        let script_type = if !subscript_first && second_suffix_start != second_suffix_end {
+            self.instruction_stack.extend(
+                self.buffer[first_suffix_start..second_suffix_start]
+                    .iter()
+                    .rev(),
+            );
+            self.instruction_stack.extend(
+                self.buffer
+                    .drain(first_suffix_start..)
+                    .skip(second_suffix_start - first_suffix_start)
+                    .rev(),
+            );
+            ScriptType::SubSuperscript
+        } else {
+            let suffixes = self.buffer.drain(first_suffix_start..);
+            self.instruction_stack.extend(suffixes.rev());
+            if second_suffix_start != second_suffix_end {
+                ScriptType::SubSuperscript
+            } else if subscript_first {
+                ScriptType::Subscript
             } else {
-                let suffixes = self.buffer.drain(first_suffix_start..);
-                self.instruction_stack.extend(suffixes.rev());
-                if second_suffix_start != second_suffix_end {
-                    Some(Visual::SubSuperscript)
-                } else if subscript_first {
-                    Some(Visual::Subscript)
-                } else {
-                    Some(Visual::Superscript)
-                }
-            },
-        )
+                ScriptType::Superscript
+            }
+        };
+        Ok(Some(Event::Script {
+            ty: script_type,
+            position: script_position,
+        }))
     }
 
     /// Parse an arugment and pushes the argument to the stack surrounded by a
@@ -240,10 +257,9 @@ impl<'a> Parser<'a> {
                 };
             }
             Argument::Group(group) => {
-                self.group_stack.push(GroupType::Brace);
                 self.buffer.extend([
                     Instruction::Event(Event::BeginGroup),
-                    Instruction::Substring(group, GroupType::Brace),
+                    Instruction::Substring(group),
                     Instruction::Event(Event::EndGroup),
                 ]);
             }
@@ -257,7 +273,7 @@ impl<'a> Parser<'a> {
             Instruction::Event(_) => None,
             // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
             // of the inputed string, when macros are supported.
-            Instruction::Substring(s, _) => Some(s.as_ptr()),
+            Instruction::Substring(s) => Some(s.as_ptr()),
         }) else {
             return ParseError {
                 context: None,
@@ -296,8 +312,6 @@ impl<'a> Iterator for Parser<'a> {
     type Item = Result<Event<'a>, ParseError<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        dbg!(&self);
-        
         match self.instruction_stack.last() {
             Some(Instruction::Event(_)) => {
                 let event = self
@@ -309,11 +323,10 @@ impl<'a> Iterator for Parser<'a> {
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::Substring(_, _)) => {
+            Some(Instruction::Substring(_)) => {
                 let content = match self.current_string() {
-                    Ok(Some(content)) => content,
-                    Ok(None) => return self.next(),
-                    Err(err) => return Some(Err(self.error_with_context(err))),
+                    Some(content) => content,
+                    None => return self.next(),
                 };
 
                 // 1. Parse the next token and output everything to the staging stack.
@@ -365,9 +378,10 @@ impl<'a> Iterator for Parser<'a> {
                 self.instruction_stack.extend(self.buffer.drain(..).rev());
                 if let Some(suffix) = suffix {
                     self.instruction_stack
-                        .push(Instruction::Event(Event::Visual(suffix)));
+                        .push(Instruction::Event(suffix));
                 }
 
+                self.state = ParserState::default();
                 self.next()
             }
             None => None,
@@ -387,7 +401,7 @@ impl Display for ParseError<'_> {
         f.write_str("Error while parsing: ")?;
         self.error.fmt(f)?;
         if let Some((context, char_position)) = self.context {
-            let context = context.replace('\n', " ");
+            let context = context.replace(['\n', '\t'], " ");
             f.write_str("\n --> Context: ")?;
             const PREFIX_LEN: usize = 14;
             f.write_str(&context)?;
@@ -458,7 +472,7 @@ pub(crate) enum ErrorKind {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Identifier, Operator};
+    use crate::event::{Identifier, Operator, Visual};
 
     use super::*;
 
@@ -472,14 +486,14 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Visual(Visual::Overscript),
+                Event::Script { ty: ScriptType::Superscript, position: ScriptPosition::AboveBelow },
                 Event::BeginGroup,
                 Event::Content(Content::Identifier(Identifier::Char('y'))),
                 Event::EndGroup,
                 Event::Content(Content::Operator(Operator {
                     content: '‾',
                     stretchy: None,
-                    moveable_limits: None,
+                    deny_movable_limits: false,
                     left_space: None,
                     right_space: None,
                     size: None,
@@ -499,7 +513,7 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Visual(Visual::SubSuperscript),
+                Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
                 Event::Content(Content::Identifier(Identifier::Char('a'))),
                 Event::Content(Content::Number(Identifier::Char('2'))),
                 Event::BeginGroup,
@@ -507,7 +521,7 @@ mod tests {
                 Event::Content(Content::Operator(Operator {
                     content: '+',
                     stretchy: None,
-                    moveable_limits: None,
+                    deny_movable_limits: false,
                     left_space: None,
                     right_space: None,
                     size: None,
@@ -527,40 +541,40 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Identifier(Identifier::Char('a'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::BeginGroup,
-                Event::Visual(Visual::Subscript),
+                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::Content(Content::Number(Identifier::Char('5'))),
                 Event::EndGroup,
@@ -588,7 +602,7 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Visual(Visual::SubSuperscript),
+                Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
                 Event::Visual(Visual::Fraction(None)),
                 Event::BeginGroup,
                 Event::Content(Content::Number(Identifier::Char('1'))),

@@ -33,6 +33,9 @@ these versions specifically.
 
 ## TODOs
 
+### To Test
+- [ ] Moving limits `\limits`, `\nolimits`
+
 - [ ] Document the algorithm behind the Parser.
 - [ ] Cargo Mutants
 - [ ] Have a correct implementation of all `amsmath` and `latex2e` math primitives.
@@ -68,6 +71,17 @@ these versions specifically.
 - `\hfil`, `\hfill`
 - `\eqno`, `\leqno`, and equation numbers in general.
 - `\over`, `\atop`, and all deprecated "fraction like" control sequences.
+
+
+### Things that should work but don't currently
+
+Splitting groupings within user defined macros. E.g.,
+```
+\def\abc{\left(}
+\abc 4 \right)
+```
+This currently does not work.
+
 
 ### Unsupported Katex/Temml Options
 

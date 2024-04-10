@@ -3,7 +3,7 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{Content, Event, Identifier, Operator, Visual},
+    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, Visual},
 };
 
 use super::{
@@ -29,14 +29,6 @@ macro_rules! op {
     };
 }
 
-macro_rules! ensure_eq {
-    ($left:expr, $right:expr, $err:expr) => {
-        if $left != $right {
-            return Err($err);
-        }
-    };
-}
-
 // NOTE/TODO: Currently, things like `\it_a` do not error.
 
 impl<'a> Parser<'a> {
@@ -56,12 +48,17 @@ impl<'a> Parser<'a> {
             '#' => return Err(ErrorKind::HashSign),
             '&' => return Err(ErrorKind::AlignmentChar),
             '{' => {
-                self.group_stack.push(GroupType::Brace);
-                Event::BeginGroup
+                let str = self.current_string().ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::Brace)))?;
+                let group = lex::group_content(str, "{", "}")?;
+                self.buffer.extend([
+                    Instruction::Event(Event::BeginGroup),
+                    Instruction::Substring(group),
+                    Instruction::Event(Event::EndGroup)
+                ]);
+                return Ok(())
             },
             '}' => {
-                ensure_eq!(self.group_stack.pop(), Some(GroupType::Brace), ErrorKind::UnbalancedGroup(Some(GroupType::Brace)));
-                Event::EndGroup
+                return Err(ErrorKind::UnbalancedGroup(None))
             },
             '\'' => Event::Content(Content::Operator(op!('′'))),
 
@@ -82,7 +79,12 @@ impl<'a> Parser<'a> {
             | "coth" | "dim" | "sin" | "tanh" => {
                 Event::Content(Content::Identifier(Identifier::Str(control_sequence)))
             }
-            // TODO: The following have `under` subscripts in display math: Pr sup liminf max inf gcd limsup min
+            // TODO: The following have `under` subscripts in display math:
+            "lim" | "Pr" | "sup" | "liminf" | "max" | "inf" | "gcd" | "limsup" | "min" => {
+                self.state.allow_suffix_modifiers = true;
+                self.state.above_below_suffix_default = true;
+                Event::Content(Content::Identifier(Identifier::Str(control_sequence)))
+            }
 
             /////////////////////////
             // Non-Latin Alphabets //
@@ -228,13 +230,13 @@ impl<'a> Parser<'a> {
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
 
             "left" => {
-                let curr_str = self.current_string()?.ok_or(ErrorKind::Delimiter)?;
+                let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     self.buffer.push(Instruction::Event(Event::BeginGroup));
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                     self.buffer.extend([
                         Instruction::Event(Event::BeginGroup),
                         Instruction::Event(Event::Content(Content::Operator(op!(delimiter)))),
@@ -242,7 +244,7 @@ impl<'a> Parser<'a> {
                 }
 
                 let curr_str = self
-                    .current_string()?
+                    .current_string()
                     .ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)))?;
                 let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
                 let delim = if let Some(rest) = curr_str.strip_prefix('.') {
@@ -250,23 +252,20 @@ impl<'a> Parser<'a> {
                     None
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                     Some(Event::Content(Content::Operator(op!(delimiter))))
                 };
-                
-                self.group_stack.push(GroupType::LeftRight);
-                self.buffer
-                    .push(Instruction::Substring(group_content, GroupType::LeftRight));
+
+                self.buffer.push(Instruction::Substring(group_content));
                 if let Some(delim) = delim {
                     self.buffer.push(Instruction::Event(delim));
                 }
                 self.buffer.push(Instruction::Event(Event::EndGroup));
-                
+
                 return Ok(());
             }
             "middle" => {
-                let delimiter =
-                    lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+                let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                 operator(op!(delimiter))
             }
             "right" => {
@@ -276,42 +275,49 @@ impl<'a> Parser<'a> {
             ///////////////////
             // Big Operators //
             ///////////////////
-            "sum" => operator(op!('∑')),
-            "prod" => operator(op!('∏')),
-            "coprod" => operator(op!('∐')),
-            "int" => operator(op!('∫')),
-            "iint" => operator(op!('∬')),
-            "intop" => operator(op!('∫')),
-            "iiint" => operator(op!('∭')),
-            "smallint" => operator(op!('∫')),
-            "iiiint" => operator(op!('⨌')),
-            "intcap" => operator(op!('⨙')),
-            "intcup" => operator(op!('⨚')),
-            "oint" => operator(op!('∮')),
-            "varointclockwise" => operator(op!('∲')),
-            "intclockwise" => operator(op!('∱')),
-            "oiint" => operator(op!('∯')),
-            "pointint" => operator(op!('⨕')),
-            "rppolint" => operator(op!('⨒')),
-            "scpolint" => operator(op!('⨓')),
-            "oiiint" => operator(op!('∰')),
-            "intlarhk" => operator(op!('⨗')),
-            "sqint" => operator(op!('⨖')),
-            "intx" => operator(op!('⨘')),
-            "intbar" => operator(op!('⨍')),
-            "intBar" => operator(op!('⨎')),
-            "fint" => operator(op!('⨏')),
-            "bigoplus" => operator(op!('⨁')),
-            "bigotimes" => operator(op!('⨂')),
-            "bigvee" => operator(op!('⋁')),
-            "bigwedge" => operator(op!('⋀')),
-            "bigodot" => operator(op!('⨀')),
-            "bigcap" => operator(op!('⋂')),
-            "biguplus" => operator(op!('⨄')),
-            "bigcup" => operator(op!('⋃')),
-            "bigsqcup" => operator(op!('⨆')),
-            "bigsqcap" => operator(op!('⨅')),
-            "bigtimes" => operator(op!('⨉')),
+            // NOTE: All of the following operators allow limit modifiers.
+            // The following operators have above and below limits by default.
+            "sum" => self.big_operator(op!('∑', {deny_movable_limits: true}), true),
+            "prod" => self.big_operator(op!('∏', {deny_movable_limits: true}), true),
+            "coprod" => self.big_operator(op!('∐', {deny_movable_limits: true}), true),
+            "bigvee" => self.big_operator(op!('⋁', {deny_movable_limits: true}), true),
+            "bigwedge" => self.big_operator(op!('⋀', {deny_movable_limits: true}), true),
+            "bigcup" => self.big_operator(op!('⋃', {deny_movable_limits: true}), true),
+            "bigcap" => self.big_operator(op!('⋂', {deny_movable_limits: true}), true),
+            "biguplus" => self.big_operator(op!('⨄', {deny_movable_limits: true}), true),
+            "bigoplus" => self.big_operator(op!('⨁', {deny_movable_limits: true}), true),
+            "bigotimes" => self.big_operator(op!('⨂', {deny_movable_limits: true}), true),
+            "bigodot" => self.big_operator(op!('⨀', {deny_movable_limits: true}), true),
+            "bigsqcup" => self.big_operator(op!('⨆', {deny_movable_limits: true}), true),
+            "bigsqcap" => self.big_operator(op!('⨅', {deny_movable_limits: true}), true),
+            "bigsqcup" => self.big_operator(op!('⨆', {deny_movable_limits: true}), true),
+            "bigsqcap" => self.big_operator(op!('⨅', {deny_movable_limits: true}), true),
+            "bigtimes" => self.big_operator(op!('⨉', {deny_movable_limits: true}), true),
+            "intop" => self.big_operator(op!('∫'), true),
+            // The following operators do not have above and below limits by default.
+            "int" => self.big_operator(op!('∫'), false),
+            "iint" => self.big_operator(op!('∬'), false),
+            "iiint" => self.big_operator(op!('∭'), false),
+            "smallint" => {
+                self.big_operator(op!('∫', {size: Some((0.7, DimensionUnit::Em))}), false)
+            }
+            "iiiint" => self.big_operator(op!('⨌'), false),
+            "intcap" => self.big_operator(op!('⨙'), false),
+            "intcup" => self.big_operator(op!('⨚'), false),
+            "oint" => self.big_operator(op!('∮'), false),
+            "varointclockwise" => self.big_operator(op!('∲'), false),
+            "intclockwise" => self.big_operator(op!('∱'), false),
+            "oiint" => self.big_operator(op!('∯'), false),
+            "pointint" => self.big_operator(op!('⨕'), false),
+            "rppolint" => self.big_operator(op!('⨒'), false),
+            "scpolint" => self.big_operator(op!('⨓'), false),
+            "oiiint" => self.big_operator(op!('∰'), false),
+            "intlarhk" => self.big_operator(op!('⨗'), false),
+            "sqint" => self.big_operator(op!('⨖'), false),
+            "intx" => self.big_operator(op!('⨘'), false),
+            "intbar" => self.big_operator(op!('⨍'), false),
+            "intBar" => self.big_operator(op!('⨎'), false),
+            "fint" => self.big_operator(op!('⨏'), false),
 
             /////////////
             // Accents //
@@ -398,8 +404,7 @@ impl<'a> Parser<'a> {
             "~" | "nobreakspace" => Event::Content(Content::Text(Identifier::Str("&nbsp;"))),
             // Variable spacing
             "kern" => {
-                let dimension =
-                    lex::dimension(self.current_string()?.ok_or(ErrorKind::Dimension)?)?;
+                let dimension = lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
                 Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -407,7 +412,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "hskip" => {
-                let glue = lex::glue(self.current_string()?.ok_or(ErrorKind::Glue)?)?;
+                let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
                 Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -416,7 +421,7 @@ impl<'a> Parser<'a> {
             }
             "mkern" => {
                 let dimension =
-                    lex::math_dimension(self.current_string()?.ok_or(ErrorKind::Dimension)?)?;
+                    lex::math_dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
                 Event::Space {
                     width: Some(dimension),
                     height: None,
@@ -424,7 +429,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "mskip" => {
-                let glue = lex::math_glue(self.current_string()?.ok_or(ErrorKind::Glue)?)?;
+                let glue = lex::math_glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
                 Event::Space {
                     width: Some(glue.0),
                     height: None,
@@ -433,7 +438,7 @@ impl<'a> Parser<'a> {
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
-                    lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
                 else {
                     return Err(ErrorKind::DimensionArgument);
                 };
@@ -591,6 +596,7 @@ impl<'a> Parser<'a> {
             ///////////////
             // Relations //
             ///////////////
+            "parallel" => operator(op!('∥')),
             "approx" => operator(op!('≈')),
             "eqdef" => operator(op!('≝')),
             "lt" => operator(op!('<')),
@@ -665,8 +671,8 @@ impl<'a> Parser<'a> {
             "vartriangleright" => operator(op!('⊳')),
             "curlyeqsucc" => operator(op!('⋟')),
             "le" => operator(op!('≤')),
-            // "shortmid" => operator(op!('∣')),
-            // "shortparallel" => operator(op!('∥')),
+            "shortmid" => operator(op!('∣', {size:Some((0.7, DimensionUnit::Em))})),
+            "shortparallel" => operator(op!('∥', {size:Some((0.7, DimensionUnit::Em))})),
             "vdash" => operator(op!('⊢')),
             "dashv" => operator(op!('⊣')),
             "leq" => operator(op!('≤')),
@@ -689,7 +695,7 @@ impl<'a> Parser<'a> {
             "veeeq" => operator(op!('≚')),
             "eqeq" => operator(op!('⩵')),
             "lesseqqgtr" => operator(op!('⪋')),
-            // "smallsmile" => operator(op!('⌣')),
+            "smallsmile" => operator(op!('⌣', {size:Some((0.7, DimensionUnit::Em))})),
             "wedgeq" => operator(op!('≙')),
             // Negated relations
             "gnapprox" => operator(op!('⪊')),
@@ -830,9 +836,9 @@ impl<'a> Parser<'a> {
             "frac" => {
                 self.buffer
                     .push(Instruction::Event(Event::Visual(Visual::Fraction(None))));
-                let first_arg = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+                let first_arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
                 self.handle_argument(first_arg)?;
-                let second_arg = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+                let second_arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
                 self.handle_argument(second_arg)?;
                 return Ok(());
             }
@@ -983,7 +989,7 @@ impl<'a> Parser<'a> {
             ),
             "|" => operator(op!('∥', {stretchy: Some(false)})),
             "text" => {
-                let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
                 self.buffer
                     .push(Instruction::Event(Event::Content(Content::Text(
                         match argument {
@@ -994,18 +1000,8 @@ impl<'a> Parser<'a> {
                     ))));
                 return Ok(());
             }
-            "begingroup" => {
-                self.group_stack.push(GroupType::BeginGroup);
-                Event::BeginGroup
-            }
-            "endgroup" => {
-                ensure_eq!(
-                    self.group_stack.pop(),
-                    Some(GroupType::BeginGroup),
-                    ErrorKind::UnbalancedGroup(Some(GroupType::BeginGroup))
-                );
-                Event::EndGroup
-            }
+            "begingroup" => Event::BeginGroup,
+            "endgroup" => Event::EndGroup,
 
             // Spacing
             c if c.trim_start().is_empty() => {
@@ -1022,13 +1018,13 @@ impl<'a> Parser<'a> {
     fn multi_event<const N: usize>(&mut self, events: [Event<'a>; N]) {
         self.buffer.push(Instruction::Event(Event::BeginGroup));
         self.buffer
-            .extend(events.iter().map(|event| Instruction::Event(*event)));
+            .extend(events.into_iter().map(Instruction::Event));
         self.buffer.push(Instruction::Event(Event::EndGroup));
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
     fn em_sized_delim(&mut self, size: f32) -> InnerResult<()> {
-        let delimiter = lex::delimiter(self.current_string()?.ok_or(ErrorKind::Delimiter)?)?;
+        let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(
                 op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
@@ -1038,7 +1034,7 @@ impl<'a> Parser<'a> {
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         self.buffer.extend([
             Instruction::Event(Event::BeginGroup),
             Instruction::Event(Event::FontChange(font)),
@@ -1051,9 +1047,7 @@ impl<'a> Parser<'a> {
                 };
             }
             Argument::Group(group) => {
-                self.buffer
-                    .push(Instruction::Substring(group, GroupType::Brace));
-                self.group_stack.push(GroupType::Brace);
+                self.buffer.push(Instruction::Substring(group));
             }
         };
         self.buffer.push(Instruction::Event(Event::EndGroup));
@@ -1062,9 +1056,12 @@ impl<'a> Parser<'a> {
 
     /// Accent commands. parse the argument, and overset the accent.
     fn accent(&mut self, accent: Operator) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         self.buffer
-            .push(Instruction::Event(Event::Visual(Visual::Overscript)));
+            .push(Instruction::Event(Event::Script {
+                ty: ScriptType::Superscript,
+                position: ScriptPosition::AboveBelow,
+            }));
         self.handle_argument(argument)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(
@@ -1075,9 +1072,12 @@ impl<'a> Parser<'a> {
 
     /// Underscript commands. parse the argument, and underset the accent.
     fn underscript(&mut self, content: Operator) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string()?.ok_or(ErrorKind::Argument)?)?;
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         self.buffer
-            .push(Instruction::Event(Event::Visual(Visual::Underscript)));
+            .push(Instruction::Event(Event::Script {
+                ty: ScriptType::Subscript,
+                position: ScriptPosition::AboveBelow,
+            }));
         self.handle_argument(argument)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(
@@ -1085,6 +1085,12 @@ impl<'a> Parser<'a> {
             ))));
 
         Ok(())
+    }
+
+    fn big_operator(&mut self, op: Operator, above_below: bool) -> Event<'a> {
+        self.state.allow_suffix_modifiers = true;
+        self.state.above_below_suffix_default = above_below;
+        operator(op)
     }
 }
 

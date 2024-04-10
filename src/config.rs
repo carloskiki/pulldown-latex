@@ -1,5 +1,5 @@
 //! Configuration options for the renderer.
-//! 
+//!
 //! The configuration of the `mathml` renderer is done through the [`RenderConfig`] struct.
 use std::fmt::Display;
 
@@ -109,7 +109,6 @@ impl MathStyle {
             MathStyle::Upright => true,
         }
     }
-    
 }
 
 /// How the math is displayed.

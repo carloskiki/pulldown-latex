@@ -9,7 +9,7 @@ fn main() {
     let parser = Parser::new(INPUT_LATEX);
     let mut mathml = String::new();
     let config = Default::default();
-    
+
     match push_mathml(&mut mathml, parser, config) {
         Ok(()) => println!("{}", mathml),
         Err(e) => eprintln!("Error while rendering: {}", e),

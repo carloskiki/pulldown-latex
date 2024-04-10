@@ -3,7 +3,7 @@ macro_rules! round_trip {
     ($name:ident, $input:literal) => {
         #[test]
         fn $name() {
-            use pulldown_latex::{parser::Parser, mathml::write_mathml};
+            use pulldown_latex::{mathml::write_mathml, parser::Parser};
             let _ = crate::common::show_errors(Parser::new($input)).unwrap();
             let parser = Parser::new($input);
             let events = parser.collect::<Result<Vec<_>, _>>().unwrap();

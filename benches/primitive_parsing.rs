@@ -42,6 +42,8 @@ fn subscript_torture(b: &mut Bencher) {
     b.iter(|| {
         let parser = Parser::new("a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}");
         let mut str = String::new();
-        test::black_box(pulldown_latex::mathml::push_mathml(&mut str, parser, Default::default()).unwrap());
+        test::black_box(
+            pulldown_latex::mathml::push_mathml(&mut str, parser, Default::default()).unwrap(),
+        );
     });
 }
