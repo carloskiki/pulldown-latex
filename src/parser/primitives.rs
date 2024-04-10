@@ -76,10 +76,9 @@ impl<'a> Parser<'a> {
         let event = match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
-            | "coth" | "dim" | "sin" | "tanh" => {
+            | "coth" | "dim" | "sin" | "tanh" | "sgn" => {
                 Event::Content(Content::Identifier(Identifier::Str(control_sequence)))
             }
-            // TODO: The following have `under` subscripts in display math:
             "lim" | "Pr" | "sup" | "liminf" | "max" | "inf" | "gcd" | "limsup" | "min" => {
                 self.state.allow_suffix_modifiers = true;
                 self.state.above_below_suffix_default = true;
