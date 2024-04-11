@@ -1,6 +1,6 @@
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{tables::{control_sequence_delimiter_map, is_char_delimiter}, Argument, ErrorKind, GroupType, InnerResult, Token};
+use super::{tables::{control_sequence_delimiter_map, is_char_delimiter}, Argument, CharToken, ErrorKind, GroupType, InnerResult, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -17,6 +17,7 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
     Ok((control_sequence, parameter_text, replacement_text))
 }
 
+/// Parse an argument to a control sequence, and return it.
 pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
     *input = input.trim_start();
 
@@ -129,7 +130,7 @@ pub fn delimiter(input: &mut &str) -> InnerResult<char> {
     let maybe_delim = token(input)?;
     match maybe_delim {
         Token::ControlSequence(cs) => control_sequence_delimiter_map(cs).ok_or(ErrorKind::Delimiter),
-        Token::Character(c) if is_char_delimiter(c) => Ok(c),
+        Token::Character(c) if is_char_delimiter(c.into()) => Ok(c.into()),
         _ => Err(ErrorKind::Delimiter),
     }
 }
@@ -429,29 +430,10 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
             token(input)
         }
         Some(c) => {
-            *input = &input[c.len_utf8()..];
-            Ok(Token::Character(c))
-        }
-        None => Err(ErrorKind::EndOfInput),
-    }
-}
-
-/// Special token parsing that does not consume single character tokens.
-///
-/// This is only used in the algorithm for reading the next token in the `Parser`.
-pub fn token_char_check<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
-    *input = input.trim_start();
-    match input.chars().next() {
-        Some('\\') => {
-            *input = &input[1..];
-            Ok(Token::ControlSequence(rhs_control_sequence(input)?))
-        }
-        Some('%') => {
-            let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
+            let (c, rest) = &input.split_at(c.len_utf8());
             *input = rest;
-            token(input)
+            Ok(Token::Character(CharToken::from_str(c)))
         }
-        Some(c) => Ok(Token::Character(c)),
         None => Err(ErrorKind::EndOfInput),
     }
 }

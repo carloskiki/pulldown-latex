@@ -23,9 +23,27 @@ pub enum Event<'a> {
 /// Base events that produce `mathml` nodes
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Content<'a> {
-    Text(Identifier<'a>),
-    Number(Identifier<'a>),
+    /// Text content that should be typeset following the rules of `LaTeX`'s `text` mode
+    Text(&'a str),
+    /// A number, which can include decimal points and commas.
+    Number(&'a str),
+    /// A mathematical identifier, such as a variable or a function name.
+    ///
+    /// If the identifier is a single character, then the character follows the typesetting rules
+    /// of single character variables. If the identifier is a string, even if that string is a
+    /// single character, it is typeset as a function name.
     Identifier(Identifier<'a>),
+    /// A mathematical operator.
+    ///
+    /// This variant ecompasses many different types of operators, such as binary operators,
+    /// relation, large operators, delimiters, etc. Specifically, it represents an operator
+    /// according to the [`mathml` specification](https://w3c.github.io/mathml-core/#operator-fence-separator-or-accent-mo).
+    /// 
+    /// > in MathML the list of things that should "render as an operator" includes a number of
+    /// > notations that are not mathematical operators in the ordinary sense. Besides ordinary
+    /// > operators with infix, prefix, or postfix forms, these include fence characters such as
+    /// > braces, parentheses, and "absolute value" bars; separators such as comma and semicolon; and
+    /// > mathematical accents such as a bar or tilde over a symbol.
     Operator(Operator),
 }
 

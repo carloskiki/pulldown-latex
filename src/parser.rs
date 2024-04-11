@@ -1,13 +1,14 @@
 mod lex;
-pub mod tables;
+mod macros;
 mod primitives;
 mod state;
+pub mod tables;
 
 use std::fmt::{Display, Write};
 
 use thiserror::Error;
 
-use crate::event::{Content, Event, Identifier, ScriptPosition, ScriptType};
+use crate::event::{Content, Event, ScriptPosition, ScriptType};
 
 use self::state::ParserState;
 
@@ -38,53 +39,6 @@ use self::state::ParserState;
 // \]
 // ```
 // This should successfully make the font change.
-//
-// OPEN QUESTIONS:
-// - When is a "group" pushed to the stack, and when should we pop it?
-// - Should all multi-even primitives be grouped? (The answer is yes from the `handle_argument`
-// method's perspective).
-// - Should we use a staging buffer for suffix handling?
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Token<'a> {
-    ControlSequence(&'a str),
-    Character(char),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Argument<'a> {
-    Token(Token<'a>),
-    Group(&'a str),
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum Instruction<'a> {
-    /// Send the event
-    Event(Event<'a>),
-    /// Parse the substring
-    Substring(&'a str),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum GroupType {
-    /// The group was initiated by a `{` character.
-    Brace,
-    /// The group was initiated by a `\begingroup` command.
-    BeginGroup,
-    /// The group was initiated by a `\left` command.
-    LeftRight,
-}
-
-impl Display for GroupType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GroupType::Brace => f.write_char('}'),
-            GroupType::BeginGroup => f.write_str("\\endgroup"),
-            GroupType::LeftRight => f.write_str("\\right"),
-        }
-    }
-}
-
 #[derive(Debug)]
 pub struct Parser<'a> {
     /// What the initial input is.
@@ -151,7 +105,7 @@ impl<'a> Parser<'a> {
         } else {
             ScriptPosition::Right
         };
-        
+
         if self.state.allow_suffix_modifiers {
             while let Some(str) = self.current_string() {
                 *str = str.trim_start();
@@ -248,7 +202,7 @@ impl<'a> Parser<'a> {
     /// Parse an arugment and pushes the argument to the stack surrounded by a
     /// group: [..., EndGroup, Argument, BeginGroup], when the argument is a subgroup.
     /// Otherwise, it pushes the argument to the stack ungrouped.
-    pub(crate) fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
+    fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
         match argument {
             Argument::Token(token) => {
                 match token {
@@ -330,9 +284,8 @@ impl<'a> Iterator for Parser<'a> {
                 };
 
                 // 1. Parse the next token and output everything to the staging stack.
-                let token = lex::token_char_check(content);
-                let maybe_err = match token {
-                    Ok(Token::Character(first_num @ ('0'..='9'))) => {
+                let maybe_err = match content.chars().next() {
+                    Some('0'..='9') => {
                         let mut len = content
                             .chars()
                             .skip(1)
@@ -345,24 +298,32 @@ impl<'a> Iterator for Parser<'a> {
                         let (number, rest) = content.split_at(len);
                         *content = rest;
                         self.buffer
-                            .push(Instruction::Event(Event::Content(Content::Number(
-                                if len == 1 {
-                                    Identifier::Char(first_num)
-                                } else {
-                                    Identifier::Str(number)
-                                },
-                            ))));
+                            .push(Instruction::Event(Event::Content(Content::Number(number))));
                         Ok(())
+                    }
+                    Some('%') => {
+                        if let Some((_, rest)) = content.split_once('\n') {
+                            *content = rest;
+                        } else {
+                            *content = &content[content.len()..];
+                        }
+                        return self.next();
                     }
                     // TODO: when expanding a user defined macro, we do not want to check for
                     // suffixes.
-                    Ok(Token::ControlSequence(cs)) => self.handle_primitive(cs),
-                    Ok(Token::Character(c)) => {
-                        *content = &content[c.len_utf8()..];
-                        self.handle_char_token(c)
+                    Some('\\') => {
+                        *content = &content[1..];
+                        match lex::rhs_control_sequence(content) {
+                            Ok(cs) => self.handle_primitive(cs),
+                            Err(err) => Err(err),
+                        }
                     }
-                    Err(ErrorKind::EndOfInput) => return None,
-                    Err(e) => Err(e),
+                    Some(c) => {
+                        let (c, rest) = &content.split_at(c.len_utf8());
+                        *content = rest;
+                        self.handle_char_token(CharToken::from_str(c))
+                    }
+                    None => return self.next(),
                 };
                 if let Err(err) = maybe_err {
                     return Some(Err(self.error_with_context(err)));
@@ -377,14 +338,78 @@ impl<'a> Iterator for Parser<'a> {
                 // 3. Drain the staging stack to the instruction stack.
                 self.instruction_stack.extend(self.buffer.drain(..).rev());
                 if let Some(suffix) = suffix {
-                    self.instruction_stack
-                        .push(Instruction::Event(suffix));
+                    self.instruction_stack.push(Instruction::Event(suffix));
                 }
 
                 self.state = ParserState::default();
                 self.next()
             }
             None => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Token<'a> {
+    ControlSequence(&'a str),
+    Character(CharToken<'a>),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+struct CharToken<'a> {
+    char: &'a str,
+}
+
+impl<'a> CharToken<'a> {
+    fn from_str(s: &'a str) -> Self {
+        assert!(
+            s.chars().count() == 1,
+            "CharToken must be a single character"
+        );
+        Self { char: s }
+    }
+
+    fn as_str(&self) -> &'a str {
+        self.char
+    }
+}
+
+impl From<CharToken<'_>> for char {
+    fn from(token: CharToken) -> char {
+        token.char.chars().next().unwrap()
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+enum Argument<'a> {
+    Token(Token<'a>),
+    Group(&'a str),
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum Instruction<'a> {
+    /// Send the event
+    Event(Event<'a>),
+    /// Parse the substring
+    Substring(&'a str),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum GroupType {
+    /// The group was initiated by a `{` character.
+    Brace,
+    /// The group was initiated by a `\begingroup` command.
+    BeginGroup,
+    /// The group was initiated by a `\left` command.
+    LeftRight,
+}
+
+impl Display for GroupType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            GroupType::Brace => f.write_char('}'),
+            GroupType::BeginGroup => f.write_str("\\endgroup"),
+            GroupType::LeftRight => f.write_str("\\right"),
         }
     }
 }
@@ -464,8 +489,8 @@ pub(crate) enum ErrorKind {
     SuperscriptAsToken,
     #[error("unknown primitive command found")]
     UnknownPrimitive,
-    #[error("control sequence in text mode")]
-    TextModeControlSequence,
+    #[error("control sequence found as argument to a command that does not support them")]
+    ControlSequenceAsArgument,
     #[error("enpty control sequence")]
     EmptyControlSequence,
 }
@@ -486,7 +511,10 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Script { ty: ScriptType::Superscript, position: ScriptPosition::AboveBelow },
+                Event::Script {
+                    ty: ScriptType::Superscript,
+                    position: ScriptPosition::AboveBelow
+                },
                 Event::BeginGroup,
                 Event::Content(Content::Identifier(Identifier::Char('y'))),
                 Event::EndGroup,
@@ -513,11 +541,14 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
+                Event::Script {
+                    ty: ScriptType::SubSuperscript,
+                    position: ScriptPosition::Right
+                },
                 Event::Content(Content::Identifier(Identifier::Char('a'))),
-                Event::Content(Content::Number(Identifier::Char('2'))),
+                Event::Content(Content::Number("2")),
                 Event::BeginGroup,
-                Event::Content(Content::Number(Identifier::Char('1'))),
+                Event::Content(Content::Number("1")),
                 Event::Content(Content::Operator(Operator {
                     content: '+',
                     stretchy: None,
@@ -526,7 +557,7 @@ mod tests {
                     right_space: None,
                     size: None,
                 })),
-                Event::Content(Content::Number(Identifier::Char('3'))),
+                Event::Content(Content::Number("3")),
                 Event::EndGroup,
             ]
         );
@@ -541,42 +572,78 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
                 Event::Content(Content::Identifier(Identifier::Char('a'))),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
                 Event::BeginGroup,
-                Event::Script { ty: ScriptType::Subscript, position: ScriptPosition::Right },
-                Event::Content(Content::Number(Identifier::Char('5'))),
-                Event::Content(Content::Number(Identifier::Char('5'))),
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Number("5")),
+                Event::Content(Content::Number("5")),
                 Event::EndGroup,
                 Event::EndGroup,
                 Event::EndGroup,
@@ -602,16 +669,19 @@ mod tests {
         assert_eq!(
             events,
             vec![
-                Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
+                Event::Script {
+                    ty: ScriptType::SubSuperscript,
+                    position: ScriptPosition::Right
+                },
                 Event::Visual(Visual::Fraction(None)),
                 Event::BeginGroup,
-                Event::Content(Content::Number(Identifier::Char('1'))),
+                Event::Content(Content::Number("1")),
                 Event::EndGroup,
                 Event::BeginGroup,
-                Event::Content(Content::Number(Identifier::Char('2'))),
+                Event::Content(Content::Number("2")),
                 Event::EndGroup,
-                Event::Content(Content::Number(Identifier::Char('2'))),
-                Event::Content(Content::Number(Identifier::Char('4'))),
+                Event::Content(Content::Number("2")),
+                Event::Content(Content::Number("4")),
             ]
         );
     }
@@ -626,7 +696,7 @@ mod tests {
 
         assert_eq!(
             events,
-            vec![Event::Content(Content::Number(Identifier::Str("123")))]
+            vec![Event::Content(Content::Number("123"))]
         );
     }
 }

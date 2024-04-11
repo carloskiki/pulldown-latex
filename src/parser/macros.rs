@@ -234,9 +234,7 @@ type Result<T> = std::result::Result<T, MacroContextError>;
 
 #[cfg(test)]
 mod tests {
-    use crate::macros::ReplacementToken;
-
-    use super::MacroContext;
+    use super::{MacroContext, ReplacementToken};
 
     #[test]
     fn no_params() {

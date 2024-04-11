@@ -9,7 +9,7 @@ use crate::{
 use super::{
     lex,
     tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator},
-    Argument, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
+    Argument, CharToken, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
 };
 
 /// Return an `Operator` event with the given content and default modifiers.
@@ -38,8 +38,8 @@ impl<'a> Parser<'a> {
     ///
     /// ## Panics
     /// - This function will panic if the `\` or `%` character is given
-    pub(crate) fn handle_char_token(&mut self, token: char) -> InnerResult<()> {
-        let instruction = Instruction::Event(match token {
+    pub(super) fn handle_char_token(&mut self, token: CharToken<'a>) -> InnerResult<()> {
+        let instruction = Instruction::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
             '_' => return Err(ErrorKind::SubscriptAsToken),
@@ -64,7 +64,7 @@ impl<'a> Parser<'a> {
 
             c if is_char_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => Event::Content(Content::Operator(op!(c))),
-            '0'..='9' => Event::Content(Content::Number(Identifier::Char(token))),
+            '0'..='9' => Event::Content(Content::Number(token.as_str())),
             c => ident(c),
         });
         self.buffer.push(instruction);
@@ -72,7 +72,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Handle a supported control sequence, pushing instructions to the provided stack.
-    pub(crate) fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<()> {
+    pub(super) fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<()> {
         let event = match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
@@ -84,6 +84,22 @@ impl<'a> Parser<'a> {
                 self.state.above_below_suffix_default = true;
                 Event::Content(Content::Identifier(Identifier::Str(control_sequence)))
             }
+            "operatorname" => {
+                self.state.allow_suffix_modifiers = true;
+                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                match argument {
+                    Argument::Token(Token::ControlSequence(_)) => {
+                        return Err(ErrorKind::ControlSequenceAsArgument)
+                    }
+                    Argument::Token(Token::Character(char_)) => {
+                        Event::Content(Content::Identifier(Identifier::Str(char_.as_str())))
+                    }
+                    Argument::Group(content) => {
+                        Event::Content(Content::Identifier(Identifier::Str(content)))
+                    }
+                }
+            }
+            // TODO: Operators with '*', for operatorname* and friends
 
             /////////////////////////
             // Non-Latin Alphabets //
@@ -219,7 +235,7 @@ impl<'a> Parser<'a> {
             "triangleleft" => ident('◃'),
             "triangleright" => ident('▹'),
             "cent" => ident('¢'),
-            "colon" => ident(':'),
+            "colon" | "ratio" | "vcentcolon" => ident(':'),
             "bigtriangledown" => ident('▽'),
             "pounds" | "mathsterling" => ident('£'),
             "bigtriangleup" => ident('△'),
@@ -484,7 +500,7 @@ impl<'a> Parser<'a> {
                 height: None,
                 depth: None,
             },
-            "~" | "nobreakspace" => Event::Content(Content::Text(Identifier::Str("&nbsp;"))),
+            "~" | "nobreakspace" => Event::Content(Content::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
                 let dimension = lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
@@ -680,7 +696,19 @@ impl<'a> Parser<'a> {
             ///////////////
             // Relations //
             ///////////////
-            "parallel" => operator(op!('∥')),
+            "eqcirc" => operator(op!('≖')),
+            "lessgtr" => operator(op!('≶')),
+            "smile" | "sincoh" => operator(op!('⌣')),
+            "eqcolon" | "minuscolon" => operator(op!('∹')),
+            "lesssim" => operator(op!('≲')),
+            "sqsubset" => operator(op!('⊏')),
+            "ll" => operator(op!('≪')),
+            "sqsubseteq" => operator(op!('⊑')),
+            "eqqcolon" => operator(op!('≕')),
+            "lll" => operator(op!('⋘')),
+            "sqsupset" => operator(op!('⊐')),
+            "llless" => operator(op!('⋘')),
+            "sqsupseteq" => operator(op!('⊒')),
             "approx" => operator(op!('≈')),
             "eqdef" => operator(op!('≝')),
             "lt" => operator(op!('<')),
@@ -712,14 +740,19 @@ impl<'a> Parser<'a> {
             "between" => operator(op!('≬')),
             "geq" => operator(op!('≥')),
             "owns" => operator(op!('∋')),
+            "succeq" => operator(op!('⪰')),
+            "bumpeq" => operator(op!('≏')),
+            "geqq" => operator(op!('≧')),
+            "parallel" => operator(op!('∥')),
             "succsim" => operator(op!('≿')),
-            "Bumpeq" => operator(op!('≏')),
+            "Bumpeq" => operator(op!('≎')),
             "geqslant" => operator(op!('⩾')),
             "perp" => operator(op!('⟂')),
             "Supset" => operator(op!('⋑')),
             "circeq" => operator(op!('≗')),
             "gg" => operator(op!('≫')),
             "Perp" => operator(op!('⫫')),
+            "coh" => operator(op!('⌢')),
             "ggg" => operator(op!('⋙')),
             "pitchfork" => operator(op!('⋔')),
             "supseteq" => operator(op!('⊇')),
@@ -771,7 +804,6 @@ impl<'a> Parser<'a> {
             "Dash" => operator(op!('⊫')),
             "Doteq" => operator(op!('≑')),
             "lessapprox" => operator(op!('⪅')),
-            "sincoh" => operator(op!('⌣')),
             "Vvdash" => operator(op!('⊪')),
             "doteqdot" => operator(op!('≑')),
             "lesseqgtr" => operator(op!('⋚')),
@@ -781,6 +813,155 @@ impl<'a> Parser<'a> {
             "lesseqqgtr" => operator(op!('⪋')),
             "smallsmile" => operator(op!('⌣', {size:Some((0.7, DimensionUnit::Em))})),
             "wedgeq" => operator(op!('≙')),
+            "Eqcolon" | "minuscoloncolon" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(
+                        op!('−', {right_space: Some((0., DimensionUnit::Em))}),
+                    )),
+                    Event::Content(Content::Operator(op!('∷'))),
+                ]);
+                return Ok(());
+            }
+            "Eqqcolon" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(
+                        op!('=', {right_space: Some((0., DimensionUnit::Em))}),
+                    )),
+                    Event::Content(Content::Operator(op!('∷'))),
+                ]);
+                return Ok(());
+            }
+            "approxcolon" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        '≈',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "colonapprox" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '≈',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "approxcoloncolon" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        '≈',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(
+                        op! {':', {left_space: Some((0., DimensionUnit::Em))}},
+                    )),
+                ]);
+                return Ok(());
+            }
+            "Colonapprox" | "coloncolonapprox" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '≈',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "coloneq" | "colonminus" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '-',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "Coloneq" | "coloncolonminus" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '-',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "colonsim" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '∼',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
+            "Colonsim" | "coloncolonsim" => {
+                self.multi_event([
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {right_space: Some((0., DimensionUnit::Em))}
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        ':',
+                        {
+                            left_space: Some((0., DimensionUnit::Em)),
+                            right_space: Some((0., DimensionUnit::Em))
+                        }
+                    })),
+                    Event::Content(Content::Operator(op! {
+                        '∼',
+                        {left_space: Some((0., DimensionUnit::Em))}
+                    })),
+                ]);
+                return Ok(());
+            }
             // Negated relations
             "gnapprox" => operator(op!('⪊')),
             "ngeqslant" => operator(op!('≱')),
@@ -927,137 +1108,6 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
 
-            "approxcolon" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        '≈',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
-            "colonapprox" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        '≈',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
-            "approxcoloncolon" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        '≈',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    Event::Content(Content::Operator(
-                        op! {':', {left_space: Some((0., DimensionUnit::Em))}},
-                    )),
-                ]);
-                return Ok(());
-            }
-            "Colonapprox" | "coloncolonapprox" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        '≈',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
-            "coloneq" | "colonminus" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        '-',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
-            "Coloneq" | "coloncolonminus" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        '-',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
-            "colonsim" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        '∼',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
-            "Colonsim" | "coloncolonsim" => {
-                self.multi_event([
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    Event::Content(Content::Operator(op! {
-                        '∼',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
-                ]);
-                return Ok(());
-            }
 
             "backslash" => ident('\\'),
 
@@ -1076,9 +1126,9 @@ impl<'a> Parser<'a> {
                 self.buffer
                     .push(Instruction::Event(Event::Content(Content::Text(
                         match argument {
-                            Argument::Token(Token::Character(c)) => Identifier::Char(c),
-                            Argument::Group(inner) => Identifier::Str(inner),
-                            _ => return Err(ErrorKind::TextModeControlSequence),
+                            Argument::Token(Token::Character(c)) => c.as_str(),
+                            Argument::Group(inner) => inner,
+                            _ => return Err(ErrorKind::ControlSequenceAsArgument),
                         },
                     ))));
                 return Ok(());
@@ -1094,7 +1144,7 @@ impl<'a> Parser<'a> {
 
             // Spacing
             c if c.trim_start().is_empty() => {
-                Event::Content(Content::Text(Identifier::Str("&nbsp;")))
+                Event::Content(Content::Text("&nbsp;"))
             }
 
             _ => return Err(ErrorKind::UnknownPrimitive),
