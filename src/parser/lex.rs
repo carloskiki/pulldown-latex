@@ -30,6 +30,17 @@ pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
     }
 }
 
+pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>> {
+    *input = input.trim_start();
+    if input.starts_with('[') {
+        *input = &input[1..];
+        let content = group_content(input, "[", "]")?;
+        Ok(Some(content))
+    } else {
+        Ok(None)
+    }
+}
+
 /// Parses the inside of a group, when the first `{` is already parsed.
 ///
 /// The output is the content within the group without the surrounding `{}`. This content is

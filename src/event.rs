@@ -1,3 +1,6 @@
+//! When an ['Event'] is talking about an element, it is referring to the next logical unit of
+//! content in the stream. This can be a single content element, a group, or a visual element.
+
 use crate::attribute::{Dimension, Font};
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -68,10 +71,18 @@ pub enum Identifier<'a> {
 /// Modifies the visual representation of the following event(s)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Visual {
-    /// The following event is the content of the root
+    /// The following element is the content of the root
     SquareRoot,
-    /// The 2 following events are the numerator and denominator of a fraction
+    /// The 2 following elements are the radicand and the index of the root
+    Root,
+    /// The 2 following elements are the numerator and denominator of a fraction
     Fraction(Option<Dimension>),
+    /// The "negation" operator as in "not equal" (≠) or "does not exist" (∄). This applies to the
+    /// next event in the stream.
+    /// 
+    /// This event can occur before an arbitrary event, not just a `Content` event. It is left to
+    /// the renderer to determine how to apply the negation.
+    Negation,
 }
 
 /// Logical type of the script. This is used to determine how to render the scripts.
@@ -80,11 +91,11 @@ pub enum Visual {
 /// conjunction with the `ScriptPosition` enum.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ScriptType {
-    /// The 2 following events are the base and and the subscript
+    /// The 2 following elements are the base and and the subscript
     Subscript,
-    /// The 2 following events are the base and and the superscript
+    /// The 2 following elements are the base and and the superscript
     Superscript,
-    /// The 3 following events are the base, subscript and superscript
+    /// The 3 following elements are the base, subscript and superscript
     SubSuperscript,
 }
 

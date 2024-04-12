@@ -68,6 +68,8 @@ where
         Ok(())
     }
 
+    // TODO: Some complete dickhead wrote this, and now I need to change it.
+    // We shouldn't call `next`, we should handle a whole ass group if there is one.
     fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
         // SAFETY: This function respects the invariants of the MathmlWriter
         match event {
@@ -164,11 +166,7 @@ where
                         "unbalanced use of grouping in `FontChange` events, no font state found",
                     ))?);
                 loop {
-                    let Some(event) = self.input.next() else {
-                        return Err(io::Error::other(
-                            "expected `EndGroup` event before the end of the input",
-                        ));
-                    };
+                    self.next_else("expected `EndGroup` event before the end of the input")?;
                     if event.as_ref().is_ok_and(|e| e == &Event::EndGroup) {
                         self.font_state.pop();
                         break;
@@ -184,28 +182,38 @@ where
             )),
             Ok(Event::Visual(visual)) => match visual {
                 Visual::Fraction(dim) => {
-                    let (Some(first), Some(second)) = (self.input.next(), self.input.next()) else {
-                        return Err(io::Error::other(
-                            "expected two components after a `Fraction` event",
-                        ));
-                    };
                     self.writer.write_all(b"<mfrac")?;
                     if let Some(dim) = dim {
                         write!(self.writer, " linethickness=\"{}em\"", tex_to_css_em(dim))?;
                     }
+                    let err = "expected two elements after a `Fraction` event";
+                    let first = self.next_else(err)?;
                     self.write_event(first)?;
+                    let second = self.next_else(err)?;
                     self.write_event(second)?;
                     self.writer.write_all(b"</mfrac>")
                 }
                 Visual::SquareRoot => {
-                    let Some(argument) = self.input.next() else {
-                        return Err(io::Error::other(
-                            "expected two components after a `Root` event",
-                        ));
-                    };
+                    let argument = self.next_else("expected an element after a `SquareRoot` event")?;
                     self.writer.write_all(b"<msqrt>")?;
                     self.write_event(argument)?;
                     self.writer.write_all(b"</msqrt>")
+                }
+                Visual::Root => {
+                    let err = "expected two elements after a `Root` event";
+                    self.writer.write_all(b"<mroot>")?;
+                    let radicand = self.next_else(err)?;
+                    self.write_event(radicand)?;
+                    let index = self.next_else(err)?;
+                    self.write_event(index)?;
+                    self.writer.write_all(b"</mroot>")
+                }
+                Visual::Negation => {
+                    let next = self.next_else("expected an element after a `Negation` event")?;
+                    if matches!(next, Ok(Event::Content(Content::Operator(_) | Content::Identifier(Identifier::Char(_))))) {
+                        todo!()
+                    } 
+                    todo!()
                 }
             },
 
@@ -220,78 +228,60 @@ where
                 };
                 match (ty, above_below) {
                     (ScriptType::Subscript, false) => {
-                        let (Some(base), Some(subscript)) = (self.input.next(), self.input.next())
-                        else {
-                            return Err(io::Error::other(
-                                "expected two components after a `Subscript` event",
-                            ));
-                        };
+                        let err = "expected two elements after a `Subscript` event";
                         self.writer.write_all(b"<msub>")?;
+                        let base = self.next_else(err)?;
                         self.write_event(base)?;
+                        let subscript = self.next_else(err)?;
                         self.write_event(subscript)?;
                         self.writer.write_all(b"</msub>")
                     }
                     (ScriptType::Superscript, false) => {
-                        let (Some(base), Some(superscript)) = (self.input.next(), self.input.next())
-                        else {
-                            return Err(io::Error::other(
-                                "expected two components after a `Superscript` event",
-                            ));
-                        };
+                        let err = "expected two elements after a `Superscript` event";
                         self.writer.write_all(b"<msup>")?;
+                        let base = self.next_else(err)?;
                         self.write_event(base)?;
+                        let superscript = self.next_else(err)?;
                         self.write_event(superscript)?;
                         self.writer.write_all(b"</msup>")
                     }
                     (ScriptType::SubSuperscript, false) => {
-                        let (Some(base), Some(subscript), Some(superscript)) =
-                            (self.input.next(), self.input.next(), self.input.next())
-                        else {
-                            return Err(io::Error::other(
-                                "expected three components after a `SubSuperscript` event",
-                            ));
-                        };
+                        let err = "expected three elements after a `SubSuperscript` event";
                         self.writer.write_all(b"<msubsup>")?;
+                        let base = self.next_else(err)?;
                         self.write_event(base)?;
+                        let subscript = self.next_else(err)?;
                         self.write_event(subscript)?;
+                        let superscript = self.next_else(err)?;
                         self.write_event(superscript)?;
                         self.writer.write_all(b"</msubsup>")
                     }
                     (ScriptType::Subscript, true) => {
-                        let (Some(base), Some(underscript)) = (self.input.next(), self.input.next())
-                        else {
-                            return Err(io::Error::other(
-                                "expected two components after a `Underscript` event",
-                            ));
-                        };
+                        let err = "expected two elements after a `Undercript` event";
                         self.writer.write_all(b"<munder>")?;
+                        let base = self.next_else(err)?;
                         self.write_event(base)?;
+                        let underscript = self.next_else(err)?;
                         self.write_event(underscript)?;
                         self.writer.write_all(b"</munder>")
                     }
                     (ScriptType::Superscript, true) => {
-                        let (Some(base), Some(overscript)) = (self.input.next(), self.input.next())
-                        else {
-                            return Err(io::Error::other(
-                                "expected two components after a `Overscript` event",
-                            ));
-                        };
+                        let err = "expected two elements after a `Overscript` event";
                         self.writer.write_all(b"<mover>")?;
+                        let base = self.next_else(err)?;
                         self.write_event(base)?;
+                        let overscript = self.next_else(err)?;
                         self.write_event(overscript)?;
                         self.writer.write_all(b"</mover>")
                     }
                     (ScriptType::SubSuperscript, true) => {
-                        let (Some(base), Some(underscript), Some(overscript)) =
-                            (self.input.next(), self.input.next(), self.input.next())
-                        else {
-                            return Err(io::Error::other(
-                                "expected three components after a `UnderOverscript` event",
-                            ));
-                        };
+                        let err = "expected three elements after a `UnderOver` event";
                         self.writer.write_all(b"<munderover>")?;
+                        let base = self.next_else(err)?;
                         self.write_event(base)?;
+                        let underscript = self.next_else(err)?;
                         self.write_event(underscript)?;
+                        let overscript = self.next_else(err)?;
                         self.write_event(overscript)?;
                         self.writer.write_all(b"</munderover>")
                     }
@@ -321,6 +311,7 @@ where
                 }
                 self.writer.write_all(b" />")
             }
+            // TODO: This is not okay, it does not work
             Ok(Event::FontChange(font)) => {
                 let font_state = self.font_state.last_mut().ok_or(io::Error::other(
                     "unbalanced use of grouping in `FontChange` events, no font state found",
@@ -342,6 +333,12 @@ where
                 self.writer.write_all(b"</mtext></merror>")
             }
         }
+    }
+
+    fn next_else(&mut self, err: &str) -> io::Result<Result<Event<'a>, E>> {
+        self.input.next().ok_or(io::Error::other(
+                err
+        ))
     }
 
     fn get_font(&self) -> io::Result<Option<Font>> {

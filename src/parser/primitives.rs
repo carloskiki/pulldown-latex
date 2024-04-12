@@ -1108,6 +1108,37 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
 
+            //////////////
+            // Radicals //
+            //////////////
+            "sqrt" => {
+                if let Some(index) =
+                    lex::optional_argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                {
+                    self.buffer
+                        .push(Instruction::Event(Event::Visual(Visual::Root)));
+                    let arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                    self.handle_argument(arg)?;
+                    self.buffer.push(Instruction::Substring(index));
+                } else {
+                    self.buffer
+                        .push(Instruction::Event(Event::Visual(Visual::SquareRoot)));
+                    let arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                    self.handle_argument(arg)?;
+                }
+                return Ok(());
+            }
+            "surd" => {
+                self.multi_event([
+                    Event::Visual(Visual::SquareRoot),
+                    Event::Space {
+                        width: Some((0., DimensionUnit::Em)),
+                        height: None,
+                        depth: None,
+                    },
+                ]);
+                return Ok(());
+            }
 
             "backslash" => ident('\\'),
 
@@ -1143,9 +1174,7 @@ impl<'a> Parser<'a> {
             }
 
             // Spacing
-            c if c.trim_start().is_empty() => {
-                Event::Content(Content::Text("&nbsp;"))
-            }
+            c if c.trim_start().is_empty() => Event::Content(Content::Text("&nbsp;")),
 
             _ => return Err(ErrorKind::UnknownPrimitive),
         };
