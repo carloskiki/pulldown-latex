@@ -1026,7 +1026,7 @@ impl<'a> Parser<'a> {
             "nshortmid" => operator(op!('∤')),
             "nvdash" => operator(op!('⊬')),
             "ngeq" => operator(op!('≱')),
-            "nshortparallel" => operator(op!('∦')),
+            "nshortparallel" => operator(op!('∦', {size: Some((0.7, DimensionUnit::Em))})),
             "nvDash" => operator(op!('⊭')),
             "varsupsetneq" => operator(op!('⊋')),
             "ngeqq" => operator(op!('≱')),

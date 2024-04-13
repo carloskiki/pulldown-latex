@@ -1,21 +1,33 @@
 #[macro_export]
 macro_rules! round_trip {
-    ($name:ident, $input:literal) => {
+    (should_panic, $name:ident, $($input:literal),*) => {
         #[test]
         fn $name() {
-            use pulldown_latex::{mathml::write_mathml, parser::Parser};
-            let _ = crate::common::show_errors(Parser::new($input)).unwrap();
-            let parser = Parser::new($input);
-            let events = parser.collect::<Result<Vec<_>, _>>().unwrap();
-            println!("{:#?}", events);
-            let parser = Parser::new($input);
-            write_mathml(std::io::sink(), parser, Default::default()).unwrap();
+            let inputs = &[$($input),*];
+            for input in inputs {
+                let mut parser = pulldown_latex::parser::Parser::new(input);
+                assert!(parser.all(|event| event.is_err()))
+            }
+        }
+    };
+    ($name:ident, $($input:literal),*) => {
+        #[test]
+        fn $name() {
+            let inputs = &[$($input),*];
+            $crate::common::test(inputs);
         }
     };
 }
-pub use round_trip;
 
-use pulldown_latex::parser::Parser;
+use pulldown_latex::{mathml::write_mathml, parser::Parser};
+
+pub fn test(inputs: &[&str]) {
+    for input in inputs {
+        let _ = show_errors(Parser::new(input)).unwrap();
+        let parser = Parser::new(input);
+        write_mathml(std::io::sink(), parser, Default::default()).unwrap();
+    }
+}
 
 pub fn show_errors(parser: Parser) -> Result<(), usize> {
     let mut error_count = 0;
