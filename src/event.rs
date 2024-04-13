@@ -55,6 +55,9 @@ pub struct Operator {
     pub content: char,
     pub stretchy: Option<bool>,
     pub deny_movable_limits: bool,
+    /// If this is set to true, the unicode character VS1 (U+20D2) is added to the operator. This
+    /// is used to allow for special negation operators, such as `\varsupsetneqq` (⫌︀).
+    pub unicode_variant: bool,
     pub left_space: Option<Dimension>,
     pub right_space: Option<Dimension>,
     pub size: Option<Dimension>,

@@ -99,6 +99,21 @@ impl<'a> Parser<'a> {
                     }
                 }
             }
+            "bmod" => Event::Content(Content::Identifier(Identifier::Str("mod"))),
+            "pmod" => {
+                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                self.buffer.extend([
+                    Instruction::Event(Event::BeginGroup),
+                    Instruction::Event(operator(op!('('))),
+                ]);
+                self.handle_argument(argument)?;
+                self.buffer.extend([
+                    Instruction::Event(operator(op!(')'))),
+                    Instruction::Event(Event::EndGroup),
+                ]);
+                return Ok(())
+            }
+
             // TODO: Operators with '*', for operatorname* and friends
 
             /////////////////////////
@@ -1017,11 +1032,11 @@ impl<'a> Parser<'a> {
             "ngeqq" => operator(op!('≱')),
             "nsim" => operator(op!('≁')),
             "nVDash" => operator(op!('⊯')),
-            // "varsupsetneqq" => operator(op!('⫌︀')),
-            // "varsubsetneqq" => operator(op!('⫋︀')),
-            // "varsubsetneq" => operator(op!('⊊︀')),
-            // "gvertneqq" => operator(op!('≩︀')),
-            // "lvertneqq" => operator(op!('≨︀')),
+            "varsupsetneqq" => operator(op!('⫌', {unicode_variant: true})),
+            "varsubsetneqq" => operator(op!('⫋', {unicode_variant: true})),
+            "varsubsetneq" => operator(op!('⊊', {unicode_variant: true})),
+            "gvertneqq" => operator(op!('≩', {unicode_variant: true})),
+            "lvertneqq" => operator(op!('≨', {unicode_variant: true})),
 
             ////////////
             // Arrows //
@@ -1108,6 +1123,31 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
 
+            "overset" => {
+                self.buffer
+                    .push(Instruction::Event(Event::Script {
+                        ty: ScriptType::Superscript,
+                        position: ScriptPosition::AboveBelow,
+                    }));
+                let over = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                self.handle_argument(over)?;
+                let base = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                self.handle_argument(base)?;
+                return Ok(());
+            }
+            "underset" => {
+                self.buffer
+                    .push(Instruction::Event(Event::Script {
+                        ty: ScriptType::Subscript,
+                        position: ScriptPosition::AboveBelow,
+                    }));
+                let under = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                self.handle_argument(under)?;
+                let base = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                self.handle_argument(base)?;
+                return Ok(());
+            }
+
             //////////////
             // Radicals //
             //////////////
@@ -1164,6 +1204,14 @@ impl<'a> Parser<'a> {
                     ))));
                 return Ok(());
             }
+            "not" => {
+                self.buffer
+                    .push(Instruction::Event(Event::Visual(Visual::Negation)));
+                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                self.handle_argument(argument)?;
+                return Ok(());
+            }
+
             // TODO: This shit
             "begingroup" => Event::BeginGroup,
             "endgroup" => Event::EndGroup,

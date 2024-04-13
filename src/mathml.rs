@@ -6,6 +6,7 @@ use crate::{
     event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, Visual},
 };
 
+// TODO: Someone stupid and tired wrote this, please refactor.
 struct MathmlWriter<'a, I, W> {
     input: I,
     writer: W,
@@ -53,7 +54,7 @@ where
         }
 
         while let Some(event) = self.input.next() {
-            self.write_event(event)?;
+            self.write_event(event, false)?;
         }
         if let Some(annotation) = self.config.annotation {
             write!(
@@ -68,9 +69,7 @@ where
         Ok(())
     }
 
-    // TODO: Some complete dickhead wrote this, and now I need to change it.
-    // We shouldn't call `next`, we should handle a whole ass group if there is one.
-    fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
+    fn write_event(&mut self, event: Result<Event<'a>, E>, required: bool) -> io::Result<()> {
         // SAFETY: This function respects the invariants of the MathmlWriter
         match event {
             Ok(Event::Content(content)) => match content {
@@ -90,74 +89,19 @@ where
                     })?;
                     self.writer.write_all(b"</mn>")
                 }
-                Content::Identifier(ident) => {
-                    match ident {
-                        Identifier::Str(str) => {
-                            self.writer.write_all(if str.chars().count() == 1 {
-                                b"<mi mathvariant=\"normal\">"
-                            } else {
-                                b"<mi>"
-                            })?;
-                            self.writer.write_all(str.as_bytes())?;
-                        }
-                        Identifier::Char(content) => {
-                            let content = match (
-                                self.get_font()?,
-                                self.config.math_style.should_be_upright(content),
-                            ) {
-                                (Some(Font::UpRight), _) | (None, true) => {
-                                    self.writer.write_all(b"<mi mathvariant=\"normal\">")?;
-                                    content
-                                }
-                                (Some(font), _) => {
-                                    self.writer.write_all(b"<mi>")?;
-                                    font.map_char(content)
-                                }
-                                _ => {
-                                    self.writer.write_all(b"<mi>")?;
-                                    content
-                                }
-                            };
-
-                            let buf = &mut [0u8; 4];
-                            let bytes = content.encode_utf8(buf);
-                            self.writer.write_all(bytes.as_bytes())?;
-                        }
+                Content::Identifier(ident) => match ident {
+                    Identifier::Str(str) => {
+                        self.writer.write_all(if str.chars().count() == 1 {
+                            b"<mi mathvariant=\"normal\">"
+                        } else {
+                            b"<mi>"
+                        })?;
+                        self.writer.write_all(str.as_bytes())?;
+                        self.writer.write_all(b"</mi>")
                     }
-                    self.writer.write_all(b"</mi>")
-                }
-                Content::Operator(Operator {
-                    content,
-                    stretchy,
-                    deny_movable_limits,
-                    left_space,
-                    right_space,
-                    size,
-                }) => {
-                    self.writer.write_all(b"<mo")?;
-                    if let Some(stretchy) = stretchy {
-                        write!(self.writer, " stretchy=\"{}\"", stretchy)?;
-                    }
-                    if deny_movable_limits {
-                        self.writer.write_all(b" movablelimits=\"false\"")?;
-                    }
-                    if let Some(left_space) = left_space {
-                        write!(self.writer, " lspace=\"{}em\"", tex_to_css_em(left_space))?;
-                    }
-                    if let Some(right_space) = right_space {
-                        write!(self.writer, " rspace=\"{}em\"", tex_to_css_em(right_space))?;
-                    }
-                    if let Some(size) = size {
-                        let size = tex_to_css_em(size);
-                        write!(self.writer, " minsize=\"{}em\"", size)?;
-                        write!(self.writer, " maxsize=\"{}em\"", size)?;
-                    }
-                    self.writer.write_all(b">")?;
-                    let buf = &mut [0u8; 4];
-                    let bytes = content.encode_utf8(buf).as_bytes();
-                    self.writer.write_all(bytes)?;
-                    self.writer.write_all(b"</mo>")
-                }
+                    Identifier::Char(content) => self.write_char_ident(content, false),
+                },
+                Content::Operator(op) => self.write_operator(op, false),
             },
             Ok(Event::BeginGroup) => {
                 self.writer.write_all(b"<mrow>")?;
@@ -166,12 +110,13 @@ where
                         "unbalanced use of grouping in `FontChange` events, no font state found",
                     ))?);
                 loop {
-                    self.next_else("expected `EndGroup` event before the end of the input")?;
+                    let event =
+                        self.next_else("expected `EndGroup` event before the end of the input")?;
                     if event.as_ref().is_ok_and(|e| e == &Event::EndGroup) {
                         self.font_state.pop();
                         break;
                     }
-                    self.write_event(event)?;
+                    self.write_event(event, false)?;
                 }
                 self.writer.write_all(b"</mrow>")
             }
@@ -188,39 +133,44 @@ where
                     }
                     let err = "expected two elements after a `Fraction` event";
                     let first = self.next_else(err)?;
-                    self.write_event(first)?;
+                    self.write_event(first, true)?;
                     let second = self.next_else(err)?;
-                    self.write_event(second)?;
+                    self.write_event(second, true)?;
                     self.writer.write_all(b"</mfrac>")
                 }
                 Visual::SquareRoot => {
-                    let argument = self.next_else("expected an element after a `SquareRoot` event")?;
+                    let argument =
+                        self.next_else("expected an element after a `SquareRoot` event")?;
                     self.writer.write_all(b"<msqrt>")?;
-                    self.write_event(argument)?;
+                    self.write_event(argument, true)?;
                     self.writer.write_all(b"</msqrt>")
                 }
                 Visual::Root => {
                     let err = "expected two elements after a `Root` event";
                     self.writer.write_all(b"<mroot>")?;
                     let radicand = self.next_else(err)?;
-                    self.write_event(radicand)?;
+                    self.write_event(radicand, true)?;
                     let index = self.next_else(err)?;
-                    self.write_event(index)?;
+                    self.write_event(index, true)?;
                     self.writer.write_all(b"</mroot>")
                 }
                 Visual::Negation => {
                     let next = self.next_else("expected an element after a `Negation` event")?;
-                    if matches!(next, Ok(Event::Content(Content::Operator(_) | Content::Identifier(Identifier::Char(_))))) {
-                        todo!()
-                    } 
-                    todo!()
+                    match next {
+                        Ok(Event::Content(Content::Operator(op))) => self.write_operator(op, true),
+                        Ok(Event::Content(Content::Identifier(Identifier::Char(c)))) => {
+                            self.write_char_ident(c, true)
+                        }
+                        _ => {
+                            self.writer.write_all(b"<mrow style=\"background: linear-gradient(to top left, rgba(0,0,0,0) 0%, rgba(0,0,0,0) calc(50% - 0.8px), rgba(0,0,0,1) 50%, rgba(0,0,0,0) calc(50% + 0.8px), rgba(0,0,0,0) 100%);\">")?;
+                            self.write_event(next, true)?;
+                            self.writer.write_all(b"</mrow>")
+                        }
+                    }
                 }
             },
 
-            Ok(Event::Script {
-                ty,
-                position,
-            }) => {
+            Ok(Event::Script { ty, position }) => {
                 let above_below = match position {
                     ScriptPosition::Right => false,
                     ScriptPosition::AboveBelow => true,
@@ -231,63 +181,63 @@ where
                         let err = "expected two elements after a `Subscript` event";
                         self.writer.write_all(b"<msub>")?;
                         let base = self.next_else(err)?;
-                        self.write_event(base)?;
+                        self.write_event(base, true)?;
                         let subscript = self.next_else(err)?;
-                        self.write_event(subscript)?;
+                        self.write_event(subscript, true)?;
                         self.writer.write_all(b"</msub>")
                     }
                     (ScriptType::Superscript, false) => {
                         let err = "expected two elements after a `Superscript` event";
                         self.writer.write_all(b"<msup>")?;
                         let base = self.next_else(err)?;
-                        self.write_event(base)?;
+                        self.write_event(base, true)?;
                         let superscript = self.next_else(err)?;
-                        self.write_event(superscript)?;
+                        self.write_event(superscript, true)?;
                         self.writer.write_all(b"</msup>")
                     }
                     (ScriptType::SubSuperscript, false) => {
                         let err = "expected three elements after a `SubSuperscript` event";
                         self.writer.write_all(b"<msubsup>")?;
                         let base = self.next_else(err)?;
-                        self.write_event(base)?;
+                        self.write_event(base, true)?;
                         let subscript = self.next_else(err)?;
-                        self.write_event(subscript)?;
+                        self.write_event(subscript, true)?;
                         let superscript = self.next_else(err)?;
-                        self.write_event(superscript)?;
+                        self.write_event(superscript, true)?;
                         self.writer.write_all(b"</msubsup>")
                     }
                     (ScriptType::Subscript, true) => {
                         let err = "expected two elements after a `Undercript` event";
                         self.writer.write_all(b"<munder>")?;
                         let base = self.next_else(err)?;
-                        self.write_event(base)?;
+                        self.write_event(base, true)?;
                         let underscript = self.next_else(err)?;
-                        self.write_event(underscript)?;
+                        self.write_event(underscript, true)?;
                         self.writer.write_all(b"</munder>")
                     }
                     (ScriptType::Superscript, true) => {
                         let err = "expected two elements after a `Overscript` event";
                         self.writer.write_all(b"<mover>")?;
                         let base = self.next_else(err)?;
-                        self.write_event(base)?;
+                        self.write_event(base, true)?;
                         let overscript = self.next_else(err)?;
-                        self.write_event(overscript)?;
+                        self.write_event(overscript, true)?;
                         self.writer.write_all(b"</mover>")
                     }
                     (ScriptType::SubSuperscript, true) => {
                         let err = "expected three elements after a `UnderOver` event";
                         self.writer.write_all(b"<munderover>")?;
                         let base = self.next_else(err)?;
-                        self.write_event(base)?;
+                        self.write_event(base, true)?;
                         let underscript = self.next_else(err)?;
-                        self.write_event(underscript)?;
+                        self.write_event(underscript, true)?;
                         let overscript = self.next_else(err)?;
-                        self.write_event(overscript)?;
+                        self.write_event(overscript, true)?;
                         self.writer.write_all(b"</munderover>")
                     }
                 }
             }
-            
+
             Ok(Event::Space {
                 width,
                 height,
@@ -317,10 +267,10 @@ where
                     "unbalanced use of grouping in `FontChange` events, no font state found",
                 ))?;
                 *font_state = font;
-                let next_event = self.input.next().ok_or(io::Error::other(
-                    "missing following event in use of grouping in `FontChange` events",
-                ))?;
-                self.write_event(next_event)
+                if required {
+                    self.writer.write_all(b"<mrow />")?;
+                }
+                Ok(())
             }
             Err(e) => {
                 let error_color = self.config.error_color;
@@ -336,15 +286,85 @@ where
     }
 
     fn next_else(&mut self, err: &str) -> io::Result<Result<Event<'a>, E>> {
-        self.input.next().ok_or(io::Error::other(
-                err
-        ))
+        self.input.next().ok_or(io::Error::other(err))
     }
 
     fn get_font(&self) -> io::Result<Option<Font>> {
         self.font_state.last().copied().ok_or(io::Error::other(
             "unbalanced use of grouping in `FontChange` events, no font state found",
         ))
+    }
+
+    fn write_operator(
+        &mut self,
+        Operator {
+            content,
+            stretchy,
+            unicode_variant,
+            deny_movable_limits,
+            left_space,
+            right_space,
+            size,
+        }: Operator,
+        negate: bool,
+    ) -> io::Result<()> {
+        self.writer.write_all(b"<mo")?;
+        if let Some(stretchy) = stretchy {
+            write!(self.writer, " stretchy=\"{}\"", stretchy)?;
+        }
+        if deny_movable_limits {
+            self.writer.write_all(b" movablelimits=\"false\"")?;
+        }
+        if let Some(left_space) = left_space {
+            write!(self.writer, " lspace=\"{}em\"", tex_to_css_em(left_space))?;
+        }
+        if let Some(right_space) = right_space {
+            write!(self.writer, " rspace=\"{}em\"", tex_to_css_em(right_space))?;
+        }
+        if let Some(size) = size {
+            let size = tex_to_css_em(size);
+            write!(self.writer, " minsize=\"{}em\"", size)?;
+            write!(self.writer, " maxsize=\"{}em\"", size)?;
+        }
+        self.writer.write_all(b">")?;
+        let buf = &mut [0u8; 4];
+        let bytes = content.encode_utf8(buf).as_bytes();
+        self.writer.write_all(bytes)?;
+        if unicode_variant {
+            self.writer.write_all("\u{20D2}".as_bytes())?;
+        }
+        if negate {
+            self.writer.write_all("\u{0338}".as_bytes())?;
+        }
+        self.writer.write_all(b"</mo>")
+    }
+
+    fn write_char_ident(&mut self, content: char, negate: bool) -> io::Result<()> {
+        let content = match (
+            self.get_font()?,
+            self.config.math_style.should_be_upright(content),
+        ) {
+            (Some(Font::UpRight), _) | (None, true) => {
+                self.writer.write_all(b"<mi mathvariant=\"normal\">")?;
+                content
+            }
+            (Some(font), _) => {
+                self.writer.write_all(b"<mi>")?;
+                font.map_char(content)
+            }
+            _ => {
+                self.writer.write_all(b"<mi>")?;
+                content
+            }
+        };
+
+        let buf = &mut [0u8; 4];
+        let bytes = content.encode_utf8(buf);
+        self.writer.write_all(bytes.as_bytes())?;
+        if negate {
+            self.writer.write_all("\u{0338}".as_bytes())?;
+        }
+        self.writer.write_all(b"</mi>")
     }
 }
 
