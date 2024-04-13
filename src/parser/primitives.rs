@@ -111,7 +111,7 @@ impl<'a> Parser<'a> {
                     Instruction::Event(operator(op!(')'))),
                     Instruction::Event(Event::EndGroup),
                 ]);
-                return Ok(())
+                return Ok(());
             }
 
             // TODO: Operators with '*', for operatorname* and friends
@@ -217,18 +217,17 @@ impl<'a> Parser<'a> {
             // Symbols & Punctuation //
             ///////////////////////////
             // TODO: Handle dots operators correctly
-            "dots" => operator(op!('…')),
-            "cdots" => operator(op!('⋯')),
+            "dots" => match self.current_string() {
+                Some(curr_str) if curr_str.trim_start().starts_with(['.', ',']) => {
+                    operator(op!('…'))
+                }
+                _ => operator(op!('⋯')),
+            },
+            "ldots" | "dotso" | "dotsc" => operator(op!('…')),
+            "cdots" | "dotsi" | "dotsm" | "dotsb" | "idotsin" => operator(op!('⋯')),
             "ddots" => operator(op!('⋱')),
-            "ldots" => operator(op!('…')),
-            "vdots" => operator(op!('⋮')),
             "iddots" => operator(op!('⋰')),
-            "dotsb" => operator(op!('⋯')),
-            "dotsc" => operator(op!('…')),
-            "dotsi" => operator(op!('⋯')),
-            "dotsm" => operator(op!('⋯')),
-            "dotso" => operator(op!('…')),
-            "idotsin" => operator(op!('⋯')),
+            "vdots" => operator(op!('⋮')),
             "mathellipsis" => operator(op!('…')),
             "infty" => ident('∞'),
             "checkmark" => ident('✓'),
@@ -313,7 +312,7 @@ impl<'a> Parser<'a> {
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" => {
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" | "boldsymbol" => {
                 return self.font_group(Some(Font::Bold))
             }
             "mathcal" | "symcal" | "mathup" | "symup" => {
@@ -1124,11 +1123,10 @@ impl<'a> Parser<'a> {
             }
 
             "overset" => {
-                self.buffer
-                    .push(Instruction::Event(Event::Script {
-                        ty: ScriptType::Superscript,
-                        position: ScriptPosition::AboveBelow,
-                    }));
+                self.buffer.push(Instruction::Event(Event::Script {
+                    ty: ScriptType::Superscript,
+                    position: ScriptPosition::AboveBelow,
+                }));
                 let over = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
                 self.handle_argument(over)?;
                 let base = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
@@ -1136,11 +1134,10 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
             "underset" => {
-                self.buffer
-                    .push(Instruction::Event(Event::Script {
-                        ty: ScriptType::Subscript,
-                        position: ScriptPosition::AboveBelow,
-                    }));
+                self.buffer.push(Instruction::Event(Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::AboveBelow,
+                }));
                 let under = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
                 self.handle_argument(under)?;
                 let base = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;

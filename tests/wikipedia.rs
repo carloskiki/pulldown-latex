@@ -178,33 +178,168 @@ round_trip!(
     r"\O \empty"
 );
 
-// TODO: these ones
 round_trip!(
-    greek_uppercase,
-    r"
-\Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta
-\Iota \Kappa \Lambda \Mu \Nu \Xi \Omicron \Pi
-\Rho \Sigma \Tau \Upsilon \Phi \Chi \Psi \Omega
-        "
+    greek_alphabet,
+    r"\Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta",
+    r"\Iota \Kappa \Lambda \Mu \Nu \Xi \Omicron \Pi",
+    r"\Rho \Sigma \Tau \Upsilon \Phi \Chi \Psi \Omega",
+    r"\alpha \beta \gamma \delta \epsilon \zeta \eta \theta",
+    r"\iota \kappa \lambda \mu \nu \xi \omicron \pi",
+    r"\rho \sigma \tau \upsilon \phi \chi \psi \omega",
+    r"\varGamma \varDelta \varTheta \varLambda \varXi \varPi \varSigma \varPhi \varUpsilon \varOmega",
+    r"\varepsilon \digamma \varkappa \varpi \varrho \varsigma \vartheta \varphi"
+);
+
+round_trip!(hebrew_symbols, r"\aleph \beth \gimel \daleth");
+
+round_trip!(
+    blackboard_bold,
+    r"\mathbb{ABCDEFGHI}",
+    r"\mathbb{JKLMNOPQR}",
+    r"\mathbb{STUVWXYZ}"
 );
 
 round_trip!(
-    greek_lowercase,
-    r"
-\alpha \beta \gamma \delta \epsilon \zeta \eta \theta
-\iota \kappa \lambda \mu \nu \xi \omicron \pi
-\rho \sigma \tau \upsilon \phi \chi \psi \omega
-        "
+    boldface,
+    r"\mathbf{ABCDEFGHI}",
+    r"\mathbf{JKLMNOPQR}",
+    r"\mathbf{STUVWXYZ}",
+    r"\mathbf{abcdefghijklm}",
+    r"\mathbf{nopqrstuvwxyz}",
+    r"\mathbf{0123456789}"
 );
 
 round_trip!(
-    greek_uppercase_variants,
-    r"\varGamma \varDelta \varTheta \varLambda \varXi \varPi \varSigma \varUpsilon \varPhi \varPsi \varOmega"
+    boldface_greek,
+    r"\boldsymbol{\Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta}",
+    r"\boldsymbol{\Iota \Kappa \Lambda \Mu \Nu \Xi \Omicron \Pi}",
+    r"\boldsymbol{\Rho \Sigma \Tau \Upsilon \Phi \Chi \Psi \Omega}",
+    r"\boldsymbol{\alpha \beta \gamma \delta \epsilon \zeta \eta \theta}",
+    r"\boldsymbol{\iota \kappa \lambda \mu \nu \xi \omicron \pi}",
+    r"\boldsymbol{\rho \sigma \tau \upsilon \phi \chi \psi \omega}",
+    r"\boldsymbol{\varepsilon\digamma\varkappa\varpi}",
+    r"\boldsymbol{\varrho\varsigma\vartheta\varphi}"
+);
+
+round_trip!(italics, r"\mathit{0123456789}");
+
+round_trip!(
+    greek_italics,
+    r"\mathit{\Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta}",
+    r"\mathit{\Iota \Kappa \Lambda \Mu \Nu \Xi \Omicron \Pi}",
+    r"\mathit{\Rho \Sigma \Tau \Upsilon \Phi \Chi \Psi \Omega}"
 );
 
 round_trip!(
-    greek_lowercase_variants,
-    r"\varepsilon \vartheta \varkappa \varrho \varsigma \varpi \digamma \varphi"
+    greek_uppercase_boldface_italics,
+    r"\boldsymbol{\varGamma \varDelta \varTheta \varLambda}",
+    r"\boldsymbol{\varXi \varPi \varSigma \varUpsilon \varOmega}"
 );
 
+round_trip!(
+    roman_typeface,
+    r"\mathrm{ABCDEFGHI}",
+    r"\mathrm{JKLMNOPQR}",
+    r"\mathrm{STUVWXYZ}",
+    r"\mathrm{abcdefghijklm}",
+    r"\mathrm{nopqrstuvwxyz}",
+    r"\mathrm{0123456789}"
+);
 
+round_trip!(
+    sans_serif,
+    r"\mathsf{ABCDEFGHI}",
+    r"\mathsf{JKLMNOPQR}",
+    r"\mathsf{STUVWXYZ}",
+    r"\mathsf{abcdefghijklm}",
+    r"\mathsf{nopqrstuvwxyz}",
+    r"\mathsf{0123456789}"
+);
+
+round_trip!(
+    sans_serif_greek,
+    r"\mathsf{\Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta}",
+    r"\mathsf{\Iota \Kappa \Lambda \Mu \Nu \Xi \Omicron \Pi}",
+    r"\mathsf{\Rho \Sigma \Tau \Upsilon \Phi \Chi \Psi \Omega}"
+);
+
+round_trip!(
+    calligraphiy,
+    r"\mathcal{ABCDEFGHI}",
+    r"\mathcal{JKLMNOPQR}",
+    r"\mathcal{STUVWXYZ}",
+    r"\mathcal{abcdefghi}",
+    r"\mathcal{jklmnopqr}",
+    r"\mathcal{stuvwxyz}"
+);
+
+round_trip!(
+    fraktur,
+    r"\mathfrak{ABCDEFGHI}",
+    r"\mathfrak{JKLMNOPQR}",
+    r"\mathfrak{STUVWXYZ}",
+    r"\mathfrak{abcdefghijklm}",
+    r"\mathfrak{nopqrstuvwxyz}",
+    r"\mathfrak{0123456789}"
+);
+
+round_trip!(small_script, r"{\scriptstyle\text{abcdefghijklm}}");
+
+round_trip!(parentheses, r"\left ( \frac{a}{b} \right )");
+
+round_trip!(
+    brackets,
+    r"\left [ \frac{a}{b} \right ]",
+    r"\left \lbrack \frac{a}{b} \right \rbrack"
+);
+
+round_trip!(
+    braces,
+    r"\left \{ \frac{a}{b} \right \}",
+    r"\left \lbrace \frac{a}{b} \right \rbrace"
+);
+
+round_trip!(angle_brackets, r"\left \langle \frac{a}{b} \right \rangle");
+
+round_trip!(
+    bars_and_double_bars,
+    r"\left | \frac{a}{b} \right \vert",
+    r"\left \| \frac{a}{b} \right \Vert"
+);
+
+round_trip!(
+    floor_and_ceiling,
+    r"\left \lfloor \frac{a}{b} \right \rfloor",
+    r"\left \lceil \frac{a}{b} \right \rceil"
+);
+
+round_trip!(
+    slashes_and_backslashes,
+    r"\left / \frac{a}{b} \right \backslash"
+);
+
+round_trip!(
+    up_down_updown_arrows,
+    r"\left \uparrow \frac{a}{b} \right \downarrow",
+    r"\left \Uparrow \frac{a}{b} \right \Downarrow",
+    r"\left \updownarrow \frac{a}{b} \right \Updownarrow"
+);
+
+round_trip!(
+    mixed,
+    r"\left [ 0,1 \right )",
+    r"\left \langle \psi \right |"
+);
+
+round_trip!(no_delimiter, r"\left . \frac{A}{B} \right \} \to X");
+
+round_trip!(
+    delimiter_sizes,
+    r"( \bigl( \Bigl( \biggl( \Biggl( \dots \Biggr] \biggr] \Bigr] \bigr] ]",
+    r"\{ \bigl\{ \Bigl\{ \biggl\{ \Biggl\{ \dots \Biggr\rangle \biggr\rangle \Bigr\rangle \bigr\rangle \rangle",
+    r"\| \big\| \Big\| \bigg\| \Bigg\| \dots \Bigg| \bigg| \Big| \big| |",
+    r"\lfloor \bigl\lfloor \Bigl\lfloor \biggl\lfloor \Biggl\lfloor \dots \Biggr\rceil \biggr\rceil \Bigr\rceil \bigr\rceil \rceil",
+    r"\uparrow \big\uparrow \Big\uparrow \bigg\uparrow \Bigg\uparrow \dots \Bigg\Downarrow \bigg\Downarrow \Big\Downarrow \big\Downarrow \Downarrow",
+    r"\updownarrow \big\updownarrow \Big\updownarrow \bigg\updownarrow \Bigg\updownarrow \dots \Bigg\Updownarrow \bigg\Updownarrow \Big\Updownarrow \big\Updownarrow \Updownarrow",
+    r"/ \big/ \Big/ \bigg/ \Bigg/ \dots \Bigg\backslash \bigg\backslash \Big\backslash \big\backslash \backslash"
+);

@@ -34,12 +34,12 @@ these versions specifically.
 ## TODOs
 
 ### To Test
-- [ ] Moving suffixes: `\limits`, `\nolimits`.
-
 - [ ] Document the algorithm behind the Parser.
+- [X] Moving suffixes: `\limits`, `\nolimits`.
+- [ ] `\sideset` command (using `mmultiscripts`?)
+- [ ] Changing text size (e.g., `\displaystyle`, `\scriptstyle`, etc.)
+- [ ] Add support for structured math environments (e.g., `align*`, `array`, `matrix`, etc.).
 - [ ] Cargo Mutants
-- [ ] Have a correct implementation of all `amsmath` and `latex2e` math primitives.
-- [ ] Add support for structured math environments.
 
 ## Unsupported Plain-TeX & LaTeX behavior
 
