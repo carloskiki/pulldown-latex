@@ -3,7 +3,7 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, Visual},
+    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, StateChange, Visual},
 };
 
 use super::{
@@ -64,6 +64,7 @@ impl<'a> Parser<'a> {
 
             c if is_char_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => Event::Content(Content::Operator(op!(c))),
+            
             '0'..='9' => Event::Content(Content::Number(token.as_str())),
             c => ident(c),
         });
@@ -216,7 +217,6 @@ impl<'a> Parser<'a> {
             ///////////////////////////
             // Symbols & Punctuation //
             ///////////////////////////
-            // TODO: Handle dots operators correctly
             "dots" => match self.current_string() {
                 Some(curr_str) if curr_str.trim_start().starts_with(['.', ',']) => {
                     operator(op!('…'))
@@ -1209,9 +1209,19 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
 
-            // TODO: This shit
-            "begingroup" => Event::BeginGroup,
-            "endgroup" => Event::EndGroup,
+            "begingroup" => {
+                let str = self
+                    .current_string()
+                    .ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::BeginGroup)))?;
+                let group = lex::group_content(str, "begingroup", "endgroup")?;
+                self.buffer.extend([
+                    Instruction::Event(Event::BeginGroup),
+                    Instruction::Substring(group),
+                    Instruction::Event(Event::EndGroup),
+                ]);
+                return Ok(());
+            }
+            "endgroup" => return Err(ErrorKind::UnbalancedGroup(None)),
 
             // Delimiters
             cs if control_sequence_delimiter_map(cs).is_some() => {
@@ -1250,7 +1260,7 @@ impl<'a> Parser<'a> {
         let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
         self.buffer.extend([
             Instruction::Event(Event::BeginGroup),
-            Instruction::Event(Event::FontChange(font)),
+            Instruction::Event(Event::StateChange(StateChange::Font(font))),
         ]);
         match argument {
             Argument::Token(token) => {
@@ -1307,7 +1317,7 @@ impl<'a> Parser<'a> {
 
 #[inline]
 fn font_override(font: Font) -> Event<'static> {
-    Event::FontChange(Some(font))
+    Event::StateChange(StateChange::Font(Some(font)))
 }
 
 #[inline]

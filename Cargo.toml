@@ -1,7 +1,7 @@
 [package]
 name = "pulldown-latex"
 version = "0.1.0"
-authors = ["Charles Edward Gagnon <charlesedgagnon@gmail.com>"]
+authors = ["Charles Edward Gagnon"]
 edition = "2021"
 description = "Pull parser to convert LaTeX equations to MathML"
 repository = "https://github.com/Carlosted/pulldown-latex"
@@ -13,5 +13,15 @@ categories = ["science"]
 [dependencies]
 thiserror = "1.0.57"
 
+[dev-dependencies]
+libtest-mimic = "0.7"
+heck = "0.5"
+inventory = "0.3"
+
 [[example]]
 name = "write_to_string"
+
+[[test]]
+name = "wikipedia"
+path = "tests/wikipedia.rs"
+harness = false

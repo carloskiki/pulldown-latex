@@ -1,3 +1,8 @@
+//! A simple `mathml` renderer.
+//!
+//! This crate provides a "simple" `mathml` renderer which is available through the
+//! [`push_mathml`] and [`write_mathml`] functions.
+
 use std::io;
 
 use crate::{
@@ -131,6 +136,7 @@ where
                     if let Some(dim) = dim {
                         write!(self.writer, " linethickness=\"{}em\"", tex_to_css_em(dim))?;
                     }
+                    self.writer.write_all(b">")?;
                     let err = "expected two elements after a `Fraction` event";
                     let first = self.next_else(err)?;
                     self.write_event(first, true)?;
@@ -262,15 +268,16 @@ where
                 self.writer.write_all(b" />")
             }
             // TODO: This is not okay, it does not work
-            Ok(Event::FontChange(font)) => {
-                let font_state = self.font_state.last_mut().ok_or(io::Error::other(
-                    "unbalanced use of grouping in `FontChange` events, no font state found",
-                ))?;
-                *font_state = font;
-                if required {
-                    self.writer.write_all(b"<mrow />")?;
-                }
-                Ok(())
+            Ok(Event::StateChange(state_change)) => {
+                todo!()
+                // let font_state = self.font_state.last_mut().ok_or(io::Error::other(
+                //     "unbalanced use of grouping in `FontChange` events, no font state found",
+                // ))?;
+                // *font_state = font;
+                // if required {
+                //     self.writer.write_all(b"<mrow />")?;
+                // }
+                // Ok(())
             }
             Err(e) => {
                 let error_color = self.config.error_color;
@@ -370,6 +377,8 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders a
 /// string of MathML into the given string.
+///
+/// [`Parser`]: crate::parser::Parser
 pub fn push_mathml<'a, I, E>(
     string: &mut String,
     parser: I,
@@ -385,6 +394,8 @@ where
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders the
 /// MathML into the given writer.
+///
+/// [`Parser`]: crate::parser::Parser
 pub fn write_mathml<'a, I, W, E>(writer: W, parser: I, config: RenderConfig<'a>) -> io::Result<()>
 where
     I: Iterator<Item = Result<Event<'a>, E>>,
