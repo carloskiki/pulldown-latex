@@ -488,6 +488,8 @@ pub(crate) enum ErrorKind {
     EmptyControlSequence,
     #[error("unkown color. colors must either be predefined or in the form `#RRGGBB`")]
     UnknownColor,
+    #[error("expected a number in the range 0..=255 for it to be translated into a character")]
+    InvalidCharNumber,
 }
 
 #[cfg(test)]

@@ -288,13 +288,19 @@ pub fn dimension_unit(input: &mut &str) -> InnerResult<DimensionUnit> {
 pub fn integer(input: &mut &str) -> InnerResult<isize> {
     let signum = signs(input)?;
 
+    let unsigned_int = unsigned_integer(input)?;
+
+    Ok(unsigned_int as isize * signum)
+}
+
+pub fn unsigned_integer(input: &mut &str) -> InnerResult<usize> {
     // The following character must be ascii.
     let next_char = input.chars().next().ok_or(ErrorKind::EndOfInput)?;
     if next_char.is_ascii_digit() {
-        return Ok(decimal(input) as isize * signum);
+        return Ok(decimal(input));
     }
     *input = &input[1..];
-    let unsigned_int = match next_char {
+    match next_char {
         '`' => {
             let mut next_byte = *input.as_bytes().first().ok_or(ErrorKind::EndOfInput)?;
             if next_byte == b'\\' {
@@ -303,17 +309,15 @@ pub fn integer(input: &mut &str) -> InnerResult<isize> {
             }
             if next_byte.is_ascii() {
                 *input = &input[1..];
-                next_byte as usize
+                Ok(next_byte as usize)
             } else {
-                return Err(ErrorKind::CharacterNumber);
+                Err(ErrorKind::CharacterNumber)
             }
         }
-        '\'' => octal(input),
-        '"' => hexadecimal(input),
-        _ => return Err(ErrorKind::Number),
-    };
-
-    Ok(unsigned_int as isize * signum)
+        '\'' => Ok(octal(input)),
+        '"' => Ok(hexadecimal(input)),
+        _ => Err(ErrorKind::Number),
+    }
 }
 
 /// Parse the signs in front of a number, returning the signum.

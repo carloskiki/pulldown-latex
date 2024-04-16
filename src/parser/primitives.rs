@@ -1282,6 +1282,15 @@ impl<'a> Parser<'a> {
                 self.handle_argument(argument)?;
                 return Ok(());
             }
+            "char" => {
+                let number = lex::unsigned_integer(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                if number > 255 {
+                    return Err(ErrorKind::InvalidCharNumber);
+                }
+                Event::Content(Content::Identifier(Identifier::Char(
+                                char::from_u32(number as u32).expect("the number is a valid char since it is less than 256")
+                                )))
+            },
 
             "begingroup" => {
                 let str = self
@@ -1426,7 +1435,6 @@ fn operator(operator: Operator) -> Event<'static> {
 // `sc` (small caps) font: https://tug.org/texinfohtml/latex2e.html#index-_005csc
 // - `relax`
 // - `raise`, `lower`
-// - `char`
 // - `hbox`, `mbox`?
 // - `vcenter`
 // - `rule`
