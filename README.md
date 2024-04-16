@@ -32,12 +32,11 @@ these versions specifically.
 - [Math Variant Selection](https://milde.users.sourceforge.net/LUCR/Math/math-font-selection.xhtml#math-styles)
 
 ## TODOs
-
-- [X] Moving suffixes: `\limits`, `\nolimits`.
-steps:
+1. State Changes
     - [ ] Styles (text, script, etc.)
     - [ ] Colors
 2. Quirky commands
+    - [X] Moving suffixes: `\limits`, `\nolimits`.
     - [ ] in primitive file
     - [ ] `\sideset` command (using `mmultiscripts`?)
 3. More complete renderer
