@@ -198,6 +198,7 @@ impl<'a> Parser<'a> {
     fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
         match argument {
             Argument::Token(token) => {
+                self.state.invalidate_relax = true;
                 match token {
                     Token::ControlSequence(cs) => self.handle_primitive(cs)?,
                     Token::Character(c) => self.handle_char_token(c)?,
@@ -490,6 +491,8 @@ pub(crate) enum ErrorKind {
     UnknownColor,
     #[error("expected a number in the range 0..=255 for it to be translated into a character")]
     InvalidCharNumber,
+    #[error("cannot use the `\\relax` command in this context")]
+    Relax,
 }
 
 #[cfg(test)]

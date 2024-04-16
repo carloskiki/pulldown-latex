@@ -37,11 +37,14 @@ these versions specifically.
     - [X] Colors
 2. Quirky commands
     - [X] Moving suffixes: `\limits`, `\nolimits`.
-    - [ ] things in primitive file
-    - [ ] `\sideset` command (using `mmultiscripts`?)
+    - [X] `\relax`
+    - [X] `\char`
 3. More complete renderer
 4. Rigorous trim start of strings
 5. Math environments
+6. Even more Quirky Stuff
+    - [ ] `\sideset` command (using `mmultiscripts`?)
+    - [ ] things at the bottom of primitive file in comments
 
 ### To Test
 - [ ] All the things temml and katex test

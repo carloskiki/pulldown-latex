@@ -7,7 +7,9 @@ pub struct ParserState {
     /// Whether the suffixes of the operator are set above and below the operator by default.
     pub above_below_suffix_default: bool,
     /// Whether the parser should skip suffix parsing for the current event.
-    pub skip_suffixes: bool
+    pub skip_suffixes: bool,
+    /// Whether we can parse the `\relax` command.
+    pub invalidate_relax: bool,
 }
 
 impl Default for ParserState {
@@ -15,7 +17,8 @@ impl Default for ParserState {
         Self {
             allow_suffix_modifiers: false,
             above_below_suffix_default: false,
-            skip_suffixes: false
+            skip_suffixes: false,
+            invalidate_relax: false,
         }
     }
 }

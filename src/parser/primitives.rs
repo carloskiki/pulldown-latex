@@ -1291,6 +1291,13 @@ impl<'a> Parser<'a> {
                                 char::from_u32(number as u32).expect("the number is a valid char since it is less than 256")
                                 )))
             },
+            "relax" => {
+                return if self.state.invalidate_relax {
+                    Err(ErrorKind::Relax)
+                } else {
+                    Ok(())
+                }
+            }
 
             "begingroup" => {
                 let str = self
@@ -1432,17 +1439,15 @@ fn operator(operator: Operator) -> Event<'static> {
 }
 
 // TODO implementations:
-// `sc` (small caps) font: https://tug.org/texinfohtml/latex2e.html#index-_005csc
-// - `relax`
 // - `raise`, `lower`
 // - `hbox`, `mbox`?
 // - `vcenter`
 // - `rule`
 // - `math_` atoms
 // - `mathchoice` (TeXbook p. 151)
-// - `displaystyle`, `textstyle`, `scriptstyle`, `scriptscriptstyle`
 
 // Unimplemented primitives:
 // `sl` (slanted) font: https://tug.org/texinfohtml/latex2e.html#index-_005csl
 // `bbit` (double-struck italic) font
 // `symliteral` wtf is this? (in unicode-math)
+// `sc` (small caps) font: https://tug.org/texinfohtml/latex2e.html#index-_005csc
