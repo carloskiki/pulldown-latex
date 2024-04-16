@@ -486,6 +486,8 @@ pub(crate) enum ErrorKind {
     ControlSequenceAsArgument,
     #[error("enpty control sequence")]
     EmptyControlSequence,
+    #[error("unkown color. colors must either be predefined or in the form `#RRGGBB`")]
+    UnknownColor,
 }
 
 #[cfg(test)]

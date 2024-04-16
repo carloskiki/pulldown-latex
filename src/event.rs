@@ -45,7 +45,7 @@ pub enum Event<'a> {
     /// This event specifies a state change in the renderer.
     ///
     /// This state change only applies to the current group nesting and deeper groups.
-    StateChange(StateChange),
+    StateChange(StateChange<'a>),
 }
 
 /// Base events that produce `mathml` nodes
@@ -145,14 +145,14 @@ pub enum ScriptPosition {
 ///
 /// State changes take effect for the current group nesting and all deeper groups.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum StateChange {
+pub enum StateChange<'a> {
     /// Changes the font of the content.
     ///
     /// If the font is `None`, then the default renderer font is used, otherwise the font is set to
     /// the specified font.
     Font(Option<Font>),
     /// Changes the color of the content.
-    Color(Option<&'static str>),
+    Color(ColorChange<'a>),
     /// Changes the style of the content (mostly affects the sizing of the content).
     Style(Style),
 }
@@ -167,4 +167,26 @@ pub enum Style {
     Text,
     Script,
     ScriptScript,
+}
+
+/// Represents a color change in the renderer.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct ColorChange<'a> {
+    /// The color to change to.
+    ///
+    /// A string that represents the color to change to, either as a hex code in the form #RRGGBB,
+    /// or as one of the color names existing as part of CSS3 (e.g., "red").
+    pub color: &'a str,
+    /// The target of the color change.
+    ///
+    /// Specifies which part of the content to change the color of.
+    pub target: ColorTarget,
+}
+
+/// The target of the color change.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ColorTarget {
+    Text,
+    Background,
+    Border,
 }

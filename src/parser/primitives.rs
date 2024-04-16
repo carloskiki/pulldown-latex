@@ -3,12 +3,12 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, StateChange, Style, Visual},
+    event::{ColorChange, ColorTarget, Content, Event, Identifier, Operator, ScriptPosition, ScriptType, StateChange, Style, Visual},
 };
 
 use super::{
     lex,
-    tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator},
+    tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator, is_primitive_color},
     Argument, CharToken, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
 };
 
@@ -343,10 +343,81 @@ impl<'a> Parser<'a> {
             ////////////////////////
             // Color state change //
             ////////////////////////
-            "color" => todo!(),
-            "textcolor" => todo!(),
-            "colorbox" => todo!(),
-            "fcolorbox" => todo!(),
+            "color" => {
+                let Argument::Group(color) =
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                else {
+                    return Err(ErrorKind::Argument);
+                };
+                self.state.skip_suffixes = true;
+                
+                if !is_primitive_color(color) {
+                    return Err(ErrorKind::UnknownColor);
+                }
+                Event::StateChange(StateChange::Color(ColorChange {
+                    color,
+                    target: ColorTarget::Text,
+                }))
+            },
+            "textcolor" => {
+                let Argument::Group(color) =
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                else {
+                    return Err(ErrorKind::Argument);
+                };
+                
+                if !is_primitive_color(color) {
+                    return Err(ErrorKind::UnknownColor);
+                }
+                let modified = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+
+                self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                    color,
+                    target: ColorTarget::Text,
+                })))]);
+                self.handle_argument(modified)?;
+                Event::EndGroup
+            }
+            "colorbox" => {
+                let Argument::Group(color) =
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                else {
+                    return Err(ErrorKind::Argument);
+                };
+                if !is_primitive_color(color) {
+                    return Err(ErrorKind::UnknownColor);
+                }
+                self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                    color,
+                    target: ColorTarget::Background,
+                })))]);
+                self.text_argument()?;
+                Event::EndGroup
+            }
+            "fcolorbox" => {
+                let Argument::Group(frame_color) =
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                else {
+                    return Err(ErrorKind::Argument);
+                };
+                let Argument::Group(background_color) =
+                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                else {
+                    return Err(ErrorKind::Argument);
+                };
+                if !is_primitive_color(frame_color) || !is_primitive_color(background_color) {
+                    return Err(ErrorKind::UnknownColor);
+                }
+                self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                    color: frame_color,
+                    target: ColorTarget::Text,
+                }))), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                    color: background_color,
+                    target: ColorTarget::Background,
+                })))]);
+                self.text_argument()?;
+                Event::EndGroup
+            },
 
             ///////////////////////////////
             // Delimiters size modifiers //
@@ -1203,18 +1274,7 @@ impl<'a> Parser<'a> {
                     .expect("the control sequence contains one of the matched characters"),
             ),
             "|" => operator(op!('∥', {stretchy: Some(false)})),
-            "text" => {
-                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-                self.buffer
-                    .push(Instruction::Event(Event::Content(Content::Text(
-                        match argument {
-                            Argument::Token(Token::Character(c)) => c.as_str(),
-                            Argument::Group(inner) => inner,
-                            _ => return Err(ErrorKind::ControlSequenceAsArgument),
-                        },
-                    ))));
-                return Ok(());
-            }
+            "text" => return self.text_argument(),
             "not" => {
                 self.buffer
                     .push(Instruction::Event(Event::Visual(Visual::Negation)));
@@ -1336,6 +1396,19 @@ impl<'a> Parser<'a> {
     fn style_change(&mut self, style: Style) -> Event<'a> {
         self.state.skip_suffixes = true;
         Event::StateChange(StateChange::Style(style))
+    }
+
+    fn text_argument(&mut self) -> InnerResult<()> {
+        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        self.buffer
+            .push(Instruction::Event(Event::Content(Content::Text(
+                match argument {
+                    Argument::Token(Token::Character(c)) => c.as_str(),
+                    Argument::Group(inner) => inner,
+                    _ => return Err(ErrorKind::ControlSequenceAsArgument),
+                },
+            ))));
+        return Ok(());
     }
 }
 

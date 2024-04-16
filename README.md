@@ -34,7 +34,7 @@ these versions specifically.
 ## TODOs
 1. State Changes
     - [X] Styles (text, script, etc.)
-    - [ ] Colors
+    - [X] Colors
 2. Quirky commands
     - [X] Moving suffixes: `\limits`, `\nolimits`.
     - [ ] things in primitive file
