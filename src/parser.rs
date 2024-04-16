@@ -89,6 +89,10 @@ impl<'a> Parser<'a> {
     ///
     /// Follows the design decisions described in [`design/suffixes.md`].
     fn check_suffixes(&mut self) -> InnerResult<Option<Event<'a>>> {
+        if self.state.skip_suffixes {
+            return Ok(None)
+        }
+        
         let mut script_position = if self.state.above_below_suffix_default {
             ScriptPosition::Movable
         } else {

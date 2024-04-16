@@ -6,6 +6,8 @@ pub struct ParserState {
     pub allow_suffix_modifiers: bool,
     /// Whether the suffixes of the operator are set above and below the operator by default.
     pub above_below_suffix_default: bool,
+    /// Whether the parser should skip suffix parsing for the current event.
+    pub skip_suffixes: bool
 }
 
 impl Default for ParserState {
@@ -13,6 +15,7 @@ impl Default for ParserState {
         Self {
             allow_suffix_modifiers: false,
             above_below_suffix_default: false,
+            skip_suffixes: false
         }
     }
 }

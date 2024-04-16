@@ -33,14 +33,15 @@ these versions specifically.
 
 ## TODOs
 1. State Changes
-    - [ ] Styles (text, script, etc.)
+    - [X] Styles (text, script, etc.)
     - [ ] Colors
 2. Quirky commands
     - [X] Moving suffixes: `\limits`, `\nolimits`.
-    - [ ] in primitive file
+    - [ ] things in primitive file
     - [ ] `\sideset` command (using `mmultiscripts`?)
 3. More complete renderer
-4. Math environments
+4. Rigorous trim start of strings
+5. Math environments
 
 ### To Test
 - [ ] All the things temml and katex test

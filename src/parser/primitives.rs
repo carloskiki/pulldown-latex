@@ -3,7 +3,7 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, StateChange, Visual},
+    event::{Content, Event, Identifier, Operator, ScriptPosition, ScriptType, StateChange, Style, Visual},
 };
 
 use super::{
@@ -28,8 +28,6 @@ macro_rules! op {
         }
     };
 }
-
-// NOTE/TODO: Currently, things like `\it_a` do not error.
 
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
@@ -302,12 +300,12 @@ impl<'a> Parser<'a> {
             // Font state changes //
             ////////////////////////
             // LaTeX native absolute font changes (old behavior a.k.a NFSS 1)
-            "bf" => font_override(Font::Bold),
-            "cal" => font_override(Font::Script),
-            "it" => font_override(Font::Italic),
-            "rm" => font_override(Font::UpRight),
-            "sf" => font_override(Font::SansSerif),
-            "tt" => font_override(Font::Monospace),
+            "bf" => self.font_change(Font::Bold),
+            "cal" => self.font_change(Font::Script),
+            "it" => self.font_change(Font::Italic),
+            "rm" => self.font_change(Font::UpRight),
+            "sf" => self.font_change(Font::SansSerif),
+            "tt" => self.font_change(Font::Monospace),
             // amsfonts font changes (old behavior a.k.a NFSS 1)
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
@@ -334,9 +332,25 @@ impl<'a> Parser<'a> {
             "mathbfsfit" | "symbfsfit" => return self.font_group(Some(Font::SansSerifBoldItalic)),
             "mathnormal" | "symnormal" => return self.font_group(None),
 
-            //////////////////////////////
+            ////////////////////////
+            // Style state change //
+            ////////////////////////
+            "displaystyle" => self.style_change(Style::Display),
+            "textstyle" => self.style_change(Style::Text),
+            "scriptstyle" => self.style_change(Style::Script),
+            "scriptscriptstyle" => self.style_change(Style::ScriptScript),
+
+            ////////////////////////
+            // Color state change //
+            ////////////////////////
+            "color" => todo!(),
+            "textcolor" => todo!(),
+            "colorbox" => todo!(),
+            "fcolorbox" => todo!(),
+
+            ///////////////////////////////
             // Delimiters size modifiers //
-            //////////////////////////////
+            ///////////////////////////////
             // Sizes taken from `texzilla`
             // Big left and right seem to not care about which delimiter is used. i.e., \bigl) and \bigr) are the same.
             "big" | "bigl" | "bigr" | "bigm" => return self.em_sized_delim(1.2),
@@ -1313,11 +1327,16 @@ impl<'a> Parser<'a> {
         self.state.above_below_suffix_default = above_below;
         operator(op)
     }
-}
 
-#[inline]
-fn font_override(font: Font) -> Event<'static> {
-    Event::StateChange(StateChange::Font(Some(font)))
+    fn font_change(&mut self, font: Font) -> Event<'a> {
+        self.state.skip_suffixes = true;
+        Event::StateChange(StateChange::Font(Some(font)))
+    }
+
+    fn style_change(&mut self, style: Style) -> Event<'a> {
+        self.state.skip_suffixes = true;
+        Event::StateChange(StateChange::Style(style))
+    }
 }
 
 #[inline]
