@@ -33,13 +33,20 @@ these versions specifically.
 
 ## TODOs
 
-### To Test
 - [X] Moving suffixes: `\limits`, `\nolimits`.
-- [ ] Changing text size (e.g., `\displaystyle`, `\scriptstyle`, etc.)
-- [ ] Add support for structured math environments (e.g., `align*`, `array`, `matrix`, etc.).
+steps:
+    - [ ] Styles (text, script, etc.)
+    - [ ] Colors
+2. Quirky commands
+    - [ ] in primitive file
+    - [ ] `\sideset` command (using `mmultiscripts`?)
+3. More complete renderer
+4. Math environments
+
+### To Test
+- [ ] All the things temml and katex test
 - [ ] Cargo Mutants
-- [ ] `\sideset` command (using `mmultiscripts`?)
-- [ ] Document things.
+- [ ] Errors
 
 ## Unsupported Plain-TeX & LaTeX behavior
 

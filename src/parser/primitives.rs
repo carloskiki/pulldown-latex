@@ -1332,7 +1332,6 @@ fn operator(operator: Operator) -> Event<'static> {
 
 // TODO implementations:
 // `sc` (small caps) font: https://tug.org/texinfohtml/latex2e.html#index-_005csc
-// `bmod`, `pod`, `pmod`, `centerdot`
 // - `relax`
 // - `raise`, `lower`
 // - `char`
@@ -1340,7 +1339,6 @@ fn operator(operator: Operator) -> Event<'static> {
 // - `vcenter`
 // - `rule`
 // - `math_` atoms
-// - `limits`, `nolimits` (only after Op)
 // - `mathchoice` (TeXbook p. 151)
 // - `displaystyle`, `textstyle`, `scriptstyle`, `scriptscriptstyle`
 
