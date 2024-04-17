@@ -20,7 +20,7 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `Katex` 
 
 ## Miscellaneous References & Tools
 Sources used during the development of this crate. Any reference in code comments refer to
-these versions specifically.
+these links specifically.
 
 - [TeXBook](https://visualmatheditor.equatheque.net/doc/texbook.pdf)
 - [latex2e unofficial Reference](https://tug.org/texinfohtml/latex2e.html)
@@ -42,7 +42,7 @@ these versions specifically.
 3. More complete renderer
 4. Rigorous trim start of strings
 5. Math environments
-6. Even more Quirky Stuff
+6. Even more quirky stuff
     - [ ] `\sideset` command (using `mmultiscripts`?)
     - [ ] things at the bottom of primitive file in comments
 
@@ -83,7 +83,6 @@ these versions specifically.
 
 
 ### Things that should work but don't currently
-
 Splitting groupings within user defined macros. E.g.,
 ```
 \def\abc{\left(}
