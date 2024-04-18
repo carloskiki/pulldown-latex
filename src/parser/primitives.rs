@@ -1424,7 +1424,7 @@ impl<'a> Parser<'a> {
                     _ => return Err(ErrorKind::ControlSequenceAsArgument),
                 },
             ))));
-        return Ok(());
+        Ok(())
     }
 }
 
