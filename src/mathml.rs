@@ -184,12 +184,7 @@ where
                         let buf = &mut [0u8; 4];
                         let bytes = content.encode_utf8(buf);
                         self.writer.write_all(bytes.as_bytes())?;
-                        if self
-                            .env_stack
-                            .last()
-                            .expect("environment stack is empty")
-                            .env
-                            == EnvironmentType::Negate
+                        if self.env_stack.last().map(|env| env.env) == Some(EnvironmentType::Negate)
                         {
                             self.writer.write_all("\u{0338}".as_bytes())?;
                             self.env_stack.pop();
@@ -231,13 +226,7 @@ where
                     if unicode_variant {
                         self.writer.write_all("\u{20D2}".as_bytes())?;
                     }
-                    if self
-                        .env_stack
-                        .last()
-                        .expect("environment stack is empty")
-                        .env
-                        == EnvironmentType::Negate
-                    {
+                    if self.env_stack.last().map(|env| env.env) == Some(EnvironmentType::Negate) {
                         self.writer.write_all("\u{0338}".as_bytes())?;
                         self.env_stack.pop();
                     }
@@ -245,11 +234,22 @@ where
                 }
             },
             Ok(Event::BeginGroup) => {
-                // TODO: Check for state changes at the begining of a group which could be
-                // optimized out into the initial elements' attributes.
-                self.open_tag("mrow", None, true)?;
+                let mut font = self.state().font;
+                let old_state = self.state_stack.last_mut().expect("state stack is empty");
+                while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
+                    match state_change {
+                        StateChange::Font(new_font) => font = *new_font,
+                        StateChange::Color(ColorChange { color, target }) => match target {
+                            ColorTarget::Text => old_state.text_color = Some(color),
+                            ColorTarget::Background => old_state.background_color = Some(color),
+                            ColorTarget::Border => old_state.border_color = Some(color),
+                        },
+                        StateChange::Style(style) => old_state.style = Some(*style),
+                    }
+                    self.input.next();
+                }
                 self.state_stack.push(State {
-                    font: self.state().font,
+                    font,
                     text_color: None,
                     border_color: None,
                     background_color: None,
@@ -257,7 +257,7 @@ where
                 });
                 self.env_stack
                     .push(Environment::new(EnvironmentType::Group));
-                Ok(())
+                self.open_tag("mrow", None, true)
             }
             Ok(Event::EndGroup) => {
                 let env = self
@@ -383,14 +383,13 @@ where
             self.write_event(event)?;
 
             if let Some(Environment { env, count }) = self.env_stack.last_mut() {
-                if let Some(count) = count.as_mut() {
+                if *count == Some(0) {
+                    self.writer.write_all(b"</")?;
+                    self.writer.write_all(env.tag().as_bytes())?;
+                    self.writer.write_all(b">")?;
+                    self.env_stack.pop();
+                } else if let Some(count) = count {
                     *count -= 1;
-                    if *count == 0 {
-                        self.writer.write_all(b"</")?;
-                        self.writer.write_all(env.tag().as_bytes())?;
-                        self.writer.write_all(b">")?;
-                        self.env_stack.pop();
-                    }
                 }
             }
         }
