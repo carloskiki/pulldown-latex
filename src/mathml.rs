@@ -379,6 +379,20 @@ where
         // - using `write!` with a utf-8 string, and the parameters must all be valid utf-8 since
         //      they are formatted using the `Display` trait.
 
+        write!(
+            self.writer,
+            "<math display=\"{}\"",
+            self.config.display_mode
+        )?;
+        if self.config.xml {
+            self.writer
+                .write_all(b" xmlns=\"http://www.w3.org/1998/Math/MathML\"")?;
+        }
+        self.writer.write_all(b">")?;
+        if self.config.annotation.is_some() {
+            self.writer.write_all(b"<semantics>")?;
+        }
+
         while let Some(event) = self.input.next() {
             self.write_event(event)?;
 
@@ -397,9 +411,17 @@ where
             eprintln!("{:?}", self.env_stack);
             eprintln!("{:?}", self.state_stack);
             panic!("unbalanced environment stack or state stack");
-        } else {
-            Ok(())
+        } 
+        
+        if let Some(annotation) = self.config.annotation {
+            write!(
+                self.writer,
+                "<annotation encoding=\"application/x-tex\">{}</annotation>",
+                annotation
+            )?;
+            self.writer.write_all(b"</semantics>")?;
         }
+        self.writer.write_all(b"</math>")
     }
 }
 
