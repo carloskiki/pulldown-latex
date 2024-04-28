@@ -3,7 +3,7 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::{ColorChange, ColorTarget, Content, Event, Identifier, Operator, ScriptPosition, ScriptType, StateChange, Style, Visual},
+    event::*,
 };
 
 use super::{

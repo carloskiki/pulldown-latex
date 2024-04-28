@@ -14,9 +14,13 @@ categories = ["science"]
 thiserror = "1.0.57"
 
 [dev-dependencies]
+anyhow = "1"
 libtest-mimic = "0.7"
 heck = "0.5"
 inventory = "0.3"
+tempfile = "3"
+fantoccini = "0.19"
+tokio = { version = "1", features = ["test-util", "rt-multi-thread", "process", "fs"] }
 
 [[example]]
 name = "write_to_string"
@@ -24,4 +28,9 @@ name = "write_to_string"
 [[test]]
 name = "wikipedia"
 path = "tests/wikipedia.rs"
+harness = false
+
+[[test]]
+name = "cross-browser"
+path = "tests/cross-browser.rs"
 harness = false

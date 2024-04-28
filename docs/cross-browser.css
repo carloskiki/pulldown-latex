@@ -1,0 +1,22 @@
+body {
+    width: fit-content;
+}
+
+.chrome-img {
+    display: block;
+    margin: 0 2.5em;
+}
+
+.safari-img {
+    width: 50%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}
+
+.firefox-img {
+    width: 50%;
+    height: auto;
+    display: block;
+    margin: 0 auto;
+}

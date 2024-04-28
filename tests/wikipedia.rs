@@ -1,8 +1,16 @@
+use std::{fs::File, path::Path};
+
+use common::{html_template, tabled, OUTPUT_DIR};
+
 mod common;
 
-
 fn main() {
-    common::test()
+    let concl = common::test();
+
+    let mut file = File::create(Path::new(OUTPUT_DIR).join("wikipedia.html")).unwrap();
+    html_template(&mut file, "Wikipedia Tests", None, tabled).unwrap();
+
+    concl.exit();
 }
 
 round_trip!(

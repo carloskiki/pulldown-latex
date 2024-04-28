@@ -1,5 +1,3 @@
 /target
 /sandbox
 Cargo.lock
-*.html
-*.xml
