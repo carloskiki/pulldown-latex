@@ -199,7 +199,7 @@ impl<'a> Parser<'a> {
             "eth" => ident('ð'),
             "ell" => ident('ℓ'),
             "nabla" => ident('∇'),
-            "partial" => operator(op!('∂')),
+            "partial" => ident('∂'),
             "Finv" => ident('Ⅎ'),
             "Game" => ident('ℷ'),
             "hbar" | "hslash" => ident('ℏ'),

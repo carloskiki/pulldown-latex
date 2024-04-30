@@ -221,10 +221,7 @@ where
                     }
                     self.writer.write_all(b">")?;
                     let buf = &mut [0u8; 4];
-                    let bytes = self
-                        .state()
-                        .font
-                        .map_or(content, |v| v.map_char(content))
+                    let bytes = content
                         .encode_utf8(buf)
                         .as_bytes();
                     self.writer.write_all(bytes)?;

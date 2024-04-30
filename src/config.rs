@@ -103,7 +103,7 @@ impl MathStyle {
     /// returns `true` if the style should be set to upright for the given character.
     pub(crate) fn should_be_upright(self, c: char) -> bool {
         match self {
-            MathStyle::TeX => !(c.is_lowercase() || c.is_ascii_uppercase()),
+            MathStyle::TeX => c.is_uppercase() && !c.is_ascii_uppercase(),
             MathStyle::ISO => false,
             MathStyle::French => !c.is_ascii_lowercase(),
             MathStyle::Upright => true,
