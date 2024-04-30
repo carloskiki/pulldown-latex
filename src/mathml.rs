@@ -154,7 +154,7 @@ where
                     Identifier::Str(str) => {
                         self.open_tag("mi", None, false)?;
                         self.writer.write_all(if str.chars().count() == 1 {
-                            b"mathvariant=\"normal\">"
+                            b" mathvariant=\"normal\">"
                         } else {
                             b">"
                         })?;
@@ -168,7 +168,7 @@ where
                             self.config.math_style.should_be_upright(content),
                         ) {
                             (Some(Font::UpRight), _) | (None, true) => {
-                                self.writer.write_all(b"mathvariant=\"normal\">")?;
+                                self.writer.write_all(b" mathvariant=\"normal\">")?;
                                 content
                             }
                             (Some(font), _) => {
@@ -221,7 +221,12 @@ where
                     }
                     self.writer.write_all(b">")?;
                     let buf = &mut [0u8; 4];
-                    let bytes = content.encode_utf8(buf).as_bytes();
+                    let bytes = self
+                        .state()
+                        .font
+                        .map_or(content, |v| v.map_char(content))
+                        .encode_utf8(buf)
+                        .as_bytes();
                     self.writer.write_all(bytes)?;
                     if unicode_variant {
                         self.writer.write_all("\u{20D2}".as_bytes())?;
@@ -408,11 +413,9 @@ where
             }
         }
         if !self.env_stack.is_empty() || self.state_stack.len() != 1 {
-            eprintln!("{:?}", self.env_stack);
-            eprintln!("{:?}", self.state_stack);
             panic!("unbalanced environment stack or state stack");
-        } 
-        
+        }
+
         if let Some(annotation) = self.config.annotation {
             write!(
                 self.writer,

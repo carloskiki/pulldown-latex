@@ -6,6 +6,9 @@ mod common;
 
 fn main() {
     let concl = common::test();
+    if std::env::var("RENDER").as_deref() != Ok("true") {
+        concl.exit()
+    }
 
     let mut file = File::create(Path::new(OUTPUT_DIR).join("wikipedia.html")).unwrap();
     html_template(&mut file, "Wikipedia Tests", None, tabled).unwrap();

@@ -7,11 +7,12 @@ mod common;
 
 fn main() {
     let concl = common::test();
-
-    if std::env::var("BROWSER_RENDER") != Ok("false".to_string()) {
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-        runtime.block_on(cross_browser()).unwrap();
+    if std::env::var("RENDER").as_deref() != Ok("true") {
+        concl.exit()
     }
+    
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    runtime.block_on(cross_browser()).unwrap();
 
     let mut file = std::fs::File::create(Path::new(OUTPUT_DIR).join("cross-browser.html")).unwrap();
     html_template(
@@ -21,7 +22,6 @@ fn main() {
         cross_browser_tabled,
     )
     .unwrap();
-
     concl.exit()
 }
 
