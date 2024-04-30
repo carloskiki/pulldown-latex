@@ -159,7 +159,9 @@ where
                             b">"
                         })?;
                         self.writer.write_all(str.as_bytes())?;
-                        self.writer.write_all(b"</mi>")
+                        self.writer.write_all(b"</mi>")?;
+                        self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
+                        self.writer.write_all(b"<mspace width=\"0.1667em\" />")
                     }
                     Identifier::Char(content) => {
                         self.open_tag("mi", None, false)?;
