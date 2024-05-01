@@ -1,6 +1,6 @@
 //! Contains the [`Parser`], which Transforms input `LaTeX` into a stream of `Result<Event, ParserError>`.
 //!
-//! The parser can be used as an iterator, and the events can be rendered by a renderer.
+//! The parser is used as an iterator, and the events it generates can be rendered by a renderer.
 //! The `mahtml` renderer provided by this crate is available through [`push_mathml`] and [`write_mathml`].
 //!
 //! [`push_mathml`]: crate::mathml::push_mathml
@@ -9,7 +9,7 @@ mod lex;
 mod macros;
 mod primitives;
 mod state;
-pub mod tables;
+mod tables;
 
 use std::fmt::{Display, Write};
 
@@ -23,7 +23,7 @@ use self::state::ParserState;
 /// namely a stream of [`Event`]s.
 ///
 /// Transforming the events into rendered math is a task for the
-/// `mahtml` renderer.
+/// [`mahtml`](crate::mathml) renderer.
 /// 
 /// The algorithm of the [`Parser`] is driven by the [`Parser::next`] method on the [`Parser`].
 /// This method is provided through the [`Iterator`] trait implementation, thus an end user should
@@ -500,6 +500,21 @@ pub(crate) enum ErrorKind {
     Relax,
 }
 
+fn floor_char_boundary(str: &str, index: usize) -> usize {
+    if index >= str.len() {
+        str.len()
+    } else {
+        let lower_bound = index.saturating_sub(3);
+        let new_index = str.as_bytes()[lower_bound..=index].iter().rposition(|b| {
+            // This is bit magic equivalent to: b < 128 || b >= 192
+            (*b as i8) >= -0x40
+        });
+
+        // SAFETY: we know that the character boundary will be within four bytes
+        unsafe { lower_bound + new_index.unwrap_unchecked() }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::event::{Identifier, Operator, Visual};
@@ -705,21 +720,6 @@ mod tests {
             events,
             vec![Event::Content(Content::Number("123"))]
         );
-    }
-}
-
-fn floor_char_boundary(str: &str, index: usize) -> usize {
-    if index >= str.len() {
-        str.len()
-    } else {
-        let lower_bound = index.saturating_sub(3);
-        let new_index = str.as_bytes()[lower_bound..=index].iter().rposition(|b| {
-            // This is bit magic equivalent to: b < 128 || b >= 192
-            (*b as i8) >= -0x40
-        });
-
-        // SAFETY: we know that the character boundary will be within four bytes
-        unsafe { lower_bound + new_index.unwrap_unchecked() }
     }
 }
 

@@ -26,7 +26,7 @@ pub struct RenderConfig<'a> {
 }
 
 impl<'a> RenderConfig<'a> {
-    /// Create a new `RenderConfig` with the provided annotation, and default values for the rest of the fields.
+    /// Create a new `RenderConfig` with the provided annotation, and default values for other fields.
     pub fn with_annotation(annotation: &'a str) -> Self {
         Self {
             annotation: Some(annotation),
@@ -62,15 +62,15 @@ impl<'a> Default for RenderConfig<'a> {
 /// The way in which math variables are displayed.
 ///
 /// This is used to determine how single-letter variables are displayed. This affects lowercase and
-/// uppercase latin letters (__a-z__ and __A-Z__), and the uppercase and lowercase greek letters
-/// (__α-ω__ and __Α-Ω__). Here is a table of the different styles:
+/// uppercase latin letters (__a-z__ and __A-Z__), and uppercase and lowercase greek letters
+/// (__α-ω__ and __Α-Ω__). Style differences are shown in the table below.
 ///
 /// ## Math Styles
 ///
 /// | Style     | Low. Latin | Upp. Latin | Low. Greek | Upp. Greek |
 /// | -----     | ---------- | ---------- | ---------- | ---------- |
 /// | `TeX`     | _italic_   | _italic_   | _italic_   | upright    |
-/// | `ISO`     | _italic_   | _italic_   | _italic_   | _italic_    |
+/// | `ISO`     | _italic_   | _italic_   | _italic_   | _italic_   |
 /// | `French`  | _italic_   | upright    | upright    | upright    |
 /// | `Upright` | upright    | upright    | upright    | upright    |
 ///
@@ -83,7 +83,7 @@ pub enum MathStyle {
     /// __This is the default value.__
     #[default]
     TeX,
-    /// The style used in ISO 80000-2:2019.
+    /// The style used in `ISO 80000-2:2019`.
     ///
     /// Makes everything italic.
     ISO,
@@ -114,16 +114,16 @@ impl MathStyle {
 
 /// How the math is displayed.
 ///
-/// Semantically, this affects the [`display`] attribute of the [`math`] in the mathml
+/// Semantically, this affects the [`display`] attribute of the [`<math>`] tag in the mathml
 /// output. The attribute will be set to `block` or `inline` depending on the value of this enum.
 ///
-/// [`math`]: https://developer.mozilla.org/en-US/docs/Web/MathML/Element/math
+/// [`<math>`]: https://developer.mozilla.org/en-US/docs/Web/MathML/Element/math
 /// [`display`]: https://developer.mozilla.org/en-US/docs/Web/MathML/Element/math#display
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum DisplayMode {
     /// The math is rendered inline.
     ///
-    /// The equation is displayed in the middle of a paragraph, and elements such as
+    /// The equation is displayed inline within a sentence or paragraph, and elements such as
     /// `\int` and `\sum` are minimized to fit within the line.
     ///
     /// __This is the default value.__
