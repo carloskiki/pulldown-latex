@@ -15,9 +15,10 @@ pub struct RenderConfig<'a> {
     pub annotation: Option<&'a str>,
     /// A RGB color. This option determines the color in which errors and invalid LaTeX commands are rendered in.
     pub error_color: (u8, u8, u8),
-    /// If true, a namespace `xml` will be written into the <math> element.
-    /// That namespace is xmlns="http://www.w3.org/1998/Math/MathML".
-    /// Such a namespace is unnecessary for modern browsers but can be helpful for other user agents,
+    /// If true, a `xml` namespace (`xmlns="http://www.w3.org/1998/Math/MathML"`) will be written
+    /// into the `<math>` element.
+    /// 
+    /// This namespace is unnecessary for modern browsers but can be helpful for other user agents,
     /// such as Microsoft Word.
     pub xml: bool,
     /// See [`MathStyle`].

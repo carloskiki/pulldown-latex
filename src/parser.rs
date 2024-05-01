@@ -408,6 +408,11 @@ impl Display for GroupType {
     }
 }
 
+/// Anything that could possibly go wrong while parsing.
+///
+/// This error type is used to provide context to an error which occurs during the parsing stage.
+/// 
+/// The [`Parser`] implements the [`Iterator`] trait, which returns a stream of `Result<Event, ParserError>`.
 #[derive(Debug, Error)]
 pub struct ParserError<'a> {
     context: Option<(&'a str, usize)>,

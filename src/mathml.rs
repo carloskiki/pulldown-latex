@@ -382,7 +382,6 @@ where
         // - using `write_all` with a utf-8 string.
         // - using `write!` with a utf-8 string, and the parameters must all be valid utf-8 since
         //      they are formatted using the `Display` trait.
-
         write!(
             self.writer,
             "<math display=\"{}\"",
@@ -488,8 +487,8 @@ struct State<'a> {
     style: Option<Style>,
 }
 
-/// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>`, as input and renders a
-/// string of MathML into the given string.
+/// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>` as input, and renders a
+/// string of MathML into the input string.
 ///
 /// [`Parser`]: crate::parser::Parser
 pub fn push_mathml<'a, I, E>(

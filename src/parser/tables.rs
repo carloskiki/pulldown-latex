@@ -146,7 +146,7 @@ pub fn control_sequence_delimiter_map(cs: &str) -> Option<char> {
 
 /// Returns whether the given string is a valid primitive color.
 ///
-/// Named colors come from: https://developer.mozilla.org/en-US/docs/Web/CSS/named-color#value,
+/// Named colors come from the [MDN docs](https://developer.mozilla.org/en-US/docs/Web/CSS/named-color#value),
 /// which is a list of about 150 official css color names.
 pub fn is_primitive_color(color: &str) -> bool {
     color.starts_with('#')

@@ -7,8 +7,8 @@ description = "Pull parser to convert LaTeX equations to MathML"
 repository = "https://github.com/Carlosted/pulldown-latex"
 readme = "README.md"
 license = "MIT"
-keywords = ["latex", "mathml"]
-categories = ["science"]
+keywords = ["latex", "mathml", "parser"]
+categories = ["Parsing tools", "Mathematics"]
 
 [dependencies]
 thiserror = "1.0.57"
@@ -24,6 +24,7 @@ tokio = { version = "1", features = ["test-util", "rt-multi-thread", "process", 
 
 [[example]]
 name = "write_to_string"
+doc-scrape-examples = true
 
 [[test]]
 name = "wikipedia"
@@ -34,3 +35,7 @@ harness = false
 name = "cross-browser"
 path = "tests/cross-browser.rs"
 harness = false
+
+[package.metadata.docs.rs]
+rustdoc-args = ["--generate-link-to-definition"]
+cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]

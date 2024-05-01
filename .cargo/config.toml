@@ -1,0 +1,2 @@
+[alias]
+d = ["doc", "--no-deps", "-Zunstable-options", "-Zrustdoc-scrape-examples"]
