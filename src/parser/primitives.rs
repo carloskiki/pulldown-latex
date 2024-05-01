@@ -1255,7 +1255,7 @@ impl<'a> Parser<'a> {
                     Event::Visual(Visual::SquareRoot),
                     Event::Space {
                         width: Some((0., DimensionUnit::Em)),
-                        height: None,
+                        height: Some((0.7, DimensionUnit::Em)),
                         depth: None,
                     },
                 ]);

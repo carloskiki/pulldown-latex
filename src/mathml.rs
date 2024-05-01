@@ -160,6 +160,9 @@ where
                         })?;
                         self.writer.write_all(str.as_bytes())?;
                         self.writer.write_all(b"</mi>")?;
+                        // TODO: Check if we are in an environment.
+                        // Exmaple: \sin^2(x) should be (sin^2)<mo><mspace>(x) and not sin<mo><mspace>^2(x)
+                        // Look at standard numerical functions in wiki tests for example.
                         self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
                         self.writer.write_all(b"<mspace width=\"0.1667em\" />")
                     }
