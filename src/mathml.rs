@@ -1,4 +1,4 @@
-//! A simple `mathml` renderer.
+//! A simple MathML Core renderer.
 //!
 //! This crate provides a "simple" `mathml` renderer which is available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
