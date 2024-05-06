@@ -2,6 +2,7 @@ use std::fs::File;
 use std::path::Path;
 
 use common::{tabled, OUTPUT_DIR, html_template};
+use pulldown_latex::config::DisplayMode;
 
 mod common;
 
@@ -27,7 +28,8 @@ round_trip!(
     "y_{x_2}",
     r"x_{92}^{31415} + \pi",
     "x_{y^a_b}^{z^c_d}",
-    "y_3'''"
+    "y_3'''",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
@@ -37,30 +39,34 @@ round_trip!(
     r"\frac{a}{b/2}",
     r"a_0 + \cfrac{1}{a_1 + \cfrac{1}{a_2 + \cfrac{1}{a_3 + \cfrac{1}{a_4}}}}",
     r"a_0+\frac{1}{a_1+\frac{1}{a_2+\frac{1}{a_3+ \frac{1}{a_4}}}}",
-    r"\binom{p}{2} x^2 y^{p-2} - \frac{1}{1-x} \frac{1}{1-x^2}"
+    r"\binom{p}{2} x^2 y^{p-2} - \frac{1}{1-x} \frac{1}{1-x^2}",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
     summations,
     r"\sum_{\genfrac{}{}{0mu}{2}{0 \le i \le m}{0 < j < n}} P(i, j)",
-    r"\sum_{i=1}^p \sum_{j=1}^q \sum_{k=1}^r a_{ij}b_{jk}c_{ki}"
-    
+    r"\sum_{i=1}^p \sum_{j=1}^q \sum_{k=1}^r a_{ij}b_{jk}c_{ki}",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
     roots,
-    r"\sqrt{1+\sqrt{1+\sqrt{1+ \sqrt{1+\sqrt{1+\sqrt{1+ \sqrt{1+x}}}}}}}"
+    r"\sqrt{1+\sqrt{1+\sqrt{1+ \sqrt{1+\sqrt{1+\sqrt{1+ \sqrt{1+x}}}}}}}",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
     differentials,
-    r"\bigg(\frac{\partial^2} {\partial x^2} + \frac {\partial^2}{\partial y^2} \bigg){\big\lvert\varphi (x+iy)\big\rvert}^2"
+    r"\bigg(\frac{\partial^2} {\partial x^2} + \frac {\partial^2}{\partial y^2} \bigg){\big\lvert\varphi (x+iy)\big\rvert}^2",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
     integrals,
     r"\int_1^x \frac{dt}{t}",
-    r"\int\!\!\!\int_D dx,dy"
+    r"\int\!\!\!\int_D dx,dy",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
@@ -82,18 +88,21 @@ round_trip!(
         &\vdots&\vdots & &\vdots
         \\c_n & c_{n+1} & c_{n+2}
         &\dots&c_{2n}
-        \end{vmatrix} > 0"
+        \end{vmatrix} > 0",
+ display_mode = DisplayMode::Block
 );
 
 round_trip!(
     over_under_braces,
     r"\overbrace{x +\cdots + x} ^{k \text{ times}}",
-    r"{\underbrace{\overbrace{ \mathstrut a,\dots,a}^{k ,a\rq\text{s}}, \overbrace{ \mathstrut b,\dots,b}^{l, b\rq\text{s}}}_{k+l \text{ elements}}}"
+    r"{\underbrace{\overbrace{ \mathstrut a,\dots,a}^{k ,a\rq\text{s}}, \overbrace{ \mathstrut b,\dots,b}^{l, b\rq\text{s}}}_{k+l \text{ elements}}}",
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(
     everything,
     r"\sum_{p\text{ prime}} f(p)=\int_{t>1} f(t)d\pi(t)",
     r"\lim_{n\rightarrow+\infty} \frac{\sqrt{2\pi n}}{n!} \genfrac (){}{}n{e}^n = 1",
-    r"\det(A) = \sum_{\sigma \in S_n} \epsilon(\sigma) \prod_{i=1}^n a_{i, \sigma_i}"
+    r"\det(A) = \sum_{\sigma \in S_n} \epsilon(\sigma) \prod_{i=1}^n a_{i, \sigma_i}",
+    display_mode = DisplayMode::Block
 );
