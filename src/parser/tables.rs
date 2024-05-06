@@ -134,7 +134,7 @@ pub fn control_sequence_delimiter_map(cs: &str) -> Option<char> {
         "rmoustache" => '⎱',
         "backslash" => '\\',
 
-        "vert" => '|',
+        "vert" | "lvert" | "rvert" => '|',
         "|" | "Vert" | "lVert" | "rVert" => '‖',
         "uparrow" => '↑',
         "Uparrow" => '⇑',

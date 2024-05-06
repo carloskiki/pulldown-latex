@@ -1277,10 +1277,31 @@ impl<'a> Parser<'a> {
                 return Ok(())
             }
             "binom" => {
-                self.buffer.push(Instruction::Event(Event::BeginGroup));
-                self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!('(')))));
+                self.buffer.extend([Instruction::Event(Event::BeginGroup),
+                                    Instruction::Event(Event::Content(Content::Operator(op!('('))))]);
                 self.fraction_like(None)?;
-                self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!(')')))));
+                self.buffer.extend([Instruction::Event(Event::Content(Content::Operator(op!(')')))),
+                                    Instruction::Event(Event::EndGroup)]);
+                return Ok(())
+            }
+            "cfrac" => {
+                self.buffer.extend([Instruction::Event(Event::BeginGroup),
+                                    Instruction::Event(Event::StateChange(StateChange::Style(Style::Display)))]);
+                self.fraction_like(None)?;
+                self.buffer.push(Instruction::Event(Event::EndGroup));
+                return Ok(())
+            }
+            "tfrac" => {
+                self.buffer.extend([Instruction::Event(Event::BeginGroup),
+                                    Instruction::Event(Event::StateChange(StateChange::Style(Style::Text)))]);
+                self.fraction_like(None)?;
+                self.buffer.push(Instruction::Event(Event::EndGroup));
+                return Ok(())
+            }
+            "dfrac" => {
+                self.buffer.extend([Instruction::Event(Event::BeginGroup),
+                                    Instruction::Event(Event::StateChange(StateChange::Style(Style::Script)))]);
+                self.fraction_like(None)?;
                 self.buffer.push(Instruction::Event(Event::EndGroup));
                 return Ok(())
             }
@@ -1414,7 +1435,8 @@ impl<'a> Parser<'a> {
 
     /// Return a delimiter with the given size from the next character in the parser.
     fn em_sized_delim(&mut self, size: f32) -> InnerResult<()> {
-        let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+        let current = self.current_string().ok_or(ErrorKind::Delimiter)?;
+        let delimiter = lex::delimiter(current)?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Operator(
                 op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
