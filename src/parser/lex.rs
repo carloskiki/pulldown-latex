@@ -1,6 +1,6 @@
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{tables::{control_sequence_delimiter_map, is_char_delimiter}, Argument, CharToken, ErrorKind, GroupType, InnerResult, Token};
+use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, GroupType, InnerResult, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -45,53 +45,6 @@ pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>
 ///
 /// The output is the content within the group without the surrounding `{}`. This content is
 /// guaranteed to be balanced.
-// Changed in favor of a more general implementation.
-// pub fn group_content<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
-//     let mut escaped = false;
-//     let mut in_comment = false;
-//     // In this case `Err` is the desired result.
-//     let end_index = input
-//         .char_indices()
-//         .try_fold(0usize, |balance, (index, c)| match c {
-//             _ if in_comment => {
-//                 if c == '\n' {
-//                     in_comment = false;
-//                 }
-//                 Ok(balance)
-//             }
-//             '{' if !escaped => Ok(balance + 1),
-//             '}' if !escaped => {
-//                 if balance == 0 {
-//                     Err(index)
-//                 } else {
-//                     Ok(balance - 1)
-//                 }
-//             }
-//             '\\' => {
-//                 // Makes it so that two backslashes in a row don't escape the next character.
-//                 escaped = !escaped;
-//                 Ok(balance)
-//             }
-//             '%' if !escaped => {
-//                 in_comment = true;
-//                 Ok(balance)
-//             }
-//             _ => {
-//                 escaped = false;
-//                 Ok(balance)
-//             }
-//         });
-//
-//     if let Err(end_index) = end_index {
-//         let (argument, rest) = input.split_at(end_index);
-//         *input = &rest[1..];
-//         Ok(argument)
-//     } else {
-//         // TODO: The group is not balanced, so it should not be EndOfInput.
-//         Err(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)))
-//     }
-// }
-
 pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerResult<&'a str> {
     let mut escaped = false;
     let mut index = 0;
@@ -139,11 +92,7 @@ pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerRe
 pub fn delimiter(input: &mut &str) -> InnerResult<char> {
     *input = input.trim_start();
     let maybe_delim = token(input)?;
-    match maybe_delim {
-        Token::ControlSequence(cs) => control_sequence_delimiter_map(cs).ok_or(ErrorKind::Delimiter),
-        Token::Character(c) if is_char_delimiter(c.into()) => Ok(c.into()),
-        _ => Err(ErrorKind::Delimiter),
-    }
+    token_to_delim(maybe_delim).ok_or(ErrorKind::Delimiter)
 }
 
 /// Parse the right-hand side of a `futurelet` assignment (TeXBook p. 273).

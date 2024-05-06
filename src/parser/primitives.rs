@@ -8,7 +8,7 @@ use crate::{
 
 use super::{
     lex,
-    tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator, is_primitive_color},
+    tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator, is_primitive_color, token_to_delim},
     Argument, CharToken, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
 };
 
@@ -85,7 +85,7 @@ impl<'a> Parser<'a> {
             }
             "operatorname" => {
                 self.state.allow_suffix_modifiers = true;
-                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let argument = self.get_argument()?;
                 match argument {
                     Argument::Token(Token::ControlSequence(_)) => {
                         return Err(ErrorKind::ControlSequenceAsArgument)
@@ -100,7 +100,7 @@ impl<'a> Parser<'a> {
             }
             "bmod" => Event::Content(Content::Identifier(Identifier::Str("mod"))),
             "pmod" => {
-                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let argument = self.get_argument()?;
                 self.buffer.extend([
                     Instruction::Event(Event::BeginGroup),
                     Instruction::Event(operator(op!('('))),
@@ -345,7 +345,7 @@ impl<'a> Parser<'a> {
             ////////////////////////
             "color" => {
                 let Argument::Group(color) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    self.get_argument()?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -361,7 +361,7 @@ impl<'a> Parser<'a> {
             },
             "textcolor" => {
                 let Argument::Group(color) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    self.get_argument()?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -369,7 +369,7 @@ impl<'a> Parser<'a> {
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                let modified = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let modified = self.get_argument()?;
 
                 self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
                     color,
@@ -380,7 +380,7 @@ impl<'a> Parser<'a> {
             }
             "colorbox" => {
                 let Argument::Group(color) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    self.get_argument()?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -396,12 +396,12 @@ impl<'a> Parser<'a> {
             }
             "fcolorbox" => {
                 let Argument::Group(frame_color) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    self.get_argument()?
                 else {
                     return Err(ErrorKind::Argument);
                 };
                 let Argument::Group(background_color) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    self.get_argument()?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -599,6 +599,11 @@ impl<'a> Parser<'a> {
                 height: None,
                 depth: None,
             },
+            "mathstrut" => Event::Space {
+                width: None,
+                height: Some((0.7, DimensionUnit::Em)),
+                depth: Some((0.3, DimensionUnit::Em)),
+            },
             "~" | "nobreakspace" => Event::Content(Content::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
@@ -636,7 +641,7 @@ impl<'a> Parser<'a> {
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
-                    lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    self.get_argument()?
                 else {
                     return Err(ErrorKind::DimensionArgument);
                 };
@@ -1198,23 +1203,95 @@ impl<'a> Parser<'a> {
             // Fractions //
             ///////////////
             "frac" => {
-                self.buffer
-                    .push(Instruction::Event(Event::Visual(Visual::Fraction(None))));
-                let first_arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-                self.handle_argument(first_arg)?;
-                let second_arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
-                self.handle_argument(second_arg)?;
-                return Ok(());
+                return self.fraction_like(None);
             }
+            // TODO: better errors for this
+            "genfrac" => {
+                let ldelim_argument = self.get_argument()?;
+                let ldelim = match ldelim_argument {
+                    Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
+                    Argument::Group(group) => if group.is_empty() {
+                        None
+                    } else {
+                        return Err(ErrorKind::Delimiter);
+                    },
+                };
+                let rdelim_argument = self.get_argument()?;
+                let rdelim = match rdelim_argument {
+                    Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
+                    Argument::Group(group) => if group.is_empty() {
+                        None
+                    } else {
+                        return Err(ErrorKind::Delimiter);
+                    },
+                };
+                let bar_size_argument = self.get_argument()?;
+                let bar_size = match bar_size_argument {
+                    Argument::Token(_) => return Err(ErrorKind::DimensionArgument),
+                    Argument::Group("") => None,
+                    Argument::Group(mut group) => lex::dimension(&mut group).and_then(|dim| {
+                        if group.is_empty() {
+                            Ok(Some(dim))
+                        } else {
+                            Err(ErrorKind::DimensionArgument)
+                        }
+                    })?,
+                };
+                let display_style_argument = self.get_argument()?;
+                let display_style = match display_style_argument {
+                    Argument::Token(t) => match t {
+                            Token::ControlSequence(_) => return Err(ErrorKind::Argument),
+                            Token::Character(c) => Some(match c.into() {
+                                '0' => Style::Display,
+                                '1' => Style::Text,
+                                '2' => Style::Script,
+                                '3' => Style::ScriptScript,
+                                _ => return Err(ErrorKind::Argument),
+                            }),
+                    },
+                    Argument::Group(group) => {
+                        match group {
+                            "0" => Some(Style::Display),
+                            "1" => Some(Style::Text),
+                            "2" => Some(Style::Script),
+                            "3" => Some(Style::ScriptScript),
+                            "" => None,
+                            _ => return Err(ErrorKind::Argument),
+                        }
+                    }
+                };
 
+                self.buffer.push(Instruction::Event(Event::BeginGroup));
+                if let Some(style) = display_style {
+                    self.buffer.push(Instruction::Event(Event::StateChange(StateChange::Style(style))));
+                }
+                if let Some(ldelim) = ldelim {
+                    self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!(ldelim)))));
+                }
+
+                if let Some(rdelim) = rdelim {
+                    self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!(rdelim)))));
+                }
+                self.fraction_like(bar_size)?;
+                self.buffer.push(Instruction::Event(Event::EndGroup));
+                return Ok(())
+            }
+            "binom" => {
+                self.buffer.push(Instruction::Event(Event::BeginGroup));
+                self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!('(')))));
+                self.fraction_like(None)?;
+                self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!(')')))));
+                self.buffer.push(Instruction::Event(Event::EndGroup));
+                return Ok(())
+            }
             "overset" => {
                 self.buffer.push(Instruction::Event(Event::Script {
                     ty: ScriptType::Superscript,
                     position: ScriptPosition::AboveBelow,
                 }));
-                let over = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let over = self.get_argument()?;
                 self.handle_argument(over)?;
-                let base = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let base = self.get_argument()?;
                 self.handle_argument(base)?;
                 return Ok(());
             }
@@ -1223,9 +1300,9 @@ impl<'a> Parser<'a> {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::AboveBelow,
                 }));
-                let under = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let under = self.get_argument()?;
                 self.handle_argument(under)?;
-                let base = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let base = self.get_argument()?;
                 self.handle_argument(base)?;
                 return Ok(());
             }
@@ -1239,13 +1316,13 @@ impl<'a> Parser<'a> {
                 {
                     self.buffer
                         .push(Instruction::Event(Event::Visual(Visual::Root)));
-                    let arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                    let arg = self.get_argument()?;
                     self.handle_argument(arg)?;
                     self.buffer.push(Instruction::Substring(index));
                 } else {
                     self.buffer
                         .push(Instruction::Event(Event::Visual(Visual::SquareRoot)));
-                    let arg = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                    let arg = self.get_argument()?;
                     self.handle_argument(arg)?;
                 }
                 return Ok(());
@@ -1278,7 +1355,7 @@ impl<'a> Parser<'a> {
             "not" => {
                 self.buffer
                     .push(Instruction::Event(Event::Visual(Visual::Negation)));
-                let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let argument = self.get_argument()?;
                 self.handle_argument(argument)?;
                 return Ok(());
             }
@@ -1347,7 +1424,7 @@ impl<'a> Parser<'a> {
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = self.get_argument()?;
         self.buffer.extend([
             Instruction::Event(Event::BeginGroup),
             Instruction::Event(Event::StateChange(StateChange::Font(font))),
@@ -1369,7 +1446,7 @@ impl<'a> Parser<'a> {
 
     /// Accent commands. parse the argument, and overset the accent.
     fn accent(&mut self, accent: Operator) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = self.get_argument()?;
         self.buffer.push(Instruction::Event(Event::Script {
             ty: ScriptType::Superscript,
             position: ScriptPosition::AboveBelow,
@@ -1384,7 +1461,7 @@ impl<'a> Parser<'a> {
 
     /// Underscript commands. parse the argument, and underset the accent.
     fn underscript(&mut self, content: Operator) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = self.get_argument()?;
         self.buffer.push(Instruction::Event(Event::Script {
             ty: ScriptType::Subscript,
             position: ScriptPosition::AboveBelow,
@@ -1414,8 +1491,12 @@ impl<'a> Parser<'a> {
         Event::StateChange(StateChange::Style(style))
     }
 
+    fn get_argument(&mut self) -> InnerResult<Argument<'a>> {
+        lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)
+    }
+
     fn text_argument(&mut self) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)?;
+        let argument = self.get_argument()?;
         self.buffer
             .push(Instruction::Event(Event::Content(Content::Text(
                 match argument {
@@ -1424,6 +1505,16 @@ impl<'a> Parser<'a> {
                     _ => return Err(ErrorKind::ControlSequenceAsArgument),
                 },
             ))));
+        Ok(())
+    }
+
+    fn fraction_like(&mut self, bar_size: Option<(f32, DimensionUnit)>) -> InnerResult<()> {
+        self.buffer.push(Instruction::Event(Event::Visual(Visual::Fraction(bar_size))));
+        
+        let numerator = self.get_argument()?;
+        self.handle_argument(numerator)?;
+        let denominator = self.get_argument()?;
+        self.handle_argument(denominator)?;
         Ok(())
     }
 }

@@ -55,6 +55,8 @@
 //     false
 // }
 
+use super::Token;
+
 pub fn is_operator(c: char) -> bool {
     matches!(
     c,
@@ -142,6 +144,14 @@ pub fn control_sequence_delimiter_map(cs: &str) -> Option<char> {
         "Updownarrow" => '⇕',
         _ => return None,
     })
+}
+
+pub fn token_to_delim(token: Token) -> Option<char> {
+    match token {
+        Token::ControlSequence(cs) => control_sequence_delimiter_map(cs),
+        Token::Character(c) if is_char_delimiter(c.into()) => Some(c.into()),
+        _ => None,
+    }
 }
 
 /// Returns whether the given string is a valid primitive color.

@@ -32,6 +32,11 @@ path = "tests/wikipedia.rs"
 harness = false
 
 [[test]]
+name = "mozilla"
+path = "tests/mozilla.rs"
+harness = false
+
+[[test]]
 name = "cross-browser"
 path = "tests/cross-browser.rs"
 harness = false

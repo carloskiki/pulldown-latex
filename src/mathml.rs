@@ -402,17 +402,21 @@ where
         while let Some(event) = self.input.next() {
             self.write_event(event)?;
 
-            if let Some(Environment { env, count }) = self.env_stack.last_mut() {
+            while let Some(Environment { env, count }) = self.env_stack.last_mut() {
                 if *count == Some(0) {
                     self.writer.write_all(b"</")?;
                     self.writer.write_all(env.tag().as_bytes())?;
                     self.writer.write_all(b">")?;
                     self.env_stack.pop();
-                } else if let Some(count) = count {
+                    continue;
+                }
+                if let Some(count) = count {
                     *count -= 1;
                 }
+                break;
             }
         }
+        
         if !self.env_stack.is_empty() || self.state_stack.len() != 1 {
             panic!("unbalanced environment stack or state stack");
         }

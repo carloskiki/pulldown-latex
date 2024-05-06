@@ -54,7 +54,7 @@ pub fn show_errors(parser: Parser) -> Result<(), usize> {
 
     parser.for_each(|event| {
         if let Err(e) = event {
-            eprintln!("{}", e);
+            println!("{:?}", e);
             error_count += 1;
         }
     });
