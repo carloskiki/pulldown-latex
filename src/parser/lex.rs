@@ -19,10 +19,8 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
 
 /// Parse an argument to a control sequence, and return it.
 pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
-    *input = input.trim_start();
-
-    if input.starts_with('{') {
-        *input = &input[1..];
+    if let Some(rest) = input.trim_start().strip_prefix('{') {
+        *input = rest;
         let content = group_content(input, "{", "}")?;
         Ok(Argument::Group(content))
     } else {
@@ -31,9 +29,8 @@ pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
 }
 
 pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>> {
-    *input = input.trim_start();
-    if input.starts_with('[') {
-        *input = &input[1..];
+    if let Some(rest) = input.trim_start().strip_prefix('[') {
+        *input = rest;
         let content = group_content(input, "[", "]")?;
         Ok(Some(content))
     } else {
@@ -90,7 +87,6 @@ pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerRe
 ///
 /// Current delimiters supported are listed in TeXBook p. 146, and on https://temml.org/docs/en/supported ("delimiter" section).
 pub fn delimiter(input: &mut &str) -> InnerResult<char> {
-    *input = input.trim_start();
     let maybe_delim = token(input)?;
     token_to_delim(maybe_delim).ok_or(ErrorKind::Delimiter)
 }
@@ -113,13 +109,9 @@ pub fn futurelet_assignment<'a>(
 /// Returns the control sequence and the value it is assigned to.
 pub fn let_assignment<'a>(input: &mut &'a str) -> InnerResult<(&'a str, Token<'a>)> {
     let control_sequence = control_sequence(input)?;
-
-    *input = input.trim_start();
-    if let Some(s) = input.strip_prefix('=') {
+    if let Some(s) = input.trim_start().strip_prefix('=') {
         *input = s;
-        one_optional_space(input);
     }
-
     let token = token(input)?;
     Ok((control_sequence, token))
 }
@@ -154,7 +146,7 @@ pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
         .max(1);
 
     let (control_sequence, rest) = input.split_at(len);
-    *input = rest.trim_start();
+    *input = rest;
     Ok(control_sequence)
 }
 
@@ -172,33 +164,10 @@ pub fn glue(input: &mut &str) -> InnerResult<Glue> {
     Ok(dimen)
 }
 
-/// Parse a glue that can only be specified in math units (mu)
-pub fn math_glue(input: &mut &str) -> InnerResult<Glue> {
-    let mut dimen = (math_dimension(input)?, None, None);
-    if let Some(s) = input.trim_start().strip_prefix("plus") {
-        *input = s;
-        dimen.1 = Some(math_dimension(input)?);
-    }
-    if let Some(s) = input.trim_start().strip_prefix("minus") {
-        *input = s;
-        dimen.2 = Some(math_dimension(input)?);
-    }
-    Ok(dimen)
-}
-
 /// Parse a dimension (TeXBook p. 266).
 pub fn dimension(input: &mut &str) -> InnerResult<Dimension> {
     let number = floating_point(input)?;
     let unit = dimension_unit(input)?;
-    Ok((number, unit))
-}
-
-/// Parse a dimension that can only be specified in math units (mu)
-pub fn math_dimension(input: &mut &str) -> InnerResult<Dimension> {
-    let number = floating_point(input)? as f32;
-    *input = input.trim_start();
-    input.strip_prefix("mu").ok_or(ErrorKind::MathUnit)?;
-    let unit = DimensionUnit::Mu;
     Ok((number, unit))
 }
 
@@ -271,9 +240,8 @@ pub fn unsigned_integer(input: &mut &str) -> InnerResult<usize> {
 
 /// Parse the signs in front of a number, returning the signum.
 pub fn signs(input: &mut &str) -> InnerResult<isize> {
-    let signs = input.trim_start();
     let mut minus_count = 0;
-    *input = signs
+    *input = input
         .trim_start_matches(|c: char| {
             if c == '-' {
                 minus_count += 1;

@@ -630,19 +630,29 @@ impl<'a> Parser<'a> {
             }
             "mkern" => {
                 let dimension =
-                    lex::math_dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
-                Event::Space {
-                    width: Some(dimension),
-                    height: None,
-                    depth: None,
+                    lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
+                if dimension.1 == DimensionUnit::Mu {
+                    Event::Space {
+                        width: Some(dimension),
+                        height: None,
+                        depth: None,
+                    }
+                } else {
+                    return Err(ErrorKind::MathUnit);
                 }
             }
             "mskip" => {
-                let glue = lex::math_glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
-                Event::Space {
-                    width: Some(glue.0),
-                    height: None,
-                    depth: None,
+                let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
+                if glue.0.1 == DimensionUnit::Mu
+                    && glue.1.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
+                    && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu) {
+                    Event::Space {
+                        width: Some(glue.0),
+                        height: None,
+                        depth: None,
+                    }
+                } else {
+                    return Err(ErrorKind::MathUnit);
                 }
             }
             "hspace" => {

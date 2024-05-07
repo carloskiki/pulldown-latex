@@ -55,6 +55,7 @@ pub struct Parser<'a> {
 }
 
 // TODO: make `trim_start` (removing whitespace) calls more systematic.
+//       Arguably, string parsing of any kind should be done in the `lex` module.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
