@@ -260,6 +260,7 @@ where
                     }
                     self.input.next();
                 }
+                self.open_tag("mrow", None, true)?;
                 self.state_stack.push(State {
                     font,
                     text_color: None,
@@ -269,7 +270,7 @@ where
                 });
                 self.env_stack
                     .push(Environment::new(EnvironmentType::Group));
-                self.open_tag("mrow", None, true)
+                Ok(())
             }
             Ok(Event::EndGroup) => {
                 let env = self
