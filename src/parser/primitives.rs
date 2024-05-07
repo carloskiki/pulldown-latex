@@ -40,8 +40,14 @@ impl<'a> Parser<'a> {
         let instruction = Instruction::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
-            '_' => return Err(ErrorKind::SubscriptAsToken),
-            '^' => return Err(ErrorKind::SuperscriptAsToken),
+            '_' => Event::Script {
+                ty: self.rhs_suffixes(true)?,
+                position: ScriptPosition::Right,
+            },
+            '^' => Event::Script {
+                ty: self.rhs_suffixes(false)?,
+                position: ScriptPosition::Right,
+            },
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
             '&' => return Err(ErrorKind::AlignmentChar),

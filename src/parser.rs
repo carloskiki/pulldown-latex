@@ -88,7 +88,7 @@ impl<'a> Parser<'a> {
     /// Handles the superscript and/or subscript following what was parsed previously.
     ///
     /// Follows the design decisions described in [`design/suffixes.md`].
-    fn check_suffixes(&mut self) -> InnerResult<Option<Event<'a>>> {
+    fn handle_suffixes(&mut self) -> InnerResult<Option<Event<'a>>> {
         if self.state.skip_suffixes {
             return Ok(None)
         }
@@ -114,8 +114,6 @@ impl<'a> Parser<'a> {
             }
         }
 
-        let mut subscript_first = false;
-        let first_suffix_start = self.buffer.len();
         let Some(str) = self.current_string() else {
             return Ok(None);
         };
@@ -124,14 +122,22 @@ impl<'a> Parser<'a> {
         let Some(next_char) = str.chars().next() else {
             return Ok(None);
         };
-        match next_char {
-            '^' => {}
-            '_' => {
-                subscript_first = true;
-            }
+        let subscript_first = match next_char {
+            '^' => false,
+            '_' => true,
             _ => return Ok(None),
         };
         *str = &str[1..];
+        
+        let ty = self.rhs_suffixes(subscript_first)?;
+        Ok(Some(Event::Script {
+            ty,
+            position: script_position,
+        }))
+    }
+
+    fn rhs_suffixes(&mut self, subscript_first: bool) -> InnerResult<ScriptType> {
+        let first_suffix_start = self.buffer.len();
         let str = self.current_string().ok_or(if subscript_first {
             ErrorKind::EmptySubscript
         } else {
@@ -162,7 +168,7 @@ impl<'a> Parser<'a> {
         };
         let second_suffix_end = self.buffer.len();
 
-        let script_type = if !subscript_first && second_suffix_start != second_suffix_end {
+        Ok(if !subscript_first && second_suffix_start != second_suffix_end {
             self.instruction_stack.extend(
                 self.buffer[first_suffix_start..second_suffix_start]
                     .iter()
@@ -185,11 +191,7 @@ impl<'a> Parser<'a> {
             } else {
                 ScriptType::Superscript
             }
-        };
-        Ok(Some(Event::Script {
-            ty: script_type,
-            position: script_position,
-        }))
+        })
     }
 
     /// Parse an arugment and pushes the argument to the stack surrounded by a
@@ -324,7 +326,7 @@ impl<'a> Iterator for Parser<'a> {
                 };
 
                 // 2. Check for suffixes, to complete the atom.
-                let suffix = match self.check_suffixes() {
+                let suffix = match self.handle_suffixes() {
                     Err(err) => return Some(Err(self.error_with_context(err))),
                     Ok(suffix) => suffix,
                 };
@@ -482,10 +484,6 @@ pub(crate) enum ErrorKind {
     DoubleSubscript,
     #[error("trying to add a superscript twice to the same element")]
     DoubleSuperscript,
-    #[error("trying to add a subscript as a token")]
-    SubscriptAsToken,
-    #[error("trying to add a superscript as a token")]
-    SuperscriptAsToken,
     #[error("unknown primitive command found")]
     UnknownPrimitive,
     #[error("control sequence found as argument to a command that does not support them")]
