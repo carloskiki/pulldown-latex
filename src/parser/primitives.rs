@@ -40,14 +40,30 @@ impl<'a> Parser<'a> {
         let instruction = Instruction::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
-            '_' => Event::Script {
-                ty: self.rhs_suffixes(true)?,
-                position: ScriptPosition::Right,
-            },
-            '^' => Event::Script {
-                ty: self.rhs_suffixes(false)?,
-                position: ScriptPosition::Right,
-            },
+            '_' => {
+                let script = Event::Script {
+                    ty: self.rhs_suffixes(true)?,
+                    position: ScriptPosition::Right,
+                };
+                self.buffer.extend([
+                    Instruction::Event(script),
+                    Instruction::Event(Event::BeginGroup),
+                ]);
+                self.state.skip_suffixes = true;
+                Event::EndGroup
+            }
+            '^' => {
+                let script = Event::Script {
+                    ty: self.rhs_suffixes(false)?,
+                    position: ScriptPosition::Right,
+                };
+                self.buffer.extend([
+                    Instruction::Event(script),
+                    Instruction::Event(Event::BeginGroup),
+                ]);
+                self.state.skip_suffixes = true;
+                Event::EndGroup
+            }
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
             '&' => return Err(ErrorKind::AlignmentChar),
