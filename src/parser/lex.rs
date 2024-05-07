@@ -1,6 +1,8 @@
 use crate::attribute::{Dimension, DimensionUnit, Glue};
 
-use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, GroupType, InnerResult, Token};
+use super::{
+    tables::token_to_delim, Argument, CharToken, ErrorKind, GroupType, InnerResult, Token,
+};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -118,8 +120,8 @@ pub fn let_assignment<'a>(input: &mut &'a str) -> InnerResult<(&'a str, Token<'a
 
 /// Parse a control_sequence, including the leading `\`.
 pub fn control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
-    if input.starts_with('\\') {
-        *input = &input[1..];
+    if let Some(rest) = input.strip_prefix('\\') {
+        *input = rest;
         rhs_control_sequence(input)
     } else {
         input
@@ -129,6 +131,25 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
                 Err(ErrorKind::ControlSequence)
             })
     }
+}
+
+pub fn limit_modifiers(input: &mut &str) -> Option<bool> {
+    let mut output = None;
+    while let Some((rest, limits)) = input
+        .trim_start()
+        .strip_prefix(r"\limits")
+        .map(|rest| (rest, true))
+        .or_else(|| {
+            input
+                .trim_start()
+                .strip_prefix(r"\nolimits")
+                .map(|rest| (rest, false))
+        })
+    {
+        *input = rest;
+        output = Some(limits);
+    }
+    output
 }
 
 /// Parse the right side of a control sequence (`\` already being parsed).
@@ -146,7 +167,7 @@ pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
         .max(1);
 
     let (control_sequence, rest) = input.split_at(len);
-    *input = rest;
+    *input = rest.trim_start();
     Ok(control_sequence)
 }
 
@@ -421,7 +442,7 @@ mod tests {
         let (cs, token) = lex::let_assignment(&mut input).unwrap();
 
         assert_eq!(cs, "foo");
-        assert_eq!(token, Token::ControlSequence("bar".into()));
+        assert_eq!(token, Token::ControlSequence("bar"));
         assert_eq!(input, "");
     }
 
@@ -431,8 +452,8 @@ mod tests {
         let (cs, token1, token2) = lex::futurelet_assignment(&mut input).unwrap();
 
         assert_eq!(cs, "foo");
-        assert_eq!(token1, Token::ControlSequence("bar".into()));
-        assert_eq!(token2, Token::ControlSequence("baz".into()));
+        assert_eq!(token1, Token::ControlSequence("bar"));
+        assert_eq!(token2, Token::ControlSequence("baz"));
         assert_eq!(input, "blah");
     }
 

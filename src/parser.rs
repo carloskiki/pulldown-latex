@@ -54,8 +54,10 @@ pub struct Parser<'a> {
     state: ParserState,
 }
 
-// TODO: make `trim_start` (removing whitespace) calls more systematic.
-//       Arguably, string parsing of any kind should be done in the `lex` module.
+// TODO: When using macros, one should truly just prepend the extended macro to the start of the
+// current string.
+// We should thus never call `current_string` repeatedly, the string
+// outputed by current string is always fully formed.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
@@ -101,16 +103,11 @@ impl<'a> Parser<'a> {
         };
 
         if self.state.allow_suffix_modifiers {
-            while let Some(str) = self.current_string() {
-                *str = str.trim_start();
-                if str.starts_with(r"\limits") {
-                    *str = &str[7..];
+            if let Some(limits) = self.current_string().and_then(lex::limit_modifiers) {
+                if limits {
                     script_position = ScriptPosition::AboveBelow;
-                } else if str.starts_with(r"\nolimits") {
-                    *str = &str[9..];
-                    script_position = ScriptPosition::Right;
                 } else {
-                    break;
+                    script_position = ScriptPosition::Right;
                 }
             }
         }
