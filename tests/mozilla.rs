@@ -102,7 +102,7 @@ round_trip!(
 round_trip!(
     everything,
     r"\sum_{p\text{ prime}} f(p)=\int_{t>1} f(t)d\pi(t)",
-    r"\lim_{n\rightarrow+\infty} \frac{\sqrt{2\pi n}}{n!} \genfrac (){}{}n{e}^n = 1",
+    r"\lim_{n \to +\infty} \frac{\sqrt{2\pi n}}{n!} \genfrac (){}{}n{e}^n = 1",
     r"\det(A) = \sum_{\sigma \in S_n} \epsilon(\sigma) \prod_{i=1}^n a_{i, \sigma_i}",
     display_mode = DisplayMode::Block
 );

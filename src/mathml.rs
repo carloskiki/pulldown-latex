@@ -160,11 +160,18 @@ where
                         })?;
                         self.writer.write_all(str.as_bytes())?;
                         self.writer.write_all(b"</mi>")?;
-                        // TODO: Check if we are in an environment.
-                        // Exmaple: \sin^2(x) should be (sin^2)<mo><mspace>(x) and not sin<mo><mspace>^2(x)
-                        // Look at standard numerical functions in wiki tests for example.
-                        self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
-                        self.writer.write_all(b"<mspace width=\"0.1667em\" />")
+
+                        let to_append = "<mo>\u{2061}</mo><mspace width=\"0.1667em\" />";
+                        if let Some(Environment {
+                            env: EnvironmentType::Script { append, .. },
+                            ..
+                        }) = self.env_stack.last_mut()
+                        {
+                            *append = to_append;
+                            Ok(())
+                        } else {
+                            self.writer.write_all(to_append.as_bytes())
+                        }
                     }
                     Identifier::Char(content) => {
                         self.open_tag("mi", None, false)?;
@@ -226,9 +233,7 @@ where
                     }
                     self.writer.write_all(b">")?;
                     let buf = &mut [0u8; 4];
-                    let bytes = content
-                        .encode_utf8(buf)
-                        .as_bytes();
+                    let bytes = content.encode_utf8(buf).as_bytes();
                     self.writer.write_all(bytes)?;
                     if unicode_variant {
                         self.writer.write_all("\u{20D2}".as_bytes())?;
@@ -325,7 +330,11 @@ where
                                 && self.config.display_mode == DisplayMode::Block)
                     }
                 };
-                let env = EnvironmentType::Script(ty, above_below);
+                let env = EnvironmentType::Script {
+                    ty,
+                    above_below,
+                    append: "",
+                };
                 self.env_stack.push(Environment::new(env));
                 self.open_tag(env.tag(), None, true)
             }
@@ -407,6 +416,9 @@ where
                     self.writer.write_all(b"</")?;
                     self.writer.write_all(env.tag().as_bytes())?;
                     self.writer.write_all(b">")?;
+                    if let EnvironmentType::Script { append, .. } = env {
+                        self.writer.write_all(append.as_bytes())?;
+                    }
                     self.env_stack.pop();
                     continue;
                 }
@@ -416,7 +428,7 @@ where
                 break;
             }
         }
-        
+
         if !self.env_stack.is_empty() || self.state_stack.len() != 1 {
             panic!("unbalanced environment stack or state stack");
         }
@@ -449,9 +461,18 @@ impl Environment {
                 EnvironmentType::Root => Some(2),
                 EnvironmentType::Sqrt => Some(1),
                 EnvironmentType::Negate => Some(1),
-                EnvironmentType::Script(ScriptType::Subscript, _) => Some(2),
-                EnvironmentType::Script(ScriptType::Superscript, _) => Some(2),
-                EnvironmentType::Script(ScriptType::SubSuperscript, _) => Some(3),
+                EnvironmentType::Script {
+                    ty: ScriptType::Subscript,
+                    ..
+                } => Some(2),
+                EnvironmentType::Script {
+                    ty: ScriptType::Superscript,
+                    ..
+                } => Some(2),
+                EnvironmentType::Script {
+                    ty: ScriptType::SubSuperscript,
+                    ..
+                } => Some(3),
             },
         }
     }
@@ -464,7 +485,13 @@ enum EnvironmentType {
     Root,
     Sqrt,
     Negate,
-    Script(ScriptType, bool),
+    Script {
+        ty: ScriptType,
+        above_below: bool,
+        // TODO: This is a hotfix to append things after groupings for the commands stuff.
+        // Shoud probably be refactored into it's own type of things to do, a bit like `Instruction`.
+        append: &'static str,
+    },
 }
 
 impl EnvironmentType {
@@ -475,12 +502,36 @@ impl EnvironmentType {
             EnvironmentType::Root => "mroot",
             EnvironmentType::Sqrt => "msqrt",
             EnvironmentType::Negate => "mrow",
-            EnvironmentType::Script(ScriptType::Subscript, false) => "msub",
-            EnvironmentType::Script(ScriptType::Superscript, false) => "msup",
-            EnvironmentType::Script(ScriptType::SubSuperscript, false) => "msubsup",
-            EnvironmentType::Script(ScriptType::Subscript, true) => "munder",
-            EnvironmentType::Script(ScriptType::Superscript, true) => "mover",
-            EnvironmentType::Script(ScriptType::SubSuperscript, true) => "munderover",
+            EnvironmentType::Script {
+                ty: ScriptType::Subscript,
+                above_below: false,
+                ..
+            } => "msub",
+            EnvironmentType::Script {
+                ty: ScriptType::Superscript,
+                above_below: false,
+                ..
+            } => "msup",
+            EnvironmentType::Script {
+                ty: ScriptType::SubSuperscript,
+                above_below: false,
+                ..
+            } => "msubsup",
+            EnvironmentType::Script {
+                ty: ScriptType::Subscript,
+                above_below: true,
+                ..
+            } => "munder",
+            EnvironmentType::Script {
+                ty: ScriptType::Superscript,
+                above_below: true,
+                ..
+            } => "mover",
+            EnvironmentType::Script {
+                ty: ScriptType::SubSuperscript,
+                above_below: true,
+                ..
+            } => "munderover",
         }
     }
 }
