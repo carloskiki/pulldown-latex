@@ -299,7 +299,6 @@ round_trip!(
     r"\mathfrak{0123456789}"
 );
 
-// TODO: Support `\scriptstyle`
 round_trip!(small_script, r"{\scriptstyle\text{abcdefghijklm}}");
 
 round_trip!(parentheses, r"\left ( \frac{a}{b} \right )");

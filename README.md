@@ -31,21 +31,6 @@ these links specifically.
 - [Font tester](https://fred-wang.github.io/MathFonts/)
 - [Math Variant Selection](https://milde.users.sourceforge.net/LUCR/Math/math-font-selection.xhtml#math-styles)
 
-## TODOs
-1. State Changes
-    - [X] Styles (text, script, etc.)
-    - [X] Colors
-2. Quirky commands
-    - [X] Moving suffixes: `\limits`, `\nolimits`.
-    - [X] `\relax`
-    - [X] `\char`
-3. More complete renderer
-4. Rigorous trim start of strings
-5. Math environments
-6. Even more quirky stuff
-    - [ ] `\sideset` command (using `mmultiscripts`?)
-    - [ ] things at the bottom of primitive file in comments
-
 ### To Test
 - [ ] All the things temml and katex test
 - [ ] Cargo Mutants

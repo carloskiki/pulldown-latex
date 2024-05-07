@@ -229,3 +229,13 @@ pub enum ColorTarget {
     /// The border surrounding the content.
     Border,
 }
+
+// TODO: We are here
+pub enum Grouping {
+    Braces,
+    LeftRight,
+    Array {
+        cols: u8,
+    },
+    Matrix,
+}
