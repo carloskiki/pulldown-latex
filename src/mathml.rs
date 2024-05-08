@@ -245,7 +245,7 @@ where
                     self.writer.write_all(b"</mo>")
                 }
             },
-            Ok(Event::BeginGroup) => {
+            Ok(Event::Begin(_)) => {
                 let mut font = self.state().font;
                 let old_state = self.state_stack.last_mut().expect("state stack is empty");
                 while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
@@ -272,7 +272,7 @@ where
                     .push(Environment::new(EnvironmentType::Group));
                 Ok(())
             }
-            Ok(Event::EndGroup) => {
+            Ok(Event::End) => {
                 let env = self
                     .env_stack
                     .pop()

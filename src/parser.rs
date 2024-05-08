@@ -15,7 +15,7 @@ use std::fmt::{Display, Write};
 
 use thiserror::Error;
 
-use crate::event::{Content, Event, ScriptPosition, ScriptType};
+use crate::event::{Content, Event, Grouping, ScriptPosition, ScriptType};
 
 use self::state::ParserState;
 
@@ -206,9 +206,9 @@ impl<'a> Parser<'a> {
             }
             Argument::Group(group) => {
                 self.buffer.extend([
-                    Instruction::Event(Event::BeginGroup),
+                    Instruction::Event(Event::Begin(Grouping::Normal)),
                     Instruction::Substring(group),
-                    Instruction::Event(Event::EndGroup),
+                    Instruction::Event(Event::End),
                 ]);
             }
         };
@@ -388,26 +388,6 @@ pub(crate) enum Instruction<'a> {
     Substring(&'a str),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum GroupType {
-    /// The group was initiated by a `{` character.
-    Brace,
-    /// The group was initiated by a `\begingroup` command.
-    BeginGroup,
-    /// The group was initiated by a `\left` command.
-    LeftRight,
-}
-
-impl Display for GroupType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            GroupType::Brace => f.write_char('}'),
-            GroupType::BeginGroup => f.write_str("\\endgroup"),
-            GroupType::LeftRight => f.write_str("\\right"),
-        }
-    }
-}
-
 /// Anything that could possibly go wrong while parsing.
 ///
 /// This error type is used to provide context to an error which occurs during the parsing stage.
@@ -440,8 +420,8 @@ pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 
 #[derive(Debug, Error)]
 pub(crate) enum ErrorKind {
-    #[error("unbalanced group found, expected {}", .0.map_or(String::from("no group closing"), |t| t.to_string()))]
-    UnbalancedGroup(Option<GroupType>),
+    #[error("unbalanced group found, expected {:?}", .0)]
+    UnbalancedGroup(Option<Grouping>),
     #[error(
         "unexpected math `$` (math shift) character - this character is currently unsupported"
     )]
@@ -531,9 +511,9 @@ mod tests {
                     ty: ScriptType::Superscript,
                     position: ScriptPosition::AboveBelow
                 },
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Content(Content::Identifier(Identifier::Char('y'))),
-                Event::EndGroup,
+                Event::End,
                 Event::Content(Content::Operator(Operator {
                     content: '‾',
                     stretchy: None,
@@ -564,7 +544,7 @@ mod tests {
                 },
                 Event::Content(Content::Identifier(Identifier::Char('a'))),
                 Event::Content(Content::Number("2")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Content(Content::Number("1")),
                 Event::Content(Content::Operator(Operator {
                     content: '+',
@@ -576,7 +556,7 @@ mod tests {
                     size: None,
                 })),
                 Event::Content(Content::Number("3")),
-                Event::EndGroup,
+                Event::End,
             ]
         );
     }
@@ -595,84 +575,84 @@ mod tests {
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Identifier(Identifier::Char('a'))),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Script {
                     ty: ScriptType::Subscript,
                     position: ScriptPosition::Right
                 },
                 Event::Content(Content::Number("5")),
                 Event::Content(Content::Number("5")),
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
-                Event::EndGroup,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
+                Event::End,
             ]
         )
     }
@@ -692,12 +672,12 @@ mod tests {
                     position: ScriptPosition::Right
                 },
                 Event::Visual(Visual::Fraction(None)),
-                Event::BeginGroup,
+                Event::Begin(Grouping::Normal),
                 Event::Content(Content::Number("1")),
-                Event::EndGroup,
-                Event::BeginGroup,
+                Event::End,
+                Event::Begin(Grouping::Normal),
                 Event::Content(Content::Number("2")),
-                Event::EndGroup,
+                Event::End,
                 Event::Content(Content::Number("2")),
                 Event::Content(Content::Number("4")),
             ]

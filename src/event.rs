@@ -22,9 +22,9 @@ pub enum Event<'a> {
     /// The events following this one constitute a "group" which counts as a single _element_
     /// (i.e., a set of elements within `{}` in `LaTeX`), until the [`Event::EndGroup`] event
     /// is reached.
-    BeginGroup,
+    Begin(Grouping),
     /// Marks the end of a "group".
-    EndGroup,
+    End,
     /// The `n` events following this one constitute the content of the [`Visual`] element. `n` is
     /// defined in the documentation of for the [`Visual`] variant.
     Visual(Visual),
@@ -230,12 +230,13 @@ pub enum ColorTarget {
     Border,
 }
 
-// TODO: We are here
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Grouping {
-    Braces,
+    Internal,
+    Normal,
     LeftRight,
-    Array {
-        cols: u8,
-    },
+    Array,
     Matrix,
+    Cases,
+    Align,
 }

@@ -3,25 +3,38 @@
 
 use crate::{
     attribute::{DimensionUnit, Font},
-    event::*,
+    event::{
+       Grouping as G,
+       Operator as O,
+       Event as E,
+       Style as S,
+       Visual as V,
+       Content as C,
+       Identifier as ID,
+       ScriptType as ST,
+       ScriptPosition as SP, 
+       StateChange as SC,
+       ColorTarget as CT,
+       ColorChange as CC,
+    },
 };
 
 use super::{
     lex,
     tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator, is_primitive_color, token_to_delim},
-    Argument, CharToken, ErrorKind, GroupType, InnerResult, Instruction, Parser, Token,
+    Argument, CharToken, ErrorKind, InnerResult, Instruction as I, Parser, Token,
 };
 
 /// Return an `Operator` event with the given content and default modifiers.
 macro_rules! op {
     ($content:expr) => {
-        Operator {
+        O {
             content: $content,
             ..Default::default()
         }
     };
     ($content:expr, {$($field:ident: $value:expr),*}) => {
-        Operator {
+        O {
             content: $content,
             $($field: $value,)*
             ..Default::default()
@@ -37,55 +50,55 @@ impl<'a> Parser<'a> {
     /// ## Panics
     /// - This function will panic if the `\` or `%` character is given
     pub(super) fn handle_char_token(&mut self, token: CharToken<'a>) -> InnerResult<()> {
-        let instruction = Instruction::Event(match token.into() {
+        let instruction = I::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
             '_' => {
-                let script = Event::Script {
+                let script = E::Script {
                     ty: self.rhs_suffixes(true)?,
-                    position: ScriptPosition::Right,
+                    position: SP::Right,
                 };
                 self.buffer.extend([
-                    Instruction::Event(script),
-                    Instruction::Event(Event::BeginGroup),
+                    I::Event(script),
+                    I::Event(E::Begin(G::Internal)),
                 ]);
                 self.state.skip_suffixes = true;
-                Event::EndGroup
+                E::End
             }
             '^' => {
-                let script = Event::Script {
+                let script = E::Script {
                     ty: self.rhs_suffixes(false)?,
-                    position: ScriptPosition::Right,
+                    position: SP::Right,
                 };
                 self.buffer.extend([
-                    Instruction::Event(script),
-                    Instruction::Event(Event::BeginGroup),
+                    I::Event(script),
+                    I::Event(E::Begin(G::Internal)),
                 ]);
                 self.state.skip_suffixes = true;
-                Event::EndGroup
+                E::End
             }
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
             '&' => return Err(ErrorKind::AlignmentChar),
             '{' => {
-                let str = self.current_string().ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::Brace)))?;
+                let str = self.current_string().ok_or(ErrorKind::UnbalancedGroup(Some(G::Normal)))?;
                 let group = lex::group_content(str, "{", "}")?;
                 self.buffer.extend([
-                    Instruction::Event(Event::BeginGroup),
-                    Instruction::Substring(group),
-                    Instruction::Event(Event::EndGroup)
+                    I::Event(E::Begin(G::Normal)),
+                    I::Substring(group),
+                    I::Event(E::End)
                 ]);
                 return Ok(())
             },
             '}' => {
                 return Err(ErrorKind::UnbalancedGroup(None))
             },
-            '\'' => Event::Content(Content::Operator(op!('′'))),
+            '\'' => E::Content(C::Operator(op!('′'))),
 
-            c if is_char_delimiter(c) => Event::Content(Content::Operator(op!(c, {stretchy: Some(false)}))),
-            c if is_operator(c) => Event::Content(Content::Operator(op!(c))),
+            c if is_char_delimiter(c) => E::Content(C::Operator(op!(c, {stretchy: Some(false)}))),
+            c if is_operator(c) => E::Content(C::Operator(op!(c))),
             
-            '0'..='9' => Event::Content(Content::Number(token.as_str())),
+            '0'..='9' => E::Content(C::Number(token.as_str())),
             c => ident(c),
         });
         self.buffer.push(instruction);
@@ -98,12 +111,12 @@ impl<'a> Parser<'a> {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
             | "coth" | "dim" | "sin" | "tanh" | "sgn" => {
-                Event::Content(Content::Identifier(Identifier::Str(control_sequence)))
+                E::Content(C::Identifier(ID::Str(control_sequence)))
             }
             "lim" | "Pr" | "sup" | "liminf" | "max" | "inf" | "gcd" | "limsup" | "min" => {
                 self.state.allow_suffix_modifiers = true;
                 self.state.above_below_suffix_default = true;
-                Event::Content(Content::Identifier(Identifier::Str(control_sequence)))
+                E::Content(C::Identifier(ID::Str(control_sequence)))
             }
             "operatorname" => {
                 self.state.allow_suffix_modifiers = true;
@@ -113,24 +126,24 @@ impl<'a> Parser<'a> {
                         return Err(ErrorKind::ControlSequenceAsArgument)
                     }
                     Argument::Token(Token::Character(char_)) => {
-                        Event::Content(Content::Identifier(Identifier::Str(char_.as_str())))
+                        E::Content(C::Identifier(ID::Str(char_.as_str())))
                     }
                     Argument::Group(content) => {
-                        Event::Content(Content::Identifier(Identifier::Str(content)))
+                        E::Content(C::Identifier(ID::Str(content)))
                     }
                 }
             }
-            "bmod" => Event::Content(Content::Identifier(Identifier::Str("mod"))),
+            "bmod" => E::Content(C::Identifier(ID::Str("mod"))),
             "pmod" => {
                 let argument = self.get_argument()?;
                 self.buffer.extend([
-                    Instruction::Event(Event::BeginGroup),
-                    Instruction::Event(operator(op!('('))),
+                    I::Event(E::Begin(G::Internal)),
+                    I::Event(operator(op!('('))),
                 ]);
                 self.handle_argument(argument)?;
                 self.buffer.extend([
-                    Instruction::Event(operator(op!(')'))),
-                    Instruction::Event(Event::EndGroup),
+                    I::Event(operator(op!(')'))),
+                    I::Event(E::End),
                 ]);
                 return Ok(());
             }
@@ -357,10 +370,10 @@ impl<'a> Parser<'a> {
             ////////////////////////
             // Style state change //
             ////////////////////////
-            "displaystyle" => self.style_change(Style::Display),
-            "textstyle" => self.style_change(Style::Text),
-            "scriptstyle" => self.style_change(Style::Script),
-            "scriptscriptstyle" => self.style_change(Style::ScriptScript),
+            "displaystyle" => self.style_change(S::Display),
+            "textstyle" => self.style_change(S::Text),
+            "scriptstyle" => self.style_change(S::Script),
+            "scriptscriptstyle" => self.style_change(S::ScriptScript),
 
             ////////////////////////
             // Color state change //
@@ -376,9 +389,9 @@ impl<'a> Parser<'a> {
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                Event::StateChange(StateChange::Color(ColorChange {
+                E::StateChange(SC::Color(CC {
                     color,
-                    target: ColorTarget::Text,
+                    target: CT::Text,
                 }))
             },
             "textcolor" => {
@@ -393,12 +406,12 @@ impl<'a> Parser<'a> {
                 }
                 let modified = self.get_argument()?;
 
-                self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
                     color,
-                    target: ColorTarget::Text,
+                    target: CT::Text,
                 })))]);
                 self.handle_argument(modified)?;
-                Event::EndGroup
+                E::End
             }
             "colorbox" => {
                 let Argument::Group(color) =
@@ -409,12 +422,12 @@ impl<'a> Parser<'a> {
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
                     color,
-                    target: ColorTarget::Background,
+                    target: CT::Background,
                 })))]);
                 self.text_argument()?;
-                Event::EndGroup
+                E::End
             }
             "fcolorbox" => {
                 let Argument::Group(frame_color) =
@@ -430,15 +443,15 @@ impl<'a> Parser<'a> {
                 if !is_primitive_color(frame_color) || !is_primitive_color(background_color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                self.buffer.extend([Instruction::Event(Event::BeginGroup), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
                     color: frame_color,
-                    target: ColorTarget::Text,
-                }))), Instruction::Event(Event::StateChange(StateChange::Color(ColorChange {
+                    target: CT::Text,
+                }))), I::Event(E::StateChange(SC::Color(CC {
                     color: background_color,
-                    target: ColorTarget::Background,
+                    target: CT::Background,
                 })))]);
                 self.text_argument()?;
-                Event::EndGroup
+                E::End
             },
 
             ///////////////////////////////
@@ -455,19 +468,19 @@ impl<'a> Parser<'a> {
                 let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
-                    self.buffer.push(Instruction::Event(Event::BeginGroup));
+                    self.buffer.push(I::Event(E::Begin(G::LeftRight)));
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
                     self.buffer.extend([
-                        Instruction::Event(Event::BeginGroup),
-                        Instruction::Event(Event::Content(Content::Operator(op!(delimiter)))),
+                        I::Event(E::Begin(G::LeftRight)),
+                        I::Event(E::Content(C::Operator(op!(delimiter)))),
                     ]);
                 }
 
                 let curr_str = self
                     .current_string()
-                    .ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)))?;
+                    .ok_or(ErrorKind::UnbalancedGroup(Some(G::LeftRight)))?;
                 let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
                 let delim = if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
@@ -475,14 +488,14 @@ impl<'a> Parser<'a> {
                 } else {
                     let delimiter =
                         lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
-                    Some(Event::Content(Content::Operator(op!(delimiter))))
+                    Some(E::Content(C::Operator(op!(delimiter))))
                 };
 
-                self.buffer.push(Instruction::Substring(group_content));
+                self.buffer.push(I::Substring(group_content));
                 if let Some(delim) = delim {
-                    self.buffer.push(Instruction::Event(delim));
+                    self.buffer.push(I::Event(delim));
                 }
-                self.buffer.push(Instruction::Event(Event::EndGroup));
+                self.buffer.push(I::Event(E::End));
 
                 return Ok(());
             }
@@ -591,46 +604,46 @@ impl<'a> Parser<'a> {
             /////////////
             // Spacing //
             /////////////
-            "," | "thinspace" => Event::Space {
+            "," | "thinspace" => E::Space {
                 width: Some((3. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            ">" | ":" | "medspace" => Event::Space {
+            ">" | ":" | "medspace" => E::Space {
                 width: Some((4. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            ";" | "thickspace" => Event::Space {
+            ";" | "thickspace" => E::Space {
                 width: Some((5. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            "enspace" => Event::Space {
+            "enspace" => E::Space {
                 width: Some((0.5, DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            "quad" => Event::Space {
+            "quad" => E::Space {
                 width: Some((1., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            "qquad" => Event::Space {
+            "qquad" => E::Space {
                 width: Some((2., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            "mathstrut" => Event::Space {
+            "mathstrut" => E::Space {
                 width: None,
                 height: Some((0.7, DimensionUnit::Em)),
                 depth: Some((0.3, DimensionUnit::Em)),
             },
-            "~" | "nobreakspace" => Event::Content(Content::Text("&nbsp;")),
+            "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
                 let dimension = lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
-                Event::Space {
+                E::Space {
                     width: Some(dimension),
                     height: None,
                     depth: None,
@@ -638,7 +651,7 @@ impl<'a> Parser<'a> {
             }
             "hskip" => {
                 let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
-                Event::Space {
+                E::Space {
                     width: Some(glue.0),
                     height: None,
                     depth: None,
@@ -648,7 +661,7 @@ impl<'a> Parser<'a> {
                 let dimension =
                     lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
                 if dimension.1 == DimensionUnit::Mu {
-                    Event::Space {
+                    E::Space {
                         width: Some(dimension),
                         height: None,
                         depth: None,
@@ -662,7 +675,7 @@ impl<'a> Parser<'a> {
                 if glue.0.1 == DimensionUnit::Mu
                     && glue.1.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
                     && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu) {
-                    Event::Space {
+                    E::Space {
                         width: Some(glue.0),
                         height: None,
                         depth: None,
@@ -678,24 +691,24 @@ impl<'a> Parser<'a> {
                     return Err(ErrorKind::DimensionArgument);
                 };
                 let glue = lex::glue(&mut argument)?;
-                Event::Space {
+                E::Space {
                     width: Some(glue.0),
                     height: None,
                     depth: None,
                 }
             }
             // Negative spacing
-            "!" | "negthinspace" => Event::Space {
+            "!" | "negthinspace" => E::Space {
                 width: Some((-3. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            "negmedspace" => Event::Space {
+            "negmedspace" => E::Space {
                 width: Some((-4. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
             },
-            "negthickspace" => Event::Space {
+            "negthickspace" => E::Space {
                 width: Some((-5. / 18., DimensionUnit::Em)),
                 height: None,
                 depth: None,
@@ -951,29 +964,29 @@ impl<'a> Parser<'a> {
             "wedgeq" => operator(op!('≙')),
             "Eqcolon" | "minuscoloncolon" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(
+                    E::Content(C::Operator(
                         op!('−', {right_space: Some((0., DimensionUnit::Em))}),
                     )),
-                    Event::Content(Content::Operator(op!('∷'))),
+                    E::Content(C::Operator(op!('∷'))),
                 ]);
                 return Ok(());
             }
             "Eqqcolon" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(
+                    E::Content(C::Operator(
                         op!('=', {right_space: Some((0., DimensionUnit::Em))}),
                     )),
-                    Event::Content(Content::Operator(op!('∷'))),
+                    E::Content(C::Operator(op!('∷'))),
                 ]);
                 return Ok(());
             }
             "approxcolon" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '≈',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -982,11 +995,11 @@ impl<'a> Parser<'a> {
             }
             "colonapprox" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '≈',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -995,18 +1008,18 @@ impl<'a> Parser<'a> {
             }
             "approxcoloncolon" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '≈',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {
                             left_space: Some((0., DimensionUnit::Em)),
                             right_space: Some((0., DimensionUnit::Em))
                         }
                     })),
-                    Event::Content(Content::Operator(
+                    E::Content(C::Operator(
                         op! {':', {left_space: Some((0., DimensionUnit::Em))}},
                     )),
                 ]);
@@ -1014,18 +1027,18 @@ impl<'a> Parser<'a> {
             }
             "Colonapprox" | "coloncolonapprox" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {
                             left_space: Some((0., DimensionUnit::Em)),
                             right_space: Some((0., DimensionUnit::Em))
                         }
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '≈',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -1034,11 +1047,11 @@ impl<'a> Parser<'a> {
             }
             "coloneq" | "colonminus" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '-',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -1047,18 +1060,18 @@ impl<'a> Parser<'a> {
             }
             "Coloneq" | "coloncolonminus" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {
                             left_space: Some((0., DimensionUnit::Em)),
                             right_space: Some((0., DimensionUnit::Em))
                         }
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '-',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -1067,11 +1080,11 @@ impl<'a> Parser<'a> {
             }
             "colonsim" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '∼',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -1080,18 +1093,18 @@ impl<'a> Parser<'a> {
             }
             "Colonsim" | "coloncolonsim" => {
                 self.multi_event([
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {right_space: Some((0., DimensionUnit::Em))}
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         ':',
                         {
                             left_space: Some((0., DimensionUnit::Em)),
                             right_space: Some((0., DimensionUnit::Em))
                         }
                     })),
-                    Event::Content(Content::Operator(op! {
+                    E::Content(C::Operator(op! {
                         '∼',
                         {left_space: Some((0., DimensionUnit::Em))}
                     })),
@@ -1274,73 +1287,74 @@ impl<'a> Parser<'a> {
                     Argument::Token(t) => match t {
                             Token::ControlSequence(_) => return Err(ErrorKind::Argument),
                             Token::Character(c) => Some(match c.into() {
-                                '0' => Style::Display,
-                                '1' => Style::Text,
-                                '2' => Style::Script,
-                                '3' => Style::ScriptScript,
+                                '0' => S::Display,
+                                '1' => S::Text,
+                                '2' => S::Script,
+                                '3' => S::ScriptScript,
                                 _ => return Err(ErrorKind::Argument),
                             }),
                     },
                     Argument::Group(group) => {
                         match group {
-                            "0" => Some(Style::Display),
-                            "1" => Some(Style::Text),
-                            "2" => Some(Style::Script),
-                            "3" => Some(Style::ScriptScript),
+                            "0" => Some(S::Display),
+                            "1" => Some(S::Text),
+                            "2" => Some(S::Script),
+                            "3" => Some(S::ScriptScript),
                             "" => None,
                             _ => return Err(ErrorKind::Argument),
                         }
                     }
                 };
 
-                self.buffer.push(Instruction::Event(Event::BeginGroup));
+                self.buffer.push(I::Event(E::Begin(G::LeftRight)));
                 if let Some(style) = display_style {
-                    self.buffer.push(Instruction::Event(Event::StateChange(StateChange::Style(style))));
+                    self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
                 }
                 if let Some(ldelim) = ldelim {
-                    self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!(ldelim)))));
+                    self.buffer.push(I::Event(E::Content(C::Operator(op!(ldelim)))));
                 }
-
-                if let Some(rdelim) = rdelim {
-                    self.buffer.push(Instruction::Event(Event::Content(Content::Operator(op!(rdelim)))));
-                }
+                
                 self.fraction_like(bar_size)?;
-                self.buffer.push(Instruction::Event(Event::EndGroup));
+                
+                if let Some(rdelim) = rdelim {
+                    self.buffer.push(I::Event(E::Content(C::Operator(op!(rdelim)))));
+                }
+                self.buffer.push(I::Event(E::End));
                 return Ok(())
             }
             "binom" => {
-                self.buffer.extend([Instruction::Event(Event::BeginGroup),
-                                    Instruction::Event(Event::Content(Content::Operator(op!('('))))]);
+                self.buffer.extend([I::Event(E::Begin(G::LeftRight)),
+                                    I::Event(E::Content(C::Operator(op!('('))))]);
                 self.fraction_like(None)?;
-                self.buffer.extend([Instruction::Event(Event::Content(Content::Operator(op!(')')))),
-                                    Instruction::Event(Event::EndGroup)]);
+                self.buffer.extend([I::Event(E::Content(C::Operator(op!(')')))),
+                                    I::Event(E::End)]);
                 return Ok(())
             }
             "cfrac" => {
-                self.buffer.extend([Instruction::Event(Event::BeginGroup),
-                                    Instruction::Event(Event::StateChange(StateChange::Style(Style::Display)))]);
+                self.buffer.extend([I::Event(E::Begin(G::Internal)),
+                                    I::Event(E::StateChange(SC::Style(S::Display)))]);
                 self.fraction_like(None)?;
-                self.buffer.push(Instruction::Event(Event::EndGroup));
+                self.buffer.push(I::Event(E::End));
                 return Ok(())
             }
             "tfrac" => {
-                self.buffer.extend([Instruction::Event(Event::BeginGroup),
-                                    Instruction::Event(Event::StateChange(StateChange::Style(Style::Text)))]);
+                self.buffer.extend([I::Event(E::Begin(G::Internal)),
+                                    I::Event(E::StateChange(SC::Style(S::Text)))]);
                 self.fraction_like(None)?;
-                self.buffer.push(Instruction::Event(Event::EndGroup));
+                self.buffer.push(I::Event(E::End));
                 return Ok(())
             }
             "dfrac" => {
-                self.buffer.extend([Instruction::Event(Event::BeginGroup),
-                                    Instruction::Event(Event::StateChange(StateChange::Style(Style::Script)))]);
+                self.buffer.extend([I::Event(E::Begin(G::Internal)),
+                                    I::Event(E::StateChange(SC::Style(S::Script)))]);
                 self.fraction_like(None)?;
-                self.buffer.push(Instruction::Event(Event::EndGroup));
+                self.buffer.push(I::Event(E::End));
                 return Ok(())
             }
             "overset" => {
-                self.buffer.push(Instruction::Event(Event::Script {
-                    ty: ScriptType::Superscript,
-                    position: ScriptPosition::AboveBelow,
+                self.buffer.push(I::Event(E::Script {
+                    ty: ST::Superscript,
+                    position: SP::AboveBelow,
                 }));
                 let over = self.get_argument()?;
                 self.handle_argument(over)?;
@@ -1349,9 +1363,9 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
             "underset" => {
-                self.buffer.push(Instruction::Event(Event::Script {
-                    ty: ScriptType::Subscript,
-                    position: ScriptPosition::AboveBelow,
+                self.buffer.push(I::Event(E::Script {
+                    ty: ST::Subscript,
+                    position: SP::AboveBelow,
                 }));
                 let under = self.get_argument()?;
                 self.handle_argument(under)?;
@@ -1368,13 +1382,13 @@ impl<'a> Parser<'a> {
                     lex::optional_argument(self.current_string().ok_or(ErrorKind::Argument)?)?
                 {
                     self.buffer
-                        .push(Instruction::Event(Event::Visual(Visual::Root)));
+                        .push(I::Event(E::Visual(V::Root)));
                     let arg = self.get_argument()?;
                     self.handle_argument(arg)?;
-                    self.buffer.push(Instruction::Substring(index));
+                    self.buffer.push(I::Substring(index));
                 } else {
                     self.buffer
-                        .push(Instruction::Event(Event::Visual(Visual::SquareRoot)));
+                        .push(I::Event(E::Visual(V::SquareRoot)));
                     let arg = self.get_argument()?;
                     self.handle_argument(arg)?;
                 }
@@ -1382,8 +1396,8 @@ impl<'a> Parser<'a> {
             }
             "surd" => {
                 self.multi_event([
-                    Event::Visual(Visual::SquareRoot),
-                    Event::Space {
+                    E::Visual(V::SquareRoot),
+                    E::Space {
                         width: Some((0., DimensionUnit::Em)),
                         height: Some((0.7, DimensionUnit::Em)),
                         depth: None,
@@ -1407,7 +1421,7 @@ impl<'a> Parser<'a> {
             "text" => return self.text_argument(),
             "not" => {
                 self.buffer
-                    .push(Instruction::Event(Event::Visual(Visual::Negation)));
+                    .push(I::Event(E::Visual(V::Negation)));
                 let argument = self.get_argument()?;
                 self.handle_argument(argument)?;
                 return Ok(());
@@ -1417,7 +1431,7 @@ impl<'a> Parser<'a> {
                 if number > 255 {
                     return Err(ErrorKind::InvalidCharNumber);
                 }
-                Event::Content(Content::Identifier(Identifier::Char(
+                E::Content(C::Identifier(ID::Char(
                                 char::from_u32(number as u32).expect("the number is a valid char since it is less than 256")
                                 )))
             },
@@ -1432,12 +1446,12 @@ impl<'a> Parser<'a> {
             "begingroup" => {
                 let str = self
                     .current_string()
-                    .ok_or(ErrorKind::UnbalancedGroup(Some(GroupType::BeginGroup)))?;
+                    .ok_or(ErrorKind::UnbalancedGroup(Some(G::Normal)))?;
                 let group = lex::group_content(str, "begingroup", "endgroup")?;
                 self.buffer.extend([
-                    Instruction::Event(Event::BeginGroup),
-                    Instruction::Substring(group),
-                    Instruction::Event(Event::EndGroup),
+                    I::Event(E::Begin(G::Normal)),
+                    I::Substring(group),
+                    I::Event(E::End),
                 ]);
                 return Ok(());
             }
@@ -1449,20 +1463,20 @@ impl<'a> Parser<'a> {
             }
 
             // Spacing
-            c if c.trim_start().is_empty() => Event::Content(Content::Text("&nbsp;")),
+            c if c.trim_start().is_empty() => E::Content(C::Text("&nbsp;")),
 
             _ => return Err(ErrorKind::UnknownPrimitive),
         };
-        self.buffer.push(Instruction::Event(event));
+        self.buffer.push(I::Event(event));
         Ok(())
     }
 
     /// Handle a control sequence that outputs more than one event.
-    fn multi_event<const N: usize>(&mut self, events: [Event<'a>; N]) {
-        self.buffer.push(Instruction::Event(Event::BeginGroup));
+    fn multi_event<const N: usize>(&mut self, events: [E<'a>; N]) {
+        self.buffer.push(I::Event(E::Begin(G::Internal)));
         self.buffer
-            .extend(events.into_iter().map(Instruction::Event));
-        self.buffer.push(Instruction::Event(Event::EndGroup));
+            .extend(events.into_iter().map(I::Event));
+        self.buffer.push(I::Event(E::End));
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
@@ -1470,7 +1484,7 @@ impl<'a> Parser<'a> {
         let current = self.current_string().ok_or(ErrorKind::Delimiter)?;
         let delimiter = lex::delimiter(current)?;
         self.buffer
-            .push(Instruction::Event(Event::Content(Content::Operator(
+            .push(I::Event(E::Content(C::Operator(
                 op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
             ))));
         Ok(())
@@ -1480,8 +1494,8 @@ impl<'a> Parser<'a> {
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
         let argument = self.get_argument()?;
         self.buffer.extend([
-            Instruction::Event(Event::BeginGroup),
-            Instruction::Event(Event::StateChange(StateChange::Font(font))),
+            I::Event(E::Begin(G::Internal)),
+            I::Event(E::StateChange(SC::Font(font))),
         ]);
         match argument {
             Argument::Token(token) => {
@@ -1491,58 +1505,58 @@ impl<'a> Parser<'a> {
                 };
             }
             Argument::Group(group) => {
-                self.buffer.push(Instruction::Substring(group));
+                self.buffer.push(I::Substring(group));
             }
         };
-        self.buffer.push(Instruction::Event(Event::EndGroup));
+        self.buffer.push(I::Event(E::End));
         Ok(())
     }
 
     /// Accent commands. parse the argument, and overset the accent.
-    fn accent(&mut self, accent: Operator) -> InnerResult<()> {
+    fn accent(&mut self, accent: O) -> InnerResult<()> {
         let argument = self.get_argument()?;
-        self.buffer.push(Instruction::Event(Event::Script {
-            ty: ScriptType::Superscript,
-            position: ScriptPosition::AboveBelow,
+        self.buffer.push(I::Event(E::Script {
+            ty: ST::Superscript,
+            position: SP::AboveBelow,
         }));
         self.handle_argument(argument)?;
         self.buffer
-            .push(Instruction::Event(Event::Content(Content::Operator(
+            .push(I::Event(E::Content(C::Operator(
                 accent,
             ))));
         Ok(())
     }
 
     /// Underscript commands. parse the argument, and underset the accent.
-    fn underscript(&mut self, content: Operator) -> InnerResult<()> {
+    fn underscript(&mut self, content: O) -> InnerResult<()> {
         let argument = self.get_argument()?;
-        self.buffer.push(Instruction::Event(Event::Script {
-            ty: ScriptType::Subscript,
-            position: ScriptPosition::AboveBelow,
+        self.buffer.push(I::Event(E::Script {
+            ty: ST::Subscript,
+            position: SP::AboveBelow,
         }));
         self.handle_argument(argument)?;
         self.buffer
-            .push(Instruction::Event(Event::Content(Content::Operator(
+            .push(I::Event(E::Content(C::Operator(
                 content,
             ))));
 
         Ok(())
     }
 
-    fn big_operator(&mut self, op: Operator, above_below: bool) -> Event<'a> {
+    fn big_operator(&mut self, op: O, above_below: bool) -> E<'a> {
         self.state.allow_suffix_modifiers = true;
         self.state.above_below_suffix_default = above_below;
         operator(op)
     }
 
-    fn font_change(&mut self, font: Font) -> Event<'a> {
+    fn font_change(&mut self, font: Font) -> E<'a> {
         self.state.skip_suffixes = true;
-        Event::StateChange(StateChange::Font(Some(font)))
+        E::StateChange(SC::Font(Some(font)))
     }
 
-    fn style_change(&mut self, style: Style) -> Event<'a> {
+    fn style_change(&mut self, style: S) -> E<'a> {
         self.state.skip_suffixes = true;
-        Event::StateChange(StateChange::Style(style))
+        E::StateChange(SC::Style(style))
     }
 
     fn get_argument(&mut self) -> InnerResult<Argument<'a>> {
@@ -1552,7 +1566,7 @@ impl<'a> Parser<'a> {
     fn text_argument(&mut self) -> InnerResult<()> {
         let argument = self.get_argument()?;
         self.buffer
-            .push(Instruction::Event(Event::Content(Content::Text(
+            .push(I::Event(E::Content(C::Text(
                 match argument {
                     Argument::Token(Token::Character(c)) => c.as_str(),
                     Argument::Group(inner) => inner,
@@ -1563,7 +1577,7 @@ impl<'a> Parser<'a> {
     }
 
     fn fraction_like(&mut self, bar_size: Option<(f32, DimensionUnit)>) -> InnerResult<()> {
-        self.buffer.push(Instruction::Event(Event::Visual(Visual::Fraction(bar_size))));
+        self.buffer.push(I::Event(E::Visual(V::Fraction(bar_size))));
         
         let numerator = self.get_argument()?;
         self.handle_argument(numerator)?;
@@ -1574,13 +1588,13 @@ impl<'a> Parser<'a> {
 }
 
 #[inline]
-fn ident(ident: char) -> Event<'static> {
-    Event::Content(Content::Identifier(Identifier::Char(ident)))
+fn ident(ident: char) -> E<'static> {
+    E::Content(C::Identifier(ID::Char(ident)))
 }
 
 #[inline]
-fn operator(operator: Operator) -> Event<'static> {
-    Event::Content(Content::Operator(operator))
+fn operator(operator: O) -> E<'static> {
+    E::Content(C::Operator(operator))
 }
 
 // TODO implementations:

@@ -1,7 +1,7 @@
-use crate::attribute::{Dimension, DimensionUnit, Glue};
+use crate::{attribute::{Dimension, DimensionUnit, Glue}, event::Grouping};
 
 use super::{
-    tables::token_to_delim, Argument, CharToken, ErrorKind, GroupType, InnerResult, Token,
+    tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token,
 };
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
@@ -51,7 +51,7 @@ pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerRe
     let bytes = input.as_bytes();
     while escaped || depth > 0 || !bytes[index..].starts_with(end.as_bytes()) {
         if index + end.len() > input.len() {
-            return Err(ErrorKind::UnbalancedGroup(Some(GroupType::LeftRight)));
+            return Err(ErrorKind::UnbalancedGroup(None));
         }
         if !escaped && bytes[index..].starts_with(start.as_bytes()) {
             depth += 1;
