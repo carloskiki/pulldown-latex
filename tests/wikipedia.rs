@@ -16,6 +16,8 @@ fn main() {
     concl.exit();
 }
 
+// General Stuff
+
 round_trip!(
     basic,
     r"\alpha",
@@ -194,6 +196,71 @@ round_trip!(
     r"\O \empty"
 );
 
+// Larger Expressions
+
+// Delimiters
+
+round_trip!(parentheses, r"\left ( \frac{a}{b} \right )");
+
+round_trip!(
+    brackets,
+    r"\left [ \frac{a}{b} \right ]",
+    r"\left \lbrack \frac{a}{b} \right \rbrack"
+);
+
+round_trip!(
+    braces,
+    r"\left \{ \frac{a}{b} \right \}",
+    r"\left \lbrace \frac{a}{b} \right \rbrace"
+);
+
+round_trip!(angle_brackets, r"\left \langle \frac{a}{b} \right \rangle");
+
+round_trip!(
+    bars_and_double_bars,
+    r"\left | \frac{a}{b} \right \vert",
+    r"\left \| \frac{a}{b} \right \Vert"
+);
+
+round_trip!(
+    floor_and_ceiling,
+    r"\left \lfloor \frac{a}{b} \right \rfloor",
+    r"\left \lceil \frac{a}{b} \right \rceil"
+);
+
+round_trip!(
+    slashes_and_backslashes,
+    r"\left / \frac{a}{b} \right \backslash"
+);
+
+round_trip!(
+    up_down_updown_arrows,
+    r"\left \uparrow \frac{a}{b} \right \downarrow",
+    r"\left \Uparrow \frac{a}{b} \right \Downarrow",
+    r"\left \updownarrow \frac{a}{b} \right \Updownarrow"
+);
+
+round_trip!(
+    mixed,
+    r"\left [ 0,1 \right )",
+    r"\left \langle \psi \right |"
+);
+
+round_trip!(no_delimiter, r"\left . \frac{A}{B} \right \} \to X");
+
+round_trip!(
+    delimiter_sizes,
+    r"( \bigl( \Bigl( \biggl( \Biggl( \dots \Biggr] \biggr] \Bigr] \bigr] ]",
+    r"\{ \bigl\{ \Bigl\{ \biggl\{ \Biggl\{ \dots \Biggr\rangle \biggr\rangle \Bigr\rangle \bigr\rangle \rangle",
+    r"\| \big\| \Big\| \bigg\| \Bigg\| \dots \Bigg| \bigg| \Big| \big| |",
+    r"\lfloor \bigl\lfloor \Bigl\lfloor \biggl\lfloor \Biggl\lfloor \dots \Biggr\rceil \biggr\rceil \Bigr\rceil \bigr\rceil \rceil",
+    r"\uparrow \big\uparrow \Big\uparrow \bigg\uparrow \Bigg\uparrow \dots \Bigg\Downarrow \bigg\Downarrow \Big\Downarrow \big\Downarrow \Downarrow",
+    r"\updownarrow \big\updownarrow \Big\updownarrow \bigg\updownarrow \Bigg\updownarrow \dots \Bigg\Updownarrow \bigg\Updownarrow \Big\Updownarrow \big\Updownarrow \Updownarrow",
+    r"/ \big/ \Big/ \bigg/ \Bigg/ \dots \Bigg\backslash \bigg\backslash \Big\backslash \big\backslash \backslash"
+);
+
+// Fonts
+
 round_trip!(
     greek_alphabet,
     r"\Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta",
@@ -301,61 +368,128 @@ round_trip!(
 
 round_trip!(small_script, r"{\scriptstyle\text{abcdefghijklm}}");
 
-round_trip!(parentheses, r"\left ( \frac{a}{b} \right )");
+round_trip!(
+    mixed_faces,
+    r"x y z",
+    r"\text{x y z}",
+    r"\text{if} n \text{is even}",
+    r"\text{if }n\text{ is even}",
+    r"\text{if}~n\ \text{is even}"
+);
+
+// Color
 
 round_trip!(
-    brackets,
-    r"\left [ \frac{a}{b} \right ]",
-    r"\left \lbrack \frac{a}{b} \right \rbrack"
+    color,
+    r"{\color{Blue}x^2}+{\color{Orange}2x}-{\color{LimeGreen}1}",
+    r"x=\frac{{\color{Blue}-b}\pm\sqrt{\color{Red}b^2-4ac}}{\color{Green}2a}",
+    r"x\color{red}\neq y=z",
+    r"x{\color{red}\neq} y=z",
+    r"x\color{red}\neq\color{black} y=z",
+    r"\frac{-b\color{Green}\pm\sqrt{b^2\color{Blue}-4{\color{Red}a}c}}{2a}=x",
+    r"{\color{Blue}x^2}+{\color{Orange}2x}-{\color{LimeGreen}1}",
+    r"\color{Blue}x^2\color{Black}+\color{Orange}2x\color{Black}-\color{LimeGreen}1"
+);
+
+// Examples
+
+round_trip!(
+    quadratic_polynomial,
+    r"ax^2 + bx + c = 0"
 );
 
 round_trip!(
-    braces,
-    r"\left \{ \frac{a}{b} \right \}",
-    r"\left \lbrace \frac{a}{b} \right \rbrace"
-);
-
-round_trip!(angle_brackets, r"\left \langle \frac{a}{b} \right \rangle");
-
-round_trip!(
-    bars_and_double_bars,
-    r"\left | \frac{a}{b} \right \vert",
-    r"\left \| \frac{a}{b} \right \Vert"
+    quadratic_formula,
+    r"x = \frac{-b\pm\sqrt{b^2-4ac}}{2a}"
 );
 
 round_trip!(
-    floor_and_ceiling,
-    r"\left \lfloor \frac{a}{b} \right \rfloor",
-    r"\left \lceil \frac{a}{b} \right \rceil"
+    tall_parentheses_and_fractions,
+    r"2 = \left( \frac{\left(3-x\right) \times 2}{3-x} \right)",
+    r"S_{\text{new}} = S_{\text{old}} - \frac{ \left( 5-T \right) ^2} {2}",
+    r"\phi_n(\kappa) = 0.033C_n^2\kappa^{-11/3},\quad \frac{1}{L_0}\ll\kappa\ll\frac{1}{l_0}"
 );
 
 round_trip!(
-    slashes_and_backslashes,
-    r"\left / \frac{a}{b} \right \backslash"
+    integrals,
+    r"\int_a^x \int_a^s f(y)\,dy\,ds = \int_a^x f(y)(x-y)\,dy",
+    r"\int_e^{\infty}\frac {1}{t(\ln t)^2}dt = \left. \frac{-1}{\ln t} \right\vert_e^\infty = 1"
 );
 
 round_trip!(
-    up_down_updown_arrows,
-    r"\left \uparrow \frac{a}{b} \right \downarrow",
-    r"\left \Uparrow \frac{a}{b} \right \Downarrow",
-    r"\left \updownarrow \frac{a}{b} \right \Updownarrow"
+    matrices_and_determinants,
+    r"\det(\mathsf{A}-\lambda\mathsf{I}) = 0"
 );
 
 round_trip!(
-    mixed,
-    r"\left [ 0,1 \right )",
-    r"\left \langle \psi \right |"
+    summation,
+    r"\sum_{i=0}^{n-1} i",
+    r"\sum_{m=1}^\infty\sum_{n=1}^\infty\frac{m^2 n}{3^m\left(m 3^n + n 3^m\right)}"
 );
 
-round_trip!(no_delimiter, r"\left . \frac{A}{B} \right \} \to X");
+round_trip!(
+    differential_equations,
+    r"u'' + p(x)u' + q(x)u=f(x),\quad x>a"
+);
 
 round_trip!(
-    delimiter_sizes,
-    r"( \bigl( \Bigl( \biggl( \Biggl( \dots \Biggr] \biggr] \Bigr] \bigr] ]",
-    r"\{ \bigl\{ \Bigl\{ \biggl\{ \Biggl\{ \dots \Biggr\rangle \biggr\rangle \Bigr\rangle \bigr\rangle \rangle",
-    r"\| \big\| \Big\| \bigg\| \Bigg\| \dots \Bigg| \bigg| \Big| \big| |",
-    r"\lfloor \bigl\lfloor \Bigl\lfloor \biggl\lfloor \Biggl\lfloor \dots \Biggr\rceil \biggr\rceil \Bigr\rceil \bigr\rceil \rceil",
-    r"\uparrow \big\uparrow \Big\uparrow \bigg\uparrow \Bigg\uparrow \dots \Bigg\Downarrow \bigg\Downarrow \Big\Downarrow \big\Downarrow \Downarrow",
-    r"\updownarrow \big\updownarrow \Big\updownarrow \bigg\updownarrow \Bigg\updownarrow \dots \Bigg\Updownarrow \bigg\Updownarrow \Big\Updownarrow \big\Updownarrow \Updownarrow",
-    r"/ \big/ \Big/ \bigg/ \Bigg/ \dots \Bigg\backslash \bigg\backslash \Big\backslash \big\backslash \backslash"
+    complex_numbers,
+    r"|\bar{z}| = |z|,
+    |(\bar{z})^n| = |z|^n,
+    \arg(z^n) = n \arg(z)"
+);
+
+round_trip!(
+    limits,
+    r"\lim_{z\to z_0} f(z)=f(z_0)"
+);
+
+round_trip!(
+    integral_equation,
+    r"\phi_n(\kappa) =
+    \frac{1}{4\pi^2\kappa^2} \int_0^\infty
+    \frac{\sin(\kappa R)}{\kappa R}
+    \frac{\partial}{\partial R}
+    \left [ R^2\frac{\partial D_n(R)}{\partial R} \right ] \,dR"
+);
+
+round_trip!(
+    continuation_and_cases,
+    r"f(x) =
+      \begin{cases}
+        1 & -1 \le x < 0 \\
+        \frac{1}{2} & x = 0 \\
+        1 - x^2 & \text{otherwise}
+      \end{cases}"
+);
+
+round_trip!(
+    prefixed_subscript,
+    r"{}_pF_q(a_1,\dots,a_p;c_1,\dots,c_q;z)
+    = \sum_{n=0}^\infty
+    \frac{(a_1)_n\cdots(a_p)_n}{(c_1)_n\cdots(c_q)_n}
+    \frac{z^n}{n!}"
+);
+
+round_trip!(
+    fraction_and_small_fraction,
+    r"\frac{a}{b}\ \tfrac{a}{b}"
+);
+
+round_trip!(
+    area_of_quadrilateral,
+    r"S=dD\sin\alpha"
+);
+
+round_trip!(
+    volume_of_sphere_stand,
+    r"V = \frac{1}{6} \pi h \left [ 3 \left ( r_1^2 + r_2^2 \right ) + h^2 \right ]"
+);
+
+round_trip!(
+    multiple_equations,
+    r"\begin{align}
+    u & = \tfrac{1}{\sqrt{2}}(x+y) \qquad & x &= \tfrac{1}{\sqrt{2}}(u+v) \\[0.6ex]
+    v & = \tfrac{1}{\sqrt{2}}(x-y) \qquad & y &= \tfrac{1}{\sqrt{2}}(u-v)
+    \end{align}"
 );
