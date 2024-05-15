@@ -198,6 +198,224 @@ round_trip!(
 
 // Larger Expressions
 
+round_trip!(superscript, r"a^2, a^{x+3}");
+
+round_trip!(subscript, r"a_2");
+
+round_trip!(grouping, r"10^{30} a^{2+2}", r"a_{i,j} b_{f'}");
+
+round_trip!(combined_sub_superscript, r"x_2^3", r"{x_2}^3");
+
+round_trip!(super_super, r"10^{10^{8}}");
+
+round_trip!(
+    preceding_and_or_additional,
+    r"\sideset{_1^2}{_3^4}\prod_a^b",
+    r"{}_1^2\!\Omega_3^4"
+);
+
+round_trip!(
+    stacking,
+    r"\overset{\alpha}{\omega}",
+    r"\underset{\alpha}{\omega}",
+    r"\overset{\alpha}{\underset{\gamma}{\omega}}",
+    r"\stackrel{\alpha}{\omega}"
+);
+
+round_trip!(
+    derivatives,
+    r"x', y'', f', f''",
+    r"x^\prime, y^{\prime\prime}"
+);
+
+round_trip!(derivative_dots, r"\dot{x}, \ddot{x}");
+
+round_trip!(
+    underline_overline_vectors,
+    r"\hat a \ \bar b \ \vec c",
+    r"\overrightarrow{a b} \ \overleftarrow{c d} \ \widehat{d e f}",
+    r"\overline{g h i} \ \underline{j k l}"
+);
+
+round_trip!(arc, r"\overset{\frown} {AB}");
+
+round_trip!(
+    arrows_example,
+    r"A \xleftarrow{n+\mu-1} B \xrightarrow[T]{n\pm i-1} C"
+);
+
+round_trip!(
+    overbraces,
+    r"\overbrace{ 1+2+\cdots+100 }^{5050}",
+    r"\underbrace{ a+b+\cdots+z }_{26}"
+);
+
+round_trip!(sum, r"\sum_{k=1}^N k^2", r"\textstyle \sum_{k=1}^N k^2");
+
+round_trip!(
+    sum_in_fraction,
+    r"\frac{\sum_{k=1}^N k^2}{a}",
+    r"\frac{\displaystyle \sum_{k=1}^N k^2}{a}",
+    r"\frac{\sum\limits^{N}_{k=1} k^2}{a}"
+);
+
+round_trip!(
+    product,
+    r"\prod_{i=1}^N x_i",
+    r"\textstyle \prod_{i=1}^N x_i"
+);
+
+round_trip!(
+    coproduct,
+    r"\coprod_{i=1}^N x_i",
+    r"\textstyle \coprod_{i=1}^N x_i"
+);
+
+round_trip!(
+    limit,
+    r"\lim_{x \to \infty} x_n",
+    r"\textstyle \lim_{x \to \infty} x_n"
+);
+
+round_trip!(
+    integral,
+    r"\int\limits_{1}^{3}\frac{e^3/x}{x^2}\, dx",
+    r"\int_{1}^{3}\frac{e^3/x}{x^2}\, dx",
+    r"\textstyle \int\limits_{-N}^{N} e^x dx",
+    r"\textstyle \int_{-N}^{N} e^x dx"
+);
+
+round_trip!(double_integral, r"\iint\limits_{D} dx\,dy");
+
+round_trip!(triple_integral, r"\iiint\limits_{D} dx\,dy\,dz");
+
+round_trip!(quadruple_integral, r"\iiiint\limits_{D} dx\,dy\,dz\,dt");
+
+round_trip!(
+    line_or_path_integral,
+    r"\int_{(x,y)\in C} x^3\, dx + 4y^2\, dy"
+);
+
+round_trip!(
+    closed_line_or_path_integral,
+    r"\oint_{(x,y)\in C} x^3\, dx + 4y^2\, dy"
+);
+
+round_trip!(intersections, r"\bigcap_{i=1}^n E_i");
+
+round_trip!(unions, r"\bigcup_{i=1}^n E_i");
+
+// Fractions, Matrices, Multilines
+
+round_trip!(
+    fractions,
+    r"\frac{2}{4} = 0.5",
+    r"\tfrac{2}{4} = 0.5",
+    r"\dfrac{2}{4} = 0.5 \qquad \dfrac{2}{c + \dfrac{2}{d + \dfrac{2}{4}}} = a",
+    r"\cfrac{2}{c + \cfrac{2}{d + \cfrac{2}{4}}} = a",
+    r"\cfrac{x}{1 + \cfrac{\cancel{y}}{\cancel{y}}} = \cfrac{x}{2}"
+);
+
+round_trip!(
+    binomials,
+    r"\binom{n}{k}",
+    r"\tbinom{n}{k}",
+    r"\dbinom{n}{k}"
+);
+
+round_trip!(
+    matrices,
+    r"\begin{matrix}
+    -x & y \\
+    z & -v
+    \end{matrix}",
+    r"\begin{vmatrix}
+    -x & y \\
+    z & -v
+    \end{vmatrix}",
+    r"\begin{Vmatrix}
+    -x & y \\
+    z & -v
+    \end{Vmatrix}",
+    r"\begin{bmatrix}
+    0 & \cdots & 0 \\
+    \vdots & \ddots & \vdots \\
+    0 & \cdots & 0
+    \end{bmatrix}",
+    r"\begin{Bmatrix}
+    x & y \\
+    z & v
+    \end{Bmatrix}",
+    r"\begin{pmatrix}
+    x & y \\
+    z & v
+    \end{pmatrix}",
+    r"\bigl( \begin{smallmatrix}
+    a&b\\ c&d
+    \end{smallmatrix} \bigr)"
+);
+
+round_trip!(
+    cases,
+    r"f(n) =
+    \begin{cases}
+    n/2, & \text{if }n\text{ is even} \\
+    3n+1, & \text{if }n\text{ is odd}
+    \end{cases}",
+    r"\begin{cases}
+    3x + 5y + z \\
+    7x - 2y + 4z \\
+    -6x + 3y + 2z
+    \end{cases}"
+);
+
+round_trip!(
+    multiline_equations,
+    r"\begin{align}
+    f(x) & = (a+b)^2 \\
+    & = a^2+2ab+b^2 \\
+    \end{align}",
+    r"\begin{alignat}{2}
+    f(x) & = (a-b)^2 \\
+    & = a^2-2ab+b^2 \\
+    \end{alignat}",
+    r"\begin{align}
+    f(a,b) & = (a+b)^2 && = (a+b)(a+b) \\
+    & = a^2+ab+ba+b^2  && = a^2+2ab+b^2 \\
+    \end{align}",
+    r"\begin{alignat}{3}
+    f(a,b) & = (a+b)^2 && = (a+b)(a+b) \\
+    & = a^2+ab+ba+b^2  && = a^2+2ab+b^2 \\
+    \end{alignat}",
+    r"\begin{array}{lcl}
+    z & = & a \\
+    f(x,y,z) & = & x + y + z
+    \end{array}",
+    r"\begin{array}{lcr}
+    z & = & a \\
+    f(x,y,z) & = & x + y + z
+    \end{array}",
+    r"\begin{alignat}{4}
+    F:\; && C(X) && \;\to\;     & C(X) \\
+         && g    && \;\mapsto\; & g^2
+    \end{alignat}",
+    r"\begin{alignat}{4}
+    F:\; && C(X) && \;\to\;     && C(X) \\
+         && g    && \;\mapsto\; && g^2
+    \end{alignat}"
+);
+
+round_trip!(
+    arrays,
+    r"\begin{array}{|c|c|c|} a & b & S \\
+    \hline
+    0 & 0 & 1 \\
+    0 & 1 & 1 \\
+    1 & 0 & 1 \\
+    1 & 1 & 0 \\
+    \end{array}"
+);
+
 // Delimiters
 
 round_trip!(parentheses, r"\left ( \frac{a}{b} \right )");
@@ -393,15 +611,9 @@ round_trip!(
 
 // Examples
 
-round_trip!(
-    quadratic_polynomial,
-    r"ax^2 + bx + c = 0"
-);
+round_trip!(quadratic_polynomial, r"ax^2 + bx + c = 0");
 
-round_trip!(
-    quadratic_formula,
-    r"x = \frac{-b\pm\sqrt{b^2-4ac}}{2a}"
-);
+round_trip!(quadratic_formula, r"x = \frac{-b\pm\sqrt{b^2-4ac}}{2a}");
 
 round_trip!(
     tall_parentheses_and_fractions,
@@ -439,10 +651,7 @@ round_trip!(
     \arg(z^n) = n \arg(z)"
 );
 
-round_trip!(
-    limits,
-    r"\lim_{z\to z_0} f(z)=f(z_0)"
-);
+round_trip!(limits, r"\lim_{z\to z_0} f(z)=f(z_0)");
 
 round_trip!(
     integral_equation,
@@ -471,15 +680,9 @@ round_trip!(
     \frac{z^n}{n!}"
 );
 
-round_trip!(
-    fraction_and_small_fraction,
-    r"\frac{a}{b}\ \tfrac{a}{b}"
-);
+round_trip!(fraction_and_small_fraction, r"\frac{a}{b}\ \tfrac{a}{b}");
 
-round_trip!(
-    area_of_quadrilateral,
-    r"S=dD\sin\alpha"
-);
+round_trip!(area_of_quadrilateral, r"S=dD\sin\alpha");
 
 round_trip!(
     volume_of_sphere_stand,
