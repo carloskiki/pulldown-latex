@@ -376,6 +376,8 @@ where
                 }
                 Ok(())
             }
+            // TODO: handle math environments
+            Ok(_) => Ok(()),
             Err(e) => {
                 let error_color = self.config.error_color;
                 write!(

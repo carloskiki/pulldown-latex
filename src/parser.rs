@@ -11,11 +11,11 @@ mod primitives;
 mod state;
 mod tables;
 
-use std::fmt::{Display, Write};
+use std::fmt::Display;
 
 use thiserror::Error;
 
-use crate::event::{Content, Event, Grouping, ScriptPosition, ScriptType};
+use crate::event::{Event, Grouping, ScriptPosition, ScriptType};
 
 use self::state::ParserState;
 
@@ -24,7 +24,7 @@ use self::state::ParserState;
 ///
 /// Transforming the events into rendered math is a task for the
 /// [`mahtml`](crate::mathml) renderer.
-/// 
+///
 /// The algorithm of the [`Parser`] is driven by the [`Parser::next`] method on the [`Parser`].
 /// This method is provided through the [`Iterator`] trait implementation, thus an end user should
 /// only need to use the [`Parser`] as an iterator of `Result<Event, ParserError>`.
@@ -61,7 +61,10 @@ pub struct Parser<'a> {
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(64);
-        instruction_stack.push(Instruction::Substring(input));
+        instruction_stack.push(Instruction::SubGroup {
+            content: input,
+            allows_alignment: false,
+        });
         let buffer = Vec::with_capacity(16);
         Self {
             input,
@@ -74,17 +77,27 @@ impl<'a> Parser<'a> {
     /// Get the current string we are parsing.
     ///
     /// This function guarantees that the string returned is not empty.
-    fn current_string(&mut self) -> Option<&mut &'a str> {
-        match self.instruction_stack.last()? {
-            Instruction::Event(_) => None,
-            Instruction::Substring("") => {
-                self.instruction_stack.pop();
-                self.current_string()
-            }
-            Instruction::Substring(_) => self.instruction_stack.last_mut().map(|i| match i {
-                Instruction::Substring(s) => s,
-                _ => unreachable!(),
-            }),
+    fn current_string(&mut self) -> &mut &'a str {
+        match self
+            .instruction_stack
+            .last_mut()
+            .expect("there is something in the stack")
+        {
+            Instruction::SubGroup { content: s, .. } => s,
+            _ => unreachable!(),
+        }
+    }
+
+    fn allows_alignment(&self) -> bool {
+        match self
+            .instruction_stack
+            .last()
+            .expect("there is something in the stack")
+        {
+            Instruction::SubGroup {
+                allows_alignment, ..
+            } => *allows_alignment,
+            _ => unreachable!(),
         }
     }
 
@@ -93,9 +106,9 @@ impl<'a> Parser<'a> {
     /// Follows the design decisions described in [`design/suffixes.md`].
     fn handle_suffixes(&mut self) -> InnerResult<Option<Event<'a>>> {
         if self.state.skip_suffixes {
-            return Ok(None)
+            return Ok(None);
         }
-        
+
         let mut script_position = if self.state.above_below_suffix_default {
             ScriptPosition::Movable
         } else {
@@ -103,7 +116,7 @@ impl<'a> Parser<'a> {
         };
 
         if self.state.allow_suffix_modifiers {
-            if let Some(limits) = self.current_string().and_then(lex::limit_modifiers) {
+            if let Some(limits) = lex::limit_modifiers(self.current_string()) {
                 if limits {
                     script_position = ScriptPosition::AboveBelow;
                 } else {
@@ -111,10 +124,7 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-
-        let Some(str) = self.current_string() else {
-            return Ok(None);
-        };
+        let str = self.current_string();
         *str = str.trim_start();
 
         let Some(next_char) = str.chars().next() else {
@@ -126,7 +136,7 @@ impl<'a> Parser<'a> {
             _ => return Ok(None),
         };
         *str = &str[1..];
-        
+
         let ty = self.rhs_suffixes(subscript_first)?;
         Ok(Some(Event::Script {
             ty,
@@ -136,60 +146,52 @@ impl<'a> Parser<'a> {
 
     fn rhs_suffixes(&mut self, subscript_first: bool) -> InnerResult<ScriptType> {
         let first_suffix_start = self.buffer.len();
-        let str = self.current_string().ok_or(if subscript_first {
-            ErrorKind::EmptySubscript
-        } else {
-            ErrorKind::EmptySuperscript
-        })?;
-
-        let arg = lex::argument(str)?;
+        let arg = lex::argument(self.current_string())?;
         self.handle_argument(arg)?;
         let second_suffix_start = self.buffer.len();
-        if let Some(str) = self.current_string() {
-            let next_char = str.chars().next().expect("current_string is not empty");
-            if (next_char == '_' && !subscript_first) || (next_char == '^' && subscript_first) {
-                *str = &str[1..];
-                let str = self.current_string().ok_or(if subscript_first {
-                    ErrorKind::EmptySuperscript
-                } else {
-                    ErrorKind::EmptySubscript
-                })?;
-                let arg = lex::argument(str)?;
-                self.handle_argument(arg)?;
-            } else if next_char == '_' || next_char == '^' {
-                return Err(if subscript_first {
-                    ErrorKind::DoubleSubscript
-                } else {
-                    ErrorKind::DoubleSuperscript
-                });
-            }
-        };
+        let str = self.current_string();
+        let next_char = str.chars().next();
+        if (next_char == Some('_') && !subscript_first)
+            || (next_char == Some('^') && subscript_first)
+        {
+            *str = &str[1..];
+            let arg = lex::argument(str)?;
+            self.handle_argument(arg)?;
+        } else if next_char == Some('_') || next_char == Some('^') {
+            return Err(if subscript_first {
+                ErrorKind::DoubleSubscript
+            } else {
+                ErrorKind::DoubleSuperscript
+            });
+        }
         let second_suffix_end = self.buffer.len();
 
-        Ok(if !subscript_first && second_suffix_start != second_suffix_end {
-            self.instruction_stack.extend(
-                self.buffer[first_suffix_start..second_suffix_start]
-                    .iter()
-                    .rev(),
-            );
-            self.instruction_stack.extend(
-                self.buffer
-                    .drain(first_suffix_start..)
-                    .skip(second_suffix_start - first_suffix_start)
-                    .rev(),
-            );
-            ScriptType::SubSuperscript
-        } else {
-            let suffixes = self.buffer.drain(first_suffix_start..);
-            self.instruction_stack.extend(suffixes.rev());
-            if second_suffix_start != second_suffix_end {
+        Ok(
+            if !subscript_first && second_suffix_start != second_suffix_end {
+                self.instruction_stack.extend(
+                    self.buffer[first_suffix_start..second_suffix_start]
+                        .iter()
+                        .rev(),
+                );
+                self.instruction_stack.extend(
+                    self.buffer
+                        .drain(first_suffix_start..)
+                        .skip(second_suffix_start - first_suffix_start)
+                        .rev(),
+                );
                 ScriptType::SubSuperscript
-            } else if subscript_first {
-                ScriptType::Subscript
             } else {
-                ScriptType::Superscript
-            }
-        })
+                let suffixes = self.buffer.drain(first_suffix_start..);
+                self.instruction_stack.extend(suffixes.rev());
+                if second_suffix_start != second_suffix_end {
+                    ScriptType::SubSuperscript
+                } else if subscript_first {
+                    ScriptType::Subscript
+                } else {
+                    ScriptType::Superscript
+                }
+            },
+        )
     }
 
     /// Parse an arugment and pushes the argument to the stack surrounded by a
@@ -207,7 +209,10 @@ impl<'a> Parser<'a> {
             Argument::Group(group) => {
                 self.buffer.extend([
                     Instruction::Event(Event::Begin(Grouping::Normal)),
-                    Instruction::Substring(group),
+                    Instruction::SubGroup {
+                        content: group,
+                        allows_alignment: false,
+                    },
                     Instruction::Event(Event::End),
                 ]);
             }
@@ -221,7 +226,7 @@ impl<'a> Parser<'a> {
             Instruction::Event(_) => None,
             // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
             // of the inputed string, when macros are supported.
-            Instruction::Substring(s) => Some(s.as_ptr()),
+            Instruction::SubGroup { content: s, .. } => Some(s.as_ptr()),
         }) else {
             return ParserError {
                 context: None,
@@ -260,7 +265,7 @@ impl<'a> Iterator for Parser<'a> {
     type Item = Result<Event<'a>, ParserError<'a>>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.instruction_stack.last() {
+        match self.instruction_stack.last_mut() {
             Some(Instruction::Event(_)) => {
                 let event = self
                     .instruction_stack
@@ -271,57 +276,32 @@ impl<'a> Iterator for Parser<'a> {
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::Substring(_)) => {
-                let content = match self.current_string() {
-                    Some(content) => content,
-                    None => return self.next(),
-                };
-
+            Some(Instruction::SubGroup {
+                content,
+                ..
+            }) if content.trim_start().is_empty() => {
+                self.instruction_stack.pop();
+                self.next()
+            }
+            Some(Instruction::SubGroup {
+                content,
+                ..
+            }) => {
                 // 1. Parse the next token and output everything to the staging stack.
-                let maybe_err = match content.chars().next() {
-                    Some('0'..='9') => {
-                        let mut len = content
-                            .chars()
-                            .skip(1)
-                            .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
-                            .count()
-                            + 1;
-                        if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                            len -= 1;
-                        }
-                        let (number, rest) = content.split_at(len);
-                        *content = rest;
-                        self.buffer
-                            .push(Instruction::Event(Event::Content(Content::Number(number))));
-                        Ok(())
-                    }
-                    Some('%') => {
-                        if let Some((_, rest)) = content.split_once('\n') {
-                            *content = rest;
-                        } else {
-                            *content = &content[content.len()..];
-                        }
-                        return self.next();
-                    }
+                // TODO: when try blocks hit stable, we should use them. (Please be stable soon!)
+                let token = match lex::token(content) {
+                    Ok(token) => token,
+                    Err(err) => return Some(Err(self.error_with_context(err))),
+                };
+                let maybe_err = match token {
                     // TODO: when expanding a user defined macro, we do not want to check for
                     // suffixes.
-                    Some('\\') => {
-                        *content = &content[1..];
-                        match lex::rhs_control_sequence(content) {
-                            Ok(cs) => self.handle_primitive(cs),
-                            Err(err) => Err(err),
-                        }
-                    }
-                    Some(c) => {
-                        let (c, rest) = &content.split_at(c.len_utf8());
-                        *content = rest;
-                        self.handle_char_token(CharToken::from_str(c))
-                    }
-                    None => return self.next(),
+                    Token::ControlSequence(cs) => self.handle_primitive(cs),
+                    Token::Character(c) => self.handle_char_token(c),
                 };
                 if let Err(err) = maybe_err {
                     return Some(Err(self.error_with_context(err)));
-                };
+                }
 
                 // 2. Check for suffixes, to complete the atom.
                 let suffix = match self.handle_suffixes() {
@@ -354,11 +334,12 @@ struct CharToken<'a> {
     char: &'a str,
 }
 
+/// A verified character that retains the string context.
 impl<'a> CharToken<'a> {
     fn from_str(s: &'a str) -> Self {
-        assert!(
-            s.chars().count() == 1,
-            "CharToken must be a single character"
+        debug_assert!(
+            s.chars().next().is_some(),
+            "CharToken must be constructed from a non-empty string"
         );
         Self { char: s }
     }
@@ -385,13 +366,16 @@ pub(crate) enum Instruction<'a> {
     /// Send the event
     Event(Event<'a>),
     /// Parse the substring
-    Substring(&'a str),
+    SubGroup {
+        content: &'a str,
+        allows_alignment: bool,
+    },
 }
 
 /// Anything that could possibly go wrong while parsing.
 ///
 /// This error type is used to provide context to an error which occurs during the parsing stage.
-/// 
+///
 /// The [`Parser`] implements the [`Iterator`] trait, which returns a stream of `Result<Event, ParserError>`.
 #[derive(Debug, Error)]
 pub struct ParserError<'a> {
@@ -422,6 +406,8 @@ pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 pub(crate) enum ErrorKind {
     #[error("unbalanced group found, expected {:?}", .0)]
     UnbalancedGroup(Option<Grouping>),
+    #[error("unkown mathematical environment found")]
+    Environment,
     #[error(
         "unexpected math `$` (math shift) character - this character is currently unsupported"
     )]
@@ -434,10 +420,6 @@ pub(crate) enum ErrorKind {
     AlignmentChar,
     #[error("unexpected end of input")]
     EndOfInput,
-    #[error("expected a dimension specification")]
-    Dimension,
-    #[error("expected a dimension or glue specification")]
-    Glue,
     #[error("expected a dimension or glue argument")]
     DimensionArgument,
     #[error("expected a dimensional unit")]
@@ -454,10 +436,6 @@ pub(crate) enum ErrorKind {
     CharacterNumber,
     #[error("expected an argument")]
     Argument,
-    #[error("trying to add a subscript with no content")]
-    EmptySubscript,
-    #[error("trying to add a superscript with no content")]
-    EmptySuperscript,
     #[error("trying to add a subscript twice to the same element")]
     DoubleSubscript,
     #[error("trying to add a superscript twice to the same element")]
@@ -493,7 +471,7 @@ fn floor_char_boundary(str: &str, index: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Identifier, Operator, Visual};
+    use crate::event::{Content, Identifier, Operator, Visual};
 
     use super::*;
 
@@ -692,10 +670,7 @@ mod tests {
             .collect::<Result<Vec<_>, ParserError<'static>>>()
             .unwrap();
 
-        assert_eq!(
-            events,
-            vec![Event::Content(Content::Number("123"))]
-        );
+        assert_eq!(events, vec![Event::Content(Content::Number("123"))]);
     }
 }
 

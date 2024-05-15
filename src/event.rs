@@ -47,6 +47,14 @@ pub enum Event<'a> {
     ///
     /// This state change only applies to the current group nesting and deeper groups.
     StateChange(StateChange<'a>),
+    /// This event specifies an alignment mark in a mathematical environment.
+    /// 
+    /// This event is only used when inside a `Grouping` that allows it.
+    Alignment,
+    /// This event specifies a line break in a mathematical environment.
+    ///
+    /// This event is only used when inside a `Grouping` that allows it.
+    NewLine,
 }
 
 /// Base events that produce `mathml` nodes
@@ -234,6 +242,7 @@ pub enum ColorTarget {
 pub enum Grouping {
     Internal,
     Normal,
+    // TODO: make LeftRight own its delimiters, when changing the Event API.
     LeftRight,
     Array,
     Matrix,

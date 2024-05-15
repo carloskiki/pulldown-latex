@@ -1,6 +1,8 @@
 //! A module that implements the behavior of every primitive of the supported LaTeX syntax. This
 //! includes every primitive macro and active character.
 
+use core::panic;
+
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
@@ -16,6 +18,7 @@ use crate::{
        StateChange as SC,
        ColorTarget as CT,
        ColorChange as CC,
+       Grouping,
     },
 };
 
@@ -79,13 +82,13 @@ impl<'a> Parser<'a> {
             }
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
-            '&' => return Err(ErrorKind::AlignmentChar),
+            '&' if self.allows_alignment() => E::Alignment,
             '{' => {
-                let str = self.current_string().ok_or(ErrorKind::UnbalancedGroup(Some(G::Normal)))?;
+                let str = self.current_string();
                 let group = lex::group_content(str, "{", "}")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
-                    I::Substring(group),
+                    I::SubGroup { content: group, allows_alignment: false },
                     I::Event(E::End)
                 ]);
                 return Ok(())
@@ -98,7 +101,23 @@ impl<'a> Parser<'a> {
             c if is_char_delimiter(c) => E::Content(C::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => E::Content(C::Operator(op!(c))),
             
-            '0'..='9' => E::Content(C::Number(token.as_str())),
+            '0'..='9' => {
+                let content = token.as_str();
+                let mut len = content
+                    .chars()
+                    .skip(1)
+                    .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
+                    .count()
+                    + 1;
+                if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                    len -= 1;
+                }
+                let (number, rest) = content.split_at(len);
+                *self.current_string() = rest;
+                self.buffer
+                    .push(I::Event(E::Content(C::Number(number))));
+                return Ok(())
+            }
             c => ident(c),
         });
         self.buffer.push(instruction);
@@ -120,7 +139,7 @@ impl<'a> Parser<'a> {
             }
             "operatorname" => {
                 self.state.allow_suffix_modifiers = true;
-                let argument = self.get_argument()?;
+                let argument = lex::argument(self.current_string())?;
                 match argument {
                     Argument::Token(Token::ControlSequence(_)) => {
                         return Err(ErrorKind::ControlSequenceAsArgument)
@@ -135,7 +154,7 @@ impl<'a> Parser<'a> {
             }
             "bmod" => E::Content(C::Identifier(ID::Str("mod"))),
             "pmod" => {
-                let argument = self.get_argument()?;
+                let argument = lex::argument(self.current_string())?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Internal)),
                     I::Event(operator(op!('('))),
@@ -250,12 +269,11 @@ impl<'a> Parser<'a> {
             ///////////////////////////
             // Symbols & Punctuation //
             ///////////////////////////
-            "dots" => match self.current_string() {
-                Some(curr_str) if curr_str.trim_start().starts_with(['.', ',']) => {
-                    operator(op!('…'))
-                }
-                _ => operator(op!('⋯')),
-            },
+            "dots" => if self.current_string().trim_start().starts_with(['.', ',']) {
+                operator(op!('…'))
+            } else {
+                operator(op!('⋯'))
+            }
             "ldots" | "dotso" | "dotsc" => operator(op!('…')),
             "cdots" | "dotsi" | "dotsm" | "dotsb" | "idotsin" => operator(op!('⋯')),
             "ddots" => operator(op!('⋱')),
@@ -380,7 +398,7 @@ impl<'a> Parser<'a> {
             ////////////////////////
             "color" => {
                 let Argument::Group(color) =
-                    self.get_argument()?
+                    lex::argument(self.current_string())?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -395,8 +413,9 @@ impl<'a> Parser<'a> {
                 }))
             },
             "textcolor" => {
+                let str = self.current_string();
                 let Argument::Group(color) =
-                    self.get_argument()?
+                    lex::argument(str)?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -404,7 +423,7 @@ impl<'a> Parser<'a> {
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                let modified = self.get_argument()?;
+                let modified = lex::argument(str)?;
 
                 self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
                     color,
@@ -415,7 +434,7 @@ impl<'a> Parser<'a> {
             }
             "colorbox" => {
                 let Argument::Group(color) =
-                    self.get_argument()?
+                    lex::argument(self.current_string())?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -430,13 +449,14 @@ impl<'a> Parser<'a> {
                 E::End
             }
             "fcolorbox" => {
+                let str = self.current_string();
                 let Argument::Group(frame_color) =
-                    self.get_argument()?
+                    lex::argument(str)?
                 else {
                     return Err(ErrorKind::Argument);
                 };
                 let Argument::Group(background_color) =
-                    self.get_argument()?
+                    lex::argument(str)?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -465,33 +485,31 @@ impl<'a> Parser<'a> {
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
 
             "left" => {
-                let curr_str = self.current_string().ok_or(ErrorKind::Delimiter)?;
+                let curr_str = self.current_string();
                 if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     self.buffer.push(I::Event(E::Begin(G::LeftRight)));
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+                        lex::delimiter(curr_str)?;
                     self.buffer.extend([
                         I::Event(E::Begin(G::LeftRight)),
                         I::Event(E::Content(C::Operator(op!(delimiter)))),
                     ]);
                 }
 
-                let curr_str = self
-                    .current_string()
-                    .ok_or(ErrorKind::UnbalancedGroup(Some(G::LeftRight)))?;
+                let curr_str = self.current_string();
                 let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
                 let delim = if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     None
                 } else {
                     let delimiter =
-                        lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+                        lex::delimiter(curr_str)?;
                     Some(E::Content(C::Operator(op!(delimiter))))
                 };
 
-                self.buffer.push(I::Substring(group_content));
+                self.buffer.push(I::SubGroup { content: group_content, allows_alignment: false });
                 if let Some(delim) = delim {
                     self.buffer.push(I::Event(delim));
                 }
@@ -500,7 +518,7 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
             "middle" => {
-                let delimiter = lex::delimiter(self.current_string().ok_or(ErrorKind::Delimiter)?)?;
+                let delimiter = lex::delimiter(self.current_string())?;
                 operator(op!(delimiter))
             }
             "right" => {
@@ -642,7 +660,7 @@ impl<'a> Parser<'a> {
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
-                let dimension = lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
+                let dimension = lex::dimension(self.current_string())?;
                 E::Space {
                     width: Some(dimension),
                     height: None,
@@ -650,7 +668,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "hskip" => {
-                let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
+                let glue = lex::glue(self.current_string())?;
                 E::Space {
                     width: Some(glue.0),
                     height: None,
@@ -659,7 +677,7 @@ impl<'a> Parser<'a> {
             }
             "mkern" => {
                 let dimension =
-                    lex::dimension(self.current_string().ok_or(ErrorKind::Dimension)?)?;
+                    lex::dimension(self.current_string())?;
                 if dimension.1 == DimensionUnit::Mu {
                     E::Space {
                         width: Some(dimension),
@@ -671,7 +689,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "mskip" => {
-                let glue = lex::glue(self.current_string().ok_or(ErrorKind::Glue)?)?;
+                let glue = lex::glue(self.current_string())?;
                 if glue.0.1 == DimensionUnit::Mu
                     && glue.1.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
                     && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu) {
@@ -686,7 +704,7 @@ impl<'a> Parser<'a> {
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
-                    self.get_argument()?
+                    lex::argument(self.current_string())?
                 else {
                     return Err(ErrorKind::DimensionArgument);
                 };
@@ -1252,7 +1270,8 @@ impl<'a> Parser<'a> {
             }
             // TODO: better errors for this
             "genfrac" => {
-                let ldelim_argument = self.get_argument()?;
+                let str = self.current_string();
+                let ldelim_argument = lex::argument(str)?;
                 let ldelim = match ldelim_argument {
                     Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
                     Argument::Group(group) => if group.is_empty() {
@@ -1261,7 +1280,7 @@ impl<'a> Parser<'a> {
                         return Err(ErrorKind::Delimiter);
                     },
                 };
-                let rdelim_argument = self.get_argument()?;
+                let rdelim_argument = lex::argument(str)?;
                 let rdelim = match rdelim_argument {
                     Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
                     Argument::Group(group) => if group.is_empty() {
@@ -1270,7 +1289,7 @@ impl<'a> Parser<'a> {
                         return Err(ErrorKind::Delimiter);
                     },
                 };
-                let bar_size_argument = self.get_argument()?;
+                let bar_size_argument = lex::argument(str)?;
                 let bar_size = match bar_size_argument {
                     Argument::Token(_) => return Err(ErrorKind::DimensionArgument),
                     Argument::Group("") => None,
@@ -1282,7 +1301,7 @@ impl<'a> Parser<'a> {
                         }
                     })?,
                 };
-                let display_style_argument = self.get_argument()?;
+                let display_style_argument = lex::argument(str)?;
                 let display_style = match display_style_argument {
                     Argument::Token(t) => match t {
                             Token::ControlSequence(_) => return Err(ErrorKind::Argument),
@@ -1356,9 +1375,9 @@ impl<'a> Parser<'a> {
                     ty: ST::Superscript,
                     position: SP::AboveBelow,
                 }));
-                let over = self.get_argument()?;
+                let over = lex::argument(self.current_string())?;
                 self.handle_argument(over)?;
-                let base = self.get_argument()?;
+                let base = lex::argument(self.current_string())?;
                 self.handle_argument(base)?;
                 return Ok(());
             }
@@ -1367,9 +1386,9 @@ impl<'a> Parser<'a> {
                     ty: ST::Subscript,
                     position: SP::AboveBelow,
                 }));
-                let under = self.get_argument()?;
+                let under = lex::argument(self.current_string())?;
                 self.handle_argument(under)?;
-                let base = self.get_argument()?;
+                let base = lex::argument(self.current_string())?;
                 self.handle_argument(base)?;
                 return Ok(());
             }
@@ -1379,17 +1398,20 @@ impl<'a> Parser<'a> {
             //////////////
             "sqrt" => {
                 if let Some(index) =
-                    lex::optional_argument(self.current_string().ok_or(ErrorKind::Argument)?)?
+                    lex::optional_argument(self.current_string())?
                 {
                     self.buffer
                         .push(I::Event(E::Visual(V::Root)));
-                    let arg = self.get_argument()?;
+                    let arg = lex::argument(self.current_string())?;
                     self.handle_argument(arg)?;
-                    self.buffer.push(I::Substring(index));
+                    self.buffer.push(I::SubGroup {
+                        content: index,
+                        allows_alignment: false,
+                    });
                 } else {
                     self.buffer
                         .push(I::Event(E::Visual(V::SquareRoot)));
-                    let arg = self.get_argument()?;
+                    let arg = lex::argument(self.current_string())?;
                     self.handle_argument(arg)?;
                 }
                 return Ok(());
@@ -1422,12 +1444,12 @@ impl<'a> Parser<'a> {
             "not" => {
                 self.buffer
                     .push(I::Event(E::Visual(V::Negation)));
-                let argument = self.get_argument()?;
+                let argument = lex::argument(self.current_string())?;
                 self.handle_argument(argument)?;
                 return Ok(());
             }
             "char" => {
-                let number = lex::unsigned_integer(self.current_string().ok_or(ErrorKind::Argument)?)?;
+                let number = lex::unsigned_integer(self.current_string())?;
                 if number > 255 {
                     return Err(ErrorKind::InvalidCharNumber);
                 }
@@ -1445,17 +1467,90 @@ impl<'a> Parser<'a> {
 
             "begingroup" => {
                 let str = self
-                    .current_string()
-                    .ok_or(ErrorKind::UnbalancedGroup(Some(G::Normal)))?;
+                    .current_string();
                 let group = lex::group_content(str, "begingroup", "endgroup")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
-                    I::Substring(group),
+                    I::SubGroup { content: group, allows_alignment: false },
                     I::Event(E::End),
                 ]);
                 return Ok(());
             }
             "endgroup" => return Err(ErrorKind::UnbalancedGroup(None)),
+
+            "begin" => {
+                let Argument::Group(argument) = lex::argument(self.current_string())? else {
+                    return Err(ErrorKind::Argument);
+                };
+                let mut closing = None;
+                let environment = match argument {
+                    "array" => Grouping::Array,
+                    "matrix" => Grouping::Matrix,
+                    "pmatrix" => {
+                        self.buffer.extend([
+                            I::Event(E::Begin(G::LeftRight)),
+                            I::Event(E::Content(C::Operator(op!('(')))),
+                        ]);
+                        closing = Some(op!(')'));
+                        Grouping::Matrix
+                    },
+                    "bmatrix" => {
+                        self.buffer.extend([
+                            I::Event(E::Begin(G::LeftRight)),
+                            I::Event(E::Content(C::Operator(op!('[')))),
+                        ]);
+                        closing = Some(op!(']'));
+                        Grouping::Matrix
+                    },
+                    "vmatrix" => {
+                        self.buffer.extend([
+                            I::Event(E::Begin(G::LeftRight)),
+                            I::Event(E::Content(C::Operator(op!('|')))),
+                        ]);
+                        closing = Some(op!('|'));
+                        Grouping::Matrix
+                    },
+                    "Vmatrix" => {
+                        self.buffer.extend([
+                            I::Event(E::Begin(G::LeftRight)),
+                            I::Event(E::Content(C::Operator(op!('‖')))),
+                        ]);
+                        closing = Some(op!('‖'));
+                        Grouping::Matrix
+                    },
+                    "Bmatrix" => {
+                        self.buffer.extend([
+                            I::Event(E::Begin(G::LeftRight)),
+                            I::Event(E::Content(C::Operator(op!('{')))),
+                        ]);
+                        closing = Some(op!('}'));
+                        Grouping::Matrix
+                    },
+                    "cases" => Grouping::Cases,
+                    "align" => Grouping::Align,
+                    _ => return Err(ErrorKind::Environment),
+                };
+                // TODO: correctly spot deeper environment of the same type.
+                let content = lex::group_content(
+                    self.current_string(),
+                    &format!(r"\begin{{{argument}}}"),
+                    &format!(r"\end{{{argument}}}")
+                )?;
+                self.buffer.extend([
+                    I::Event(E::Begin(environment)),
+                    I::SubGroup { content, allows_alignment: true },
+                    I::Event(E::End)
+                ]);
+                if let Some(closing) = closing {
+                    self.buffer.extend([
+                        I::Event(E::Content(C::Operator(closing))),
+                        I::Event(E::End)
+                    ]);
+                }
+                return Ok(());
+            }
+            "end" => return Err(ErrorKind::UnbalancedGroup(None)),
+            "\\" | "cr" if self.allows_alignment() => E::NewLine,
 
             // Delimiters
             cs if control_sequence_delimiter_map(cs).is_some() => {
@@ -1481,7 +1576,7 @@ impl<'a> Parser<'a> {
 
     /// Return a delimiter with the given size from the next character in the parser.
     fn em_sized_delim(&mut self, size: f32) -> InnerResult<()> {
-        let current = self.current_string().ok_or(ErrorKind::Delimiter)?;
+        let current = self.current_string();
         let delimiter = lex::delimiter(current)?;
         self.buffer
             .push(I::Event(E::Content(C::Operator(
@@ -1492,7 +1587,7 @@ impl<'a> Parser<'a> {
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
-        let argument = self.get_argument()?;
+        let argument = lex::argument(self.current_string())?;
         self.buffer.extend([
             I::Event(E::Begin(G::Internal)),
             I::Event(E::StateChange(SC::Font(font))),
@@ -1505,7 +1600,7 @@ impl<'a> Parser<'a> {
                 };
             }
             Argument::Group(group) => {
-                self.buffer.push(I::Substring(group));
+                self.buffer.push(I::SubGroup { content: group, allows_alignment: false });
             }
         };
         self.buffer.push(I::Event(E::End));
@@ -1514,7 +1609,7 @@ impl<'a> Parser<'a> {
 
     /// Accent commands. parse the argument, and overset the accent.
     fn accent(&mut self, accent: O) -> InnerResult<()> {
-        let argument = self.get_argument()?;
+        let argument = lex::argument(self.current_string())?;
         self.buffer.push(I::Event(E::Script {
             ty: ST::Superscript,
             position: SP::AboveBelow,
@@ -1529,7 +1624,7 @@ impl<'a> Parser<'a> {
 
     /// Underscript commands. parse the argument, and underset the accent.
     fn underscript(&mut self, content: O) -> InnerResult<()> {
-        let argument = self.get_argument()?;
+        let argument = lex::argument(self.current_string())?;
         self.buffer.push(I::Event(E::Script {
             ty: ST::Subscript,
             position: SP::AboveBelow,
@@ -1559,12 +1654,8 @@ impl<'a> Parser<'a> {
         E::StateChange(SC::Style(style))
     }
 
-    fn get_argument(&mut self) -> InnerResult<Argument<'a>> {
-        lex::argument(self.current_string().ok_or(ErrorKind::Argument)?)
-    }
-
     fn text_argument(&mut self) -> InnerResult<()> {
-        let argument = self.get_argument()?;
+        let argument = lex::argument(self.current_string())?;
         self.buffer
             .push(I::Event(E::Content(C::Text(
                 match argument {
@@ -1578,10 +1669,9 @@ impl<'a> Parser<'a> {
 
     fn fraction_like(&mut self, bar_size: Option<(f32, DimensionUnit)>) -> InnerResult<()> {
         self.buffer.push(I::Event(E::Visual(V::Fraction(bar_size))));
-        
-        let numerator = self.get_argument()?;
+        let numerator = lex::argument(self.current_string())?;
         self.handle_argument(numerator)?;
-        let denominator = self.get_argument()?;
+        let denominator = lex::argument(self.current_string())?;
         self.handle_argument(denominator)?;
         Ok(())
     }

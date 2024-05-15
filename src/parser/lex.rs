@@ -1,4 +1,4 @@
-use crate::{attribute::{Dimension, DimensionUnit, Glue}, event::Grouping};
+use crate::attribute::{Dimension, DimensionUnit, Glue};
 
 use super::{
     tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token,
@@ -383,9 +383,9 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
             token(input)
         }
         Some(c) => {
-            let (c, rest) = &input.split_at(c.len_utf8());
-            *input = rest;
-            Ok(Token::Character(CharToken::from_str(c)))
+            let context = *input;
+            *input = &input.split_at(c.len_utf8()).1;
+            Ok(Token::Character(CharToken::from_str(context)))
         }
         None => Err(ErrorKind::EndOfInput),
     }
