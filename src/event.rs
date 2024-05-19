@@ -82,6 +82,13 @@ pub enum Content<'a> {
     /// > braces, parentheses, and "absolute value" bars; separators such as comma and semicolon; and
     /// > mathematical accents such as a bar or tilde over a symbol.
     Operator(Operator),
+    
+    // LargeOp,
+    // BinaryOp,
+    // Relation,
+    // Opening,
+    // Closing,
+    // Punctuation,
 }
 
 /// Represents a mathematical operator.
