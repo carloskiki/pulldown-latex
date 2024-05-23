@@ -82,14 +82,45 @@ pub enum Content<'a> {
     /// > braces, parentheses, and "absolute value" bars; separators such as comma and semicolon; and
     /// > mathematical accents such as a bar or tilde over a symbol.
     Operator(Operator),
-    
-    // LargeOp,
+
+    // Text,
+    // Number,
+    // Function,
+    // Ordinary,
     // BinaryOp,
+    // UnaryOp,
+    // LargeOp,
     // Relation,
     // Opening,
     // Closing,
     // Punctuation,
+    // Identifier,
 }
+
+// MathML operator types:
+// A: Arrows and other stretchy stuff
+// B: Binary operators
+// C: Things with less spacing such as `%`, `*`, `⊗`, `?`
+// D: Prefixes
+// E: Postfixes
+// F: Opening Delim
+// G: Closing Delim
+// H: Prefix large operators (integrals)
+// I: Stretchy under and overscripts
+// J: Prefix large operators p2 (sums, products, etc.) Those are specified to have movable limits
+//     per mathml spec.
+// K: Invisible accessibility stuff, (function application, invisible plus, etc.)
+// L: Derivative specific stuff such as `d`, `∂`, etc.
+// M: Punctuation
+//
+// Could conceivably be regrouped into the following:
+// Binary operators: (part of B) (part of C)
+// Relations: (part of B)
+// Unary operators: D E L (parto of C)
+// Large operators: H J
+// Stretchy stuff: A I
+// Delimiters (should be slplit): F G
+// Punctuation: M
 
 /// Represents a mathematical operator.
 ///
