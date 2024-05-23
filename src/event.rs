@@ -64,37 +64,16 @@ pub enum Content<'a> {
     Text(&'a str),
     /// A number, which can include decimal points and commas.
     Number(&'a str),
-    /// A mathematical identifier, such as a variable or a function name.
-    ///
-    /// If the identifier is a single character, then the character follows the typesetting rules
-    /// of single character variables. If the identifier is a string, even if that string is a
-    /// single character, it is typeset as a function name.
-    Identifier(Identifier<'a>),
-    /// A mathematical operator.
-    ///
-    /// This variant ecompasses many different types of operators, such as binary operators,
-    /// relation, large operators, delimiters, etc. Specifically, it represents an operator
-    /// according to the [`mathml` specification](https://w3c.github.io/mathml-core/#operator-fence-separator-or-accent-mo).
-    /// 
-    /// > In MathML the list of things that should "render as an operator" includes a number of
-    /// > notations that are not mathematical operators in the ordinary sense. Besides ordinary
-    /// > operators with infix, prefix, or postfix forms, these include fence characters such as
-    /// > braces, parentheses, and "absolute value" bars; separators such as comma and semicolon; and
-    /// > mathematical accents such as a bar or tilde over a symbol.
-    Operator(Operator),
 
-    // Text,
-    // Number,
-    // Function,
-    // Ordinary,
-    // BinaryOp,
-    // UnaryOp,
-    // LargeOp,
-    // Relation,
-    // Opening,
-    // Closing,
-    // Punctuation,
-    // Identifier,
+    Function(&'a str),
+    Ordinary(char),
+    BinaryOp(char),
+    UnaryOp(char),
+    LargeOp(char),
+    Relation(char),
+    Opening(char),
+    Closing(char),
+    Punctuation(char),
 }
 
 // MathML operator types:
@@ -228,15 +207,6 @@ pub enum ScriptPosition {
 /// State changes take effect for the current group nesting and all deeper groups.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StateChange<'a> {
-    /// Changes the font of the content.
-    ///
-    /// If the font is `None`, then the default renderer font is used, otherwise the font is set to
-    /// the specified font.
-    Font(Option<Font>),
-    /// Changes the color of the content.
-    Color(ColorChange<'a>),
-    /// Changes the style of the content (mostly affects the sizing of the content).
-    Style(Style),
 }
 
 /// The style of the content.
