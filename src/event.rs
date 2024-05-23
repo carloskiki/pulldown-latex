@@ -67,13 +67,27 @@ pub enum Content<'a> {
 
     Function(&'a str),
     Ordinary(char),
-    BinaryOp(char),
     UnaryOp(char),
-    LargeOp(char),
-    Relation(char),
+    LargeOp { 
+        content: char,
+        small: bool,
+    },
+    BinaryOp { 
+        content: char,
+        left_space: bool,
+        right_space: bool,
+        small: bool,
+    },
+    Relation {
+        content: char,
+        left_space: bool,
+        right_space: bool,
+        small: bool,
+    },
     Opening(char),
     Closing(char),
     Punctuation(char),
+    Stretchy(char),
 }
 
 // MathML operator types:
