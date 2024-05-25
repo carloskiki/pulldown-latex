@@ -221,6 +221,15 @@ pub enum ScriptPosition {
 /// State changes take effect for the current group nesting and all deeper groups.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StateChange<'a> {
+    /// Changes the font of the content.
+    ///
+    /// If the font is `None`, then the default renderer font is used, otherwise the font is set to
+    /// the specified font.
+    Font(Option<Font>),
+    /// Changes the color of the content.
+    Color(ColorChange<'a>),
+    /// Changes the style of the content (mostly affects the sizing of the content).
+    Style(Style),
 }
 
 /// The style of the content.
