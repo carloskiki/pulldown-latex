@@ -28,23 +28,6 @@ use super::{
     Argument, CharToken, ErrorKind, InnerResult, Instruction as I, Parser, Token,
 };
 
-/// Return an `Operator` event with the given content and default modifiers.
-macro_rules! op {
-    ($content:expr) => {
-        O {
-            content: $content,
-            ..Default::default()
-        }
-    };
-    ($content:expr, {$($field:ident: $value:expr),*}) => {
-        O {
-            content: $content,
-            $($field: $value,)*
-            ..Default::default()
-        }
-    };
-}
-
 impl<'a> Parser<'a> {
     /// Handle a character token, returning a corresponding event.
     ///
@@ -96,7 +79,7 @@ impl<'a> Parser<'a> {
             '}' => {
                 return Err(ErrorKind::UnbalancedGroup(None))
             },
-            '\'' => E::Content(C::Operator(op!('′'))),
+            '\'' => unary('′'),
 
             c if is_char_delimiter(c) => E::Content(C::Operator(op!(c, {stretchy: Some(false)}))),
             c if is_operator(c) => E::Content(C::Operator(op!(c))),
@@ -130,12 +113,12 @@ impl<'a> Parser<'a> {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
             | "coth" | "dim" | "sin" | "tanh" | "sgn" => {
-                E::Content(C::Identifier(ID::Str(control_sequence)))
+                E::Content(C::Function(control_sequence))
             }
             "lim" | "Pr" | "sup" | "liminf" | "max" | "inf" | "gcd" | "limsup" | "min" => {
                 self.state.allow_suffix_modifiers = true;
                 self.state.above_below_suffix_default = true;
-                E::Content(C::Identifier(ID::Str(control_sequence)))
+                E::Content(C::Function(control_sequence))
             }
             "operatorname" => {
                 self.state.allow_suffix_modifiers = true;
@@ -145,23 +128,23 @@ impl<'a> Parser<'a> {
                         return Err(ErrorKind::ControlSequenceAsArgument)
                     }
                     Argument::Token(Token::Character(char_)) => {
-                        E::Content(C::Identifier(ID::Str(char_.as_str())))
+                        E::Content(C::Function(char_.as_str()))
                     }
                     Argument::Group(content) => {
-                        E::Content(C::Identifier(ID::Str(content)))
+                        E::Content(C::Function(content))
                     }
                 }
             }
-            "bmod" => E::Content(C::Identifier(ID::Str("mod"))),
+            "bmod" => E::Content(C::Function("mod")),
             "pmod" => {
                 let argument = lex::argument(self.current_string())?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Internal)),
-                    I::Event(operator(op!('('))),
+                    I::Event(E::Content(C::Opening('('))),
                 ]);
                 self.handle_argument(argument)?;
                 self.buffer.extend([
-                    I::Event(operator(op!(')'))),
+                    I::Event(E::Content(C::Closing(')'))),
                     I::Event(E::End),
                 ]);
                 return Ok(());
@@ -270,16 +253,16 @@ impl<'a> Parser<'a> {
             // Symbols & Punctuation //
             ///////////////////////////
             "dots" => if self.current_string().trim_start().starts_with(['.', ',']) {
-                operator(op!('…'))
+                ident('…')
             } else {
-                operator(op!('⋯'))
+                ident('⋯')
             }
-            "ldots" | "dotso" | "dotsc" => operator(op!('…')),
-            "cdots" | "dotsi" | "dotsm" | "dotsb" | "idotsin" => operator(op!('⋯')),
-            "ddots" => operator(op!('⋱')),
-            "iddots" => operator(op!('⋰')),
-            "vdots" => operator(op!('⋮')),
-            "mathellipsis" => operator(op!('…')),
+            "ldots" | "dotso" | "dotsc" => ident('…'),
+            "cdots" | "dotsi" | "dotsm" | "dotsb" | "idotsin" => ident('⋯'),
+            "ddots" => ident('⋱'),
+            "iddots" => ident('⋰'),
+            "vdots" => ident('⋮'),
+            "mathellipsis" => ident('…'),
             "infty" => ident('∞'),
             "checkmark" => ident('✓'),
             "ballotx" => ident('✗'),
@@ -519,7 +502,7 @@ impl<'a> Parser<'a> {
             }
             "middle" => {
                 let delimiter = lex::delimiter(self.current_string())?;
-                operator(op!(delimiter))
+                relation(delimiter)
             }
             "right" => {
                 return Err(ErrorKind::UnbalancedGroup(None));
@@ -530,45 +513,46 @@ impl<'a> Parser<'a> {
             ///////////////////
             // NOTE: All of the following operators allow limit modifiers.
             // The following operators have above and below limits by default.
-            "sum" => self.big_operator(op!('∑', {deny_movable_limits: true}), true),
-            "prod" => self.big_operator(op!('∏', {deny_movable_limits: true}), true),
-            "coprod" => self.big_operator(op!('∐', {deny_movable_limits: true}), true),
-            "bigvee" => self.big_operator(op!('⋁', {deny_movable_limits: true}), true),
-            "bigwedge" => self.big_operator(op!('⋀', {deny_movable_limits: true}), true),
-            "bigcup" => self.big_operator(op!('⋃', {deny_movable_limits: true}), true),
-            "bigcap" => self.big_operator(op!('⋂', {deny_movable_limits: true}), true),
-            "biguplus" => self.big_operator(op!('⨄', {deny_movable_limits: true}), true),
-            "bigoplus" => self.big_operator(op!('⨁', {deny_movable_limits: true}), true),
-            "bigotimes" => self.big_operator(op!('⨂', {deny_movable_limits: true}), true),
-            "bigodot" => self.big_operator(op!('⨀', {deny_movable_limits: true}), true),
-            "bigsqcup" => self.big_operator(op!('⨆', {deny_movable_limits: true}), true),
-            "bigsqcap" => self.big_operator(op!('⨅', {deny_movable_limits: true}), true),
-            "bigtimes" => self.big_operator(op!('⨉', {deny_movable_limits: true}), true),
-            "intop" => self.big_operator(op!('∫'), true),
+            "sum" => self.large_op('∑', true),
+            "prod" => self.large_op('∏', true),
+            "coprod" => self.large_op('∐', true),
+            "bigvee" => self.large_op('⋁', true),
+            "bigwedge" => self.large_op('⋀', true),
+            "bigcup" => self.large_op('⋃', true),
+            "bigcap" => self.large_op('⋂', true),
+            "biguplus" => self.large_op('⨄', true),
+            "bigoplus" => self.large_op('⨁', true),
+            "bigotimes" => self.large_op('⨂', true),
+            "bigodot" => self.large_op('⨀', true),
+            "bigsqcup" => self.large_op('⨆', true),
+            "bigsqcap" => self.large_op('⨅', true),
+            "bigtimes" => self.large_op('⨉', true),
+            "intop" => self.large_op('∫', true),
             // The following operators do not have above and below limits by default.
-            "int" => self.big_operator(op!('∫'), false),
-            "iint" => self.big_operator(op!('∬'), false),
-            "iiint" => self.big_operator(op!('∭'), false),
+            "int" => self.large_op('∫', false),
+            "iint" => self.large_op('∬', false),
+            "iiint" => self.large_op('∭', false),
             "smallint" => {
-                self.big_operator(op!('∫', {size: Some((0.7, DimensionUnit::Em))}), false)
+                self.state.allow_suffix_modifiers = true;
+                E::Content(C::LargeOp { content: '∫', small: true })
             }
-            "iiiint" => self.big_operator(op!('⨌'), false),
-            "intcap" => self.big_operator(op!('⨙'), false),
-            "intcup" => self.big_operator(op!('⨚'), false),
-            "oint" => self.big_operator(op!('∮'), false),
-            "varointclockwise" => self.big_operator(op!('∲'), false),
-            "intclockwise" => self.big_operator(op!('∱'), false),
-            "oiint" => self.big_operator(op!('∯'), false),
-            "pointint" => self.big_operator(op!('⨕'), false),
-            "rppolint" => self.big_operator(op!('⨒'), false),
-            "scpolint" => self.big_operator(op!('⨓'), false),
-            "oiiint" => self.big_operator(op!('∰'), false),
-            "intlarhk" => self.big_operator(op!('⨗'), false),
-            "sqint" => self.big_operator(op!('⨖'), false),
-            "intx" => self.big_operator(op!('⨘'), false),
-            "intbar" => self.big_operator(op!('⨍'), false),
-            "intBar" => self.big_operator(op!('⨎'), false),
-            "fint" => self.big_operator(op!('⨏'), false),
+            "iiiint" => self.large_op('⨌', false),
+            "intcap" => self.large_op('⨙', false),
+            "intcup" => self.large_op('⨚', false),
+            "oint" => self.large_op('∮', false),
+            "varointclockwise" => self.large_op('∲', false),
+            "intclockwise" => self.large_op('∱', false),
+            "oiint" => self.large_op('∯', false),
+            "pointint" => self.large_op('⨕', false),
+            "rppolint" => self.large_op('⨒', false),
+            "scpolint" => self.large_op('⨓', false),
+            "oiiint" => self.large_op('∰', false),
+            "intlarhk" => self.large_op('⨗', false),
+            "sqint" => self.large_op('⨖', false),
+            "intx" => self.large_op('⨘', false),
+            "intbar" => self.large_op('⨍', false),
+            "intBar" => self.large_op('⨎', false),
+            "fint" => self.large_op('⨏', false),
 
             /////////////
             // Accents //
@@ -1638,10 +1622,13 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn big_operator(&mut self, op: O, above_below: bool) -> E<'a> {
+    fn large_op(&mut self, op: char, above_below: bool) -> E<'a> {
         self.state.allow_suffix_modifiers = true;
         self.state.above_below_suffix_default = above_below;
-        operator(op)
+        E::Content(C::LargeOp {
+            content: op,
+            small: false,
+        })
     }
 
     fn font_change(&mut self, font: Font) -> E<'a> {
@@ -1679,12 +1666,22 @@ impl<'a> Parser<'a> {
 
 #[inline]
 fn ident(ident: char) -> E<'static> {
-    E::Content(C::Identifier(ID::Char(ident)))
+    E::Content(C::Ordinary(ident))
 }
 
 #[inline]
-fn operator(operator: O) -> E<'static> {
-    E::Content(C::Operator(operator))
+fn relation(rel: char) -> E<'static> {
+    E::Content(C::Relation {
+        content: rel,
+        left_space: false,
+        right_space: false,
+        unicode_variant: false,
+    })
+}
+
+#[inline]
+fn unary(op: char) -> E<'static> {
+    E::Content(C::UnaryOp{ content: op, stretchy: false })
 }
 
 // TODO implementations:

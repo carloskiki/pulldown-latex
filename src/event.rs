@@ -65,29 +65,45 @@ pub enum Content<'a> {
     /// A number, which can include decimal points and commas.
     Number(&'a str),
 
+    /// A function identifier, such as `sin`, `lim`, or a custom function with
+    /// `\operatorname{arccotan}`.
     Function(&'a str),
+    /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and stuff that do not have
+    /// any spacing around them.
     Ordinary(char),
-    UnaryOp(char),
+    /// A unary operator, such as `+`, `-`, `!`, etc. This includes stuff that normally go in under
+    /// and overscripts which may be stretchy.
+    UnaryOp{
+        content: char,
+        stretchy: bool
+    },
+    /// A large operator, such as `\sum`, `\int`, `\prod`, etc.
+    ///
+    // TODO: Deny movable limits in renderer
     LargeOp { 
         content: char,
         small: bool,
     },
+    /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { 
         content: char,
         left_space: bool,
         right_space: bool,
         small: bool,
     },
+    /// A relation, such as `=`, `≠`, `≈`, etc.
     Relation {
         content: char,
         left_space: bool,
         right_space: bool,
-        small: bool,
+        unicode_variant: bool,
     },
+    /// An opening delimiter, such as `(`, `[`, `{`, etc.
     Opening(char),
+    /// A closing delimiter, such as `)`, `]`, `}`, etc.
     Closing(char),
+    /// A punctuation character, such as `,`, `.`, `;`, etc.
     Punctuation(char),
-    Stretchy(char),
 }
 
 // MathML operator types:
