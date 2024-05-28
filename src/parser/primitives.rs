@@ -6,25 +6,13 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-       Grouping as G,
-       Operator as O,
-       Event as E,
-       Style as S,
-       Visual as V,
-       Content as C,
-       Identifier as ID,
-       ScriptType as ST,
-       ScriptPosition as SP, 
-       StateChange as SC,
-       ColorTarget as CT,
-       ColorChange as CC,
-       Grouping,
+       ColorChange as CC, ColorTarget as CT, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
     },
 };
 
 use super::{
     lex,
-    tables::{control_sequence_delimiter_map, is_char_delimiter, is_operator, is_primitive_color, token_to_delim},
+    tables::{char_delimiter_map, control_sequence_delimiter_map, is_primitive_color, token_to_delim},
     Argument, CharToken, ErrorKind, InnerResult, Instruction as I, Parser, Token,
 };
 
@@ -79,11 +67,7 @@ impl<'a> Parser<'a> {
             '}' => {
                 return Err(ErrorKind::UnbalancedGroup(None))
             },
-            '\'' => unary('′'),
 
-            c if is_char_delimiter(c) => E::Content(C::Operator(op!(c, {stretchy: Some(false)}))),
-            c if is_operator(c) => E::Content(C::Operator(op!(c))),
-            
             '0'..='9' => {
                 let content = token.as_str();
                 let mut len = content
@@ -101,6 +85,134 @@ impl<'a> Parser<'a> {
                     .push(I::Event(E::Content(C::Number(number))));
                 return Ok(())
             }
+
+            c if char_delimiter_map(c).is_some() => {
+                let (content, ty) = char_delimiter_map(c).unwrap();
+                E::Content(C::Delimiter {
+                    content,
+                    size: None,
+                    ty,
+                })
+            }
+            // Punctuation
+            '.' | ',' | ';' => E::Content(C::Punctuation(token.into())),
+
+
+            // TODO: 
+            // Varying
+            // Varing is a binary when:
+            // 1. preceded by closing
+            // 2. preceded by unary
+            // 3. preceded by punctuation
+            // 4. preceded by number
+            // 5. preceded by normal
+            // and:
+            // 1. followed by closing
+            // 2. followed by unary
+            // 4. followed by number
+            // 5. followed by normal
+            //
+            // If the current item is a Bin atom, and if this was the first atom in the list,
+            // or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
+            // Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
+            // 
+            // If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
+            // was Bin, change that previous Bin to Ord. Continue with Rule 17.
+            '-' => Content::BinaryOp { content: '−', left_space: true, right_space: true, small: false },
+            '+' | '±' | '∓' => todo!(),
+                
+            // Things
+            '*' => Content::BinaryOp { content: '∗', left_space: true, right_space: true, small: false },
+            '\'' => Content::UnaryOp { content: '′', stretchy: false },
+
+            // Special ( ~ = nobreak space)
+            // TODO:
+            '~' => todo!(),
+
+            // U - Unary
+            // 0021;U
+            // 00AC;U
+            // 2200;U
+            // 2201;U
+            // 2203;U
+            // 2204;U
+            // 2206;U
+            // 2207;U
+
+
+            // F - Fence - unpaired delimiter (often used as opening or closing)
+            // 007C;F
+            // 2016;F
+            // 2980;F
+            // 2982;F
+            // 2999;F
+            // 299A;F
+
+            // O - Opening - usually paired with closing delimiter
+            // 0028;O
+            // 005B;O
+            // 007B;O
+            // 301A;O
+            // 2308;O
+            // 230A;O
+            // 231C;O
+            // 231E;O
+            // 2329;O
+            // 2772;O
+            // 27E6;O
+            // 27E8;O
+            // 27EA;O
+            // 27EC;O
+            // 27EE;O
+            // 2983;O
+            // 2985;O
+            // 2987;O
+            // 2989;O
+            // 298D;O
+            // 298F;O
+            // 2991;O
+            // 2993;O
+            // 2995;O
+            // 2997;O
+            // 29D8;O
+            // 29DA;O
+            // 29FC;O
+            // 3008;O
+
+            // C - Closing - usually paired with opening delimiter
+            // 0029;C
+            // 005D;C
+            // 007D;C
+            // 2309;C
+            // 230B;C
+            // 231D;C
+            // 231F;C
+            // 232A;C
+            // 2773;C
+            // 27E7;C
+            // 27E9;C
+            // 27EB;C
+            // 27ED;C
+            // 27EF;C
+            // 2984;C
+            // 2986;C
+            // 2988;C
+            // 298A;C
+            // 298C;C
+            // 298E;C
+            // 2990;C
+            // 2992;C
+            // 2994;C
+            // 2996;C
+            // 2998;C
+            // 29D9;C
+            // 29DB;C
+            // 29FD;C
+            // 3009;C
+            // 301B;C
+
+            // B - Binary
+            
             c => ident(c),
         });
         self.buffer.push(instruction);
@@ -140,11 +252,19 @@ impl<'a> Parser<'a> {
                 let argument = lex::argument(self.current_string())?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Internal)),
-                    I::Event(E::Content(C::Opening('('))),
+                    I::Event(E::Content(C::Delimiter {
+                        content: '(',
+                        size: None,
+                        ty: DelimiterType::Open
+                    })),
                 ]);
                 self.handle_argument(argument)?;
                 self.buffer.extend([
-                    I::Event(E::Content(C::Closing(')'))),
+                    I::Event(E::Content(C::Delimiter {
+                     content: ')',
+                     size: None,
+                     ty: DelimiterType::Close
+                    })),   
                     I::Event(E::End),
                 ]);
                 return Ok(());
@@ -331,6 +451,16 @@ impl<'a> Parser<'a> {
             "QED" => ident('∎'),
             "lightning" => ident('↯'),
             "diameter" => ident('⌀'),
+            "leftouterjoin" => ident('⟕'),
+            "rightouterjoin" => ident('⟖'),
+            "concavediamond" => ident('⟡'),
+            "concavediamondtickleft" => ident('⟢'),
+            "concavediamondtickright" => ident('⟣'),
+            "fullouterjoin" => ident('⟗'),
+            "triangle" | "vartriangle" => ident('△'),
+            "whitesquaretickleft" => ident('⟤'),
+            "whitesquaretickright" => ident('⟥'),
+
 
             ////////////////////////
             // Font state changes //
@@ -462,47 +592,44 @@ impl<'a> Parser<'a> {
             ///////////////////////////////
             // Sizes taken from `texzilla`
             // Big left and right seem to not care about which delimiter is used. i.e., \bigl) and \bigr) are the same.
-            "big" | "bigl" | "bigr" | "bigm" => return self.em_sized_delim(1.2),
-            "Big" | "Bigl" | "Bigr" | "Bigm" => return self.em_sized_delim(1.8),
-            "bigg" | "biggl" | "biggr" | "biggm" => return self.em_sized_delim(2.4),
-            "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.em_sized_delim(3.0),
+            "big" | "bigl" | "bigr" | "bigm" => return self.sized_delim(DelimiterSize::Big),
+            "Big" | "Bigl" | "Bigr" | "Bigm" => return self.sized_delim(DelimiterSize::BIG),
+            "bigg" | "biggl" | "biggr" | "biggm" => return self.sized_delim(DelimiterSize::Bigg),
+            "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.sized_delim(DelimiterSize::BIGG),
 
             "left" => {
                 let curr_str = self.current_string();
-                if let Some(rest) = curr_str.strip_prefix('.') {
-                    *curr_str = rest;
-                    self.buffer.push(I::Event(E::Begin(G::LeftRight)));
-                } else {
-                    let delimiter =
-                        lex::delimiter(curr_str)?;
-                    self.buffer.extend([
-                        I::Event(E::Begin(G::LeftRight)),
-                        I::Event(E::Content(C::Operator(op!(delimiter)))),
-                    ]);
-                }
-
-                let curr_str = self.current_string();
-                let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
-                let delim = if let Some(rest) = curr_str.strip_prefix('.') {
+                let opening = if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     None
                 } else {
-                    let delimiter =
-                        lex::delimiter(curr_str)?;
-                    Some(E::Content(C::Operator(op!(delimiter))))
+                    Some(lex::delimiter(curr_str)?.0)
                 };
 
-                self.buffer.push(I::SubGroup { content: group_content, allows_alignment: false });
-                if let Some(delim) = delim {
-                    self.buffer.push(I::Event(delim));
-                }
-                self.buffer.push(I::Event(E::End));
+                let curr_str = self.current_string();
+                let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
+                let closing = if let Some(rest) = curr_str.strip_prefix('.') {
+                    *curr_str = rest;
+                    None
+                } else {
+                    Some(lex::delimiter(curr_str)?.0)
+                };
+
+                self.buffer.extend([
+                    I::Event(E::Begin(G::LeftRight(opening, closing))),
+                    I::SubGroup { content: group_content, allows_alignment: false },
+                    I::Event(E::End),
+                ]);
 
                 return Ok(());
             }
             "middle" => {
                 let delimiter = lex::delimiter(self.current_string())?;
-                relation(delimiter)
+                E::Content(C::Delimiter {
+                    content: delimiter.0,
+                    size: Some(DelimiterSize::Big),
+                    ty: DelimiterType::Fence,
+                })
             }
             "right" => {
                 return Err(ErrorKind::UnbalancedGroup(None));
@@ -557,51 +684,51 @@ impl<'a> Parser<'a> {
             /////////////
             // Accents //
             /////////////
-            "acute" => return self.accent(op!('´')),
-            "bar" | "overline" => return self.accent(op!('‾')),
-            "underbar" | "underline" => return self.underscript(op!('_')),
-            "breve" => return self.accent(op!('˘')),
-            "check" => return self.accent(op!('ˇ', {stretchy: Some(false)})),
-            "dot" => return self.accent(op!('˙')),
-            "ddot" => return self.accent(op!('¨')),
-            "grave" => return self.accent(op!('`')),
-            "hat" => return self.accent(op!('^', {stretchy: Some(false)})),
-            "tilde" => return self.accent(op!('~', {stretchy: Some(false)})),
-            "vec" => return self.accent(op!('→', {stretchy: Some(false)})),
-            "mathring" => return self.accent(op!('˚')),
+            "acute" => return self.accent('´', false),
+            "bar" | "overline" => return self.accent('‾', false),
+            "underbar" | "underline" => return self.underscript('_'),
+            "breve" => return self.accent('˘', false),
+            "check" => return self.accent('ˇ', false),
+            "dot" => return self.accent('˙', false),
+            "ddot" => return self.accent('¨', false),
+            "grave" => return self.accent('`', false),
+            "hat" => return self.accent('^', false),
+            "tilde" => return self.accent('~', false),
+            "vec" => return self.accent('→', false),
+            "mathring" => return self.accent('˚', false),
 
             // Arrows
-            "overleftarrow" => return self.accent(op!('←')),
-            "underleftarrow" => return self.underscript(op!('←')),
-            "overrightarrow" => return self.accent(op!('→')),
-            "Overrightarrow" => return self.accent(op!('⇒')),
-            "underrightarrow" => return self.underscript(op!('→')),
-            "overleftrightarrow" => return self.accent(op!('↔')),
-            "underleftrightarrow" => return self.underscript(op!('↔')),
-            "overleftharpoon" => return self.accent(op!('↼')),
-            "overrightharpoon" => return self.accent(op!('⇀')),
+            "overleftarrow" => return self.accent('←', true),
+            "underleftarrow" => return self.underscript('←'),
+            "overrightarrow" => return self.accent('→', true),
+            "Overrightarrow" => return self.accent('⇒', true),
+            "underrightarrow" => return self.underscript('→'),
+            "overleftrightarrow" => return self.accent('↔', true),
+            "underleftrightarrow" => return self.underscript('↔'),
+            "overleftharpoon" => return self.accent('↼', true),
+            "overrightharpoon" => return self.accent('⇀', true),
 
             // Wide ops
-            "widecheck" => return self.accent(op!('ˇ')),
-            "widehat" => return self.accent(op!('^')),
-            "widetilde" => return self.accent(op!('~')),
-            "wideparen" | "overparen" => return self.accent(op!('⏜')),
+            "widecheck" => return self.accent('ˇ', true),
+            "widehat" => return self.accent('^', true),
+            "widetilde" => return self.accent('~', true),
+            "wideparen" | "overparen" => return self.accent('⏜', true),
 
             // Groups
-            "overgroup" => return self.accent(op!('⏠')),
-            "undergroup" => return self.underscript(op!('⏡')),
-            "overbrace" => return self.accent(op!('⏞')),
-            "underbrace" => return self.underscript(op!('⏟')),
-            "underparen" => return self.underscript(op!('⏝')),
+            "overgroup" => return self.accent('⏠', true),
+            "undergroup" => return self.underscript('⏡'),
+            "overbrace" => return self.accent('⏞', true),
+            "underbrace" => return self.underscript('⏟'),
+            "underparen" => return self.underscript('⏝'),
 
             // Primes
-            "prime" => operator(op!('′')),
-            "dprime" => operator(op!('″')),
-            "trprime" => operator(op!('‴')),
-            "qprime" => operator(op!('⁗')),
-            "backprime" => operator(op!('‵')),
-            "backdprime" => operator(op!('‶')),
-            "backtrprime" => operator(op!('‷')),
+            "prime" => unary('′'),
+            "dprime" => unary('″'),
+            "trprime" => unary('‴'),
+            "qprime" => unary('⁗'),
+            "backprime" => unary('‵'),
+            "backdprime" => unary('‶'),
+            "backtrprime" => unary('‷'),
 
             /////////////
             // Spacing //
@@ -719,532 +846,564 @@ impl<'a> Parser<'a> {
             ////////////////////////
             // Logic & Set Theory //
             ////////////////////////
-            "forall" => operator(op!('∀')),
-            "complement" => operator(op!('∁')),
-            "therefore" => operator(op!('∴')),
-            "emptyset" => operator(op!('∅')),
-            "exists" => operator(op!('∃')),
-            "subset" => operator(op!('⊂')),
-            "because" => operator(op!('∵')),
-            "varnothing" => operator(op!('⌀')),
-            "nexists" => operator(op!('∄')),
-            "supset" => operator(op!('⊃')),
-            "mapsto" => operator(op!('↦')),
-            "implies" => operator(op!('⟹')),
-            "in" | "isin" => operator(op!('∈')),
-            "mid" => operator(op!('∣')),
-            "to" => operator(op!('→')),
-            "impliedby" => operator(op!('⟸')),
-            "ni" => operator(op!('∋')),
-            "land" => operator(op!('∧')),
-            "gets" => operator(op!('←')),
-            "iff" => operator(op!('⟺')),
-            "notni" => operator(op!('∌')),
-            "neg" | "lnot" => operator(op!('¬')),
-            "strictif" => operator(op!('⥽')),
-            "strictfi" => operator(op!('⥼')),
+            "forall" => unary('∀'),
+            "therefore" => unary('∴'),
+            "exists" => unary('∃'),
+            "because" => unary('∵'),
+            "complement" => unary('∁'),
+            "nexists" => unary('∄'),
+            "neg" | "lnot" => unary('¬'),
+            
+            "subset" => relation('⊂'),
+            "supset" => relation('⊃'),
+            "strictif" => relation('⥽'),
+            "strictfi" => relation('⥼'),
+            "mapsto" => relation('↦'),
+            "implies" => relation('⟹'),
+            "mid" => relation('∣'),
+            "to" => relation('→'),
+            "impliedby" => relation('⟸'),
+            "in" | "isin" => relation('∈'),
+            "ni" => relation('∋'),
+            "gets" => relation('←'),
+            "iff" => relation('⟺'),
+            "notni" => relation('∌'),
+            
+            "land" => binary('∧'),
+            
+            "emptyset" => ident('∅'),
+            "varnothing" => ident('⌀'),
 
             //////////////////////
             // Binary Operators //
             //////////////////////
-            "ldotp" => operator(op!('.')),
-            "cdotp" => operator(op!('·')),
-            "cdot" => operator(op!('⋅')),
-            "centerdot" => operator(op!('·')),
-            "circ" => operator(op!('∘')),
-            "bullet" => operator(op!('∙')),
-            "circledast" => operator(op!('⊛')),
-            "circledcirc" => operator(op!('⊚')),
-            "circleddash" => operator(op!('⊝')),
-            "bigcirc" => operator(op!('◯')),
-            "leftthreetimes" => operator(op!('⋋')),
-            "rhd" => operator(op!('⊳')),
-            "lhd" => operator(op!('⊲')),
-            "leftouterjoin" => operator(op!('⟕')),
-            "rightouterjoin" => operator(op!('⟖')),
-            "rightthreetimes" => operator(op!('⋌')),
-            "rtimes" => operator(op!('⋊')),
-            "ltimes" => operator(op!('⋉')),
-            "leftmodels" => operator(op!('⊨')),
-            "amalg" => operator(op!('⨿')),
-            "ast" => operator(op!('*')),
-            "asymp" => operator(op!('≍')),
-            "And" => operator(op!('&')),
-            "lor" => operator(op!('∨')),
-            "setminus" => operator(op!('∖')),
-            "Cup" => operator(op!('⋓')),
-            "cup" => operator(op!('∪')),
-            "sqcup" => operator(op!('⊔')),
-            "sqcap" => operator(op!('⊓')),
-            "lessdot" => operator(op!('⋖')),
-            "smallsetminus" => operator(op!('∖', {size: Some((0.7, DimensionUnit::Em))})),
-            "barwedge" => operator(op!('⌅')),
-            "curlyvee" => operator(op!('⋎')),
-            "curlywedge" => operator(op!('⋏')),
-            "sslash" => operator(op!('⫽')),
-            "bowtie" | "Join" => operator(op!('⋈')),
-            "div" => operator(op!('÷')),
-            "mp" => operator(op!('∓')),
-            "times" => operator(op!('×')),
-            "boxdot" => operator(op!('⊡')),
-            "divideontimes" => operator(op!('⋇')),
-            "odot" => operator(op!('⊙')),
-            "unlhd" => operator(op!('⊴')),
-            "boxminus" => operator(op!('⊟')),
-            "dotplus" => operator(op!('∔')),
-            "ominus" => operator(op!('⊖')),
-            "unrhd" => operator(op!('⊵')),
-            "boxplus" => operator(op!('⊞')),
-            "doublebarwedge" => operator(op!('⩞')),
-            "oplus" => operator(op!('⊕')),
-            "uplus" => operator(op!('⊎')),
-            "boxtimes" => operator(op!('⊠')),
-            "doublecap" => operator(op!('⋒')),
-            "otimes" => operator(op!('⊗')),
-            "vee" => operator(op!('∨')),
-            "veebar" => operator(op!('⊻')),
-            "Cap" => operator(op!('⋒')),
-            "fullouterjoin" => operator(op!('⟗')),
-            "parr" => operator(op!('⅋')),
-            "wedge" => operator(op!('∧')),
-            "cap" => operator(op!('∩')),
-            "gtrdot" => operator(op!('⋗')),
-            "pm" => operator(op!('±')),
-            "with" => operator(op!('&')),
-            "intercal" => operator(op!('⊺')),
-            "wr" => operator(op!('≀')),
-            "circledvert" => operator(op!('⦶')),
-            "blackhourglass" => operator(op!('⧗')),
-            "circlehbar" => operator(op!('⦵')),
-            "operp" => operator(op!('⦹')),
-            "boxast" => operator(op!('⧆')),
-            "concavediamond" => operator(op!('⟡')),
-            "boxbox" => operator(op!('⧈')),
-            "concavediamondtickleft" => operator(op!('⟢')),
-            "oslash" => operator(op!('⊘')),
-            "boxcircle" => operator(op!('⧇')),
-            "concavediamondtickright" => operator(op!('⟣')),
-            "diamond" => operator(op!('⋄')),
-            "Otimes" => operator(op!('⨷')),
-            "hourglass" => operator(op!('⧖')),
-            "otimeshat" => operator(op!('⨶')),
-            "triangletimes" => operator(op!('⨻')),
-            "lozengeminus" => operator(op!('⟠')),
-            "star" => operator(op!('⋆')),
-            "obar" => operator(op!('⌽')),
-            "triangle" | "vartriangle" => operator(op!('△')),
-            "obslash" => operator(op!('⦸')),
-            "triangleminus" => operator(op!('⨺')),
-            "odiv" => operator(op!('⨸')),
-            "triangleplus" => operator(op!('⨹')),
-            "circledequal" => operator(op!('⊜')),
-            "ogreaterthan" => operator(op!('⧁')),
-            "whitesquaretickleft" => operator(op!('⟤')),
-            "circledparallel" => operator(op!('⦷')),
-            "olessthan" => operator(op!('⧀')),
-            "whitesquaretickright" => operator(op!('⟥')),
+            "ldotp" => binary('.'),
+            "cdotp" => binary('·'),
+            "cdot" => binary('⋅'),
+            "centerdot" => binary('·'),
+            "circ" => binary('∘'),
+            "bullet" => binary('∙'),
+            "circledast" => binary('⊛'),
+            "circledcirc" => binary('⊚'),
+            "circleddash" => binary('⊝'),
+            "bigcirc" => binary('◯'),
+            "leftthreetimes" => binary('⋋'),
+            "rhd" => binary('⊳'),
+            "lhd" => binary('⊲'),
+            "rightthreetimes" => binary('⋌'),
+            "rtimes" => binary('⋊'),
+            "ltimes" => binary('⋉'),
+            "leftmodels" => binary('⊨'),
+            "amalg" => binary('⨿'),
+            "ast" => binary('*'),
+            "asymp" => binary('≍'),
+            "And" | "with" => binary('&'),
+            "lor" => binary('∨'),
+            "setminus" => binary('∖'),
+            "Cup" => binary('⋓'),
+            "cup" => binary('∪'),
+            "sqcup" => binary('⊔'),
+            "sqcap" => binary('⊓'),
+            "lessdot" => binary('⋖'),
+            "smallsetminus" => E::Content(C::BinaryOp { content: '∖', left_space: true, right_space: true, small: false }),
+            "barwedge" => binary('⌅'),
+            "curlyvee" => binary('⋎'),
+            "curlywedge" => binary('⋏'),
+            "sslash" => binary('⫽'),
+            "div" => binary('÷'),
+            "mp" => binary('∓'),
+            "times" => binary('×'),
+            "boxdot" => binary('⊡'),
+            "divideontimes" => binary('⋇'),
+            "odot" => binary('⊙'),
+            "unlhd" => binary('⊴'),
+            "boxminus" => binary('⊟'),
+            "dotplus" => binary('∔'),
+            "ominus" => binary('⊖'),
+            "unrhd" => binary('⊵'),
+            "boxplus" => binary('⊞'),
+            "doublebarwedge" => binary('⩞'),
+            "oplus" => binary('⊕'),
+            "uplus" => binary('⊎'),
+            "boxtimes" => binary('⊠'),
+            "doublecap" => binary('⋒'),
+            "otimes" => binary('⊗'),
+            "vee" => binary('∨'),
+            "veebar" => binary('⊻'),
+            "Cap" => binary('⋒'),
+            "parr" => binary('⅋'),
+            "wedge" => binary('∧'),
+            "cap" => binary('∩'),
+            "gtrdot" => binary('⋗'),
+            "pm" => binary('±'),
+            "intercal" => binary('⊺'),
+            "wr" => binary('≀'),
+            "circledvert" => binary('⦶'),
+            "blackhourglass" => binary('⧗'),
+            "circlehbar" => binary('⦵'),
+            "operp" => binary('⦹'),
+            "boxast" => binary('⧆'),
+            "boxbox" => binary('⧈'),
+            "oslash" => binary('⊘'),
+            "boxcircle" => binary('⧇'),
+            "diamond" => binary('⋄'),
+            "Otimes" => binary('⨷'),
+            "hourglass" => binary('⧖'),
+            "otimeshat" => binary('⨶'),
+            "triangletimes" => binary('⨻'),
+            "lozengeminus" => binary('⟠'),
+            "star" => binary('⋆'),
+            "obar" => binary('⌽'),
+            "obslash" => binary('⦸'),
+            "triangleminus" => binary('⨺'),
+            "odiv" => binary('⨸'),
+            "triangleplus" => binary('⨹'),
+            "circledequal" => binary('⊜'),
+            "ogreaterthan" => binary('⧁'),
+            "circledparallel" => binary('⦷'),
+            "olessthan" => binary('⧀'),
 
             ///////////////
             // Relations //
             ///////////////
-            "eqcirc" => operator(op!('≖')),
-            "lessgtr" => operator(op!('≶')),
-            "smile" | "sincoh" => operator(op!('⌣')),
-            "eqcolon" | "minuscolon" => operator(op!('∹')),
-            "lesssim" => operator(op!('≲')),
-            "sqsubset" => operator(op!('⊏')),
-            "ll" => operator(op!('≪')),
-            "sqsubseteq" => operator(op!('⊑')),
-            "eqqcolon" => operator(op!('≕')),
-            "lll" => operator(op!('⋘')),
-            "sqsupset" => operator(op!('⊐')),
-            "llless" => operator(op!('⋘')),
-            "sqsupseteq" => operator(op!('⊒')),
-            "approx" => operator(op!('≈')),
-            "eqdef" => operator(op!('≝')),
-            "lt" => operator(op!('<')),
-            "stareq" => operator(op!('≛')),
-            "approxeq" => operator(op!('≊')),
-            "eqsim" => operator(op!('≂')),
-            "measeq" => operator(op!('≞')),
-            "Subset" => operator(op!('⋐')),
-            "arceq" => operator(op!('≘')),
-            "eqslantgtr" => operator(op!('⪖')),
-            "eqslantless" => operator(op!('⪕')),
-            "models" => operator(op!('⊨')),
-            "subseteq" => operator(op!('⊆')),
-            "backcong" => operator(op!('≌')),
-            "equiv" => operator(op!('≡')),
-            "multimap" => operator(op!('⊸')),
-            "subseteqq" => operator(op!('⫅')),
-            "fallingdotseq" => operator(op!('≒')),
-            "multimapboth" => operator(op!('⧟')),
-            "succ" => operator(op!('≻')),
-            "backsim" => operator(op!('∽')),
-            "frown" => operator(op!('⌢')),
-            "multimapinv" => operator(op!('⟜')),
-            "succapprox" => operator(op!('⪸')),
-            "backsimeq" => operator(op!('⋍')),
-            "ge" => operator(op!('≥')),
-            "origof" => operator(op!('⊶')),
-            "succcurlyeq" => operator(op!('≽')),
-            "between" => operator(op!('≬')),
-            "geq" => operator(op!('≥')),
-            "owns" => operator(op!('∋')),
-            "succeq" => operator(op!('⪰')),
-            "bumpeq" => operator(op!('≏')),
-            "geqq" => operator(op!('≧')),
-            "parallel" => operator(op!('∥')),
-            "succsim" => operator(op!('≿')),
-            "Bumpeq" => operator(op!('≎')),
-            "geqslant" => operator(op!('⩾')),
-            "perp" => operator(op!('⟂')),
-            "Supset" => operator(op!('⋑')),
-            "circeq" => operator(op!('≗')),
-            "gg" => operator(op!('≫')),
-            "Perp" => operator(op!('⫫')),
-            "coh" => operator(op!('⌢')),
-            "ggg" => operator(op!('⋙')),
-            "pitchfork" => operator(op!('⋔')),
-            "supseteq" => operator(op!('⊇')),
-            "gggtr" => operator(op!('⋙')),
-            "prec" => operator(op!('≺')),
-            "supseteqq" => operator(op!('⫆')),
-            "gt" => operator(op!('>')),
-            "precapprox" => operator(op!('⪷')),
-            "thickapprox" => operator(op!('≈')),
-            "gtrapprox" => operator(op!('⪆')),
-            "preccurlyeq" => operator(op!('≼')),
-            "thicksim" => operator(op!('∼')),
-            "gtreqless" => operator(op!('⋛')),
-            "preceq" => operator(op!('⪯')),
-            "trianglelefteq" => operator(op!('⊴')),
-            "coloneqq" | "colonequals" => operator(op!('≔')),
-            "gtreqqless" => operator(op!('⪌')),
-            "precsim" => operator(op!('≾')),
-            "triangleq" => operator(op!('≜')),
-            "Coloneqq" | "coloncolonequals" => operator(op!('⩴')),
-            "gtrless" => operator(op!('≷')),
-            "propto" => operator(op!('∝')),
-            "trianglerighteq" => operator(op!('⊵')),
-            "gtrsim" => operator(op!('≳')),
-            "questeq" => operator(op!('≟')),
-            "varpropto" => operator(op!('∝')),
-            "imageof" => operator(op!('⊷')),
-            "cong" => operator(op!('≅')),
-            "risingdotseq" => operator(op!('≓')),
-            "vartriangleleft" => operator(op!('⊲')),
-            "curlyeqprec" => operator(op!('⋞')),
-            "scoh" => operator(op!('⌢')),
-            "vartriangleright" => operator(op!('⊳')),
-            "curlyeqsucc" => operator(op!('⋟')),
-            "le" => operator(op!('≤')),
-            "shortmid" => operator(op!('∣', {size:Some((0.7, DimensionUnit::Em))})),
-            "shortparallel" => operator(op!('∥', {size:Some((0.7, DimensionUnit::Em))})),
-            "vdash" => operator(op!('⊢')),
-            "dashv" => operator(op!('⊣')),
-            "leq" => operator(op!('≤')),
-            "vDash" => operator(op!('⊨')),
-            "dblcolon" | "coloncolon" => operator(op!('∷')),
-            "leqq" => operator(op!('≦')),
-            "sim" => operator(op!('∼')),
-            "Vdash" => operator(op!('⊩')),
-            "doteq" => operator(op!('≐')),
-            "leqslant" => operator(op!('⩽')),
-            "simeq" => operator(op!('≃')),
-            "Dash" => operator(op!('⊫')),
-            "Doteq" => operator(op!('≑')),
-            "lessapprox" => operator(op!('⪅')),
-            "Vvdash" => operator(op!('⊪')),
-            "doteqdot" => operator(op!('≑')),
-            "lesseqgtr" => operator(op!('⋚')),
-            "smallfrown" => operator(op!('⌢')),
-            "veeeq" => operator(op!('≚')),
-            "eqeq" => operator(op!('⩵')),
-            "lesseqqgtr" => operator(op!('⪋')),
-            "smallsmile" => operator(op!('⌣', {size:Some((0.7, DimensionUnit::Em))})),
-            "wedgeq" => operator(op!('≙')),
+            "eqcirc" => relation('≖'),
+            "lessgtr" => relation('≶'),
+            "smile" | "sincoh" => relation('⌣'),
+            "eqcolon" | "minuscolon" => relation('∹'),
+            "lesssim" => relation('≲'),
+            "sqsubset" => relation('⊏'),
+            "ll" => relation('≪'),
+            "sqsubseteq" => relation('⊑'),
+            "eqqcolon" => relation('≕'),
+            "lll" => relation('⋘'),
+            "sqsupset" => relation('⊐'),
+            "llless" => relation('⋘'),
+            "sqsupseteq" => relation('⊒'),
+            "approx" => relation('≈'),
+            "eqdef" => relation('≝'),
+            "lt" => relation('<'),
+            "stareq" => relation('≛'),
+            "approxeq" => relation('≊'),
+            "eqsim" => relation('≂'),
+            "measeq" => relation('≞'),
+            "Subset" => relation('⋐'),
+            "arceq" => relation('≘'),
+            "eqslantgtr" => relation('⪖'),
+            "eqslantless" => relation('⪕'),
+            "models" => relation('⊨'),
+            "subseteq" => relation('⊆'),
+            "backcong" => relation('≌'),
+            "equiv" => relation('≡'),
+            "multimap" => relation('⊸'),
+            "subseteqq" => relation('⫅'),
+            "fallingdotseq" => relation('≒'),
+            "multimapboth" => relation('⧟'),
+            "succ" => relation('≻'),
+            "backsim" => relation('∽'),
+            "frown" => relation('⌢'),
+            "multimapinv" => relation('⟜'),
+            "succapprox" => relation('⪸'),
+            "backsimeq" => relation('⋍'),
+            "ge" => relation('≥'),
+            "origof" => relation('⊶'),
+            "succcurlyeq" => relation('≽'),
+            "between" => relation('≬'),
+            "geq" => relation('≥'),
+            "owns" => relation('∋'),
+            "succeq" => relation('⪰'),
+            "bumpeq" => relation('≏'),
+            "geqq" => relation('≧'),
+            "parallel" => relation('∥'),
+            "succsim" => relation('≿'),
+            "Bumpeq" => relation('≎'),
+            "geqslant" => relation('⩾'),
+            "perp" => relation('⟂'),
+            "Supset" => relation('⋑'),
+            "circeq" => relation('≗'),
+            "gg" => relation('≫'),
+            "Perp" => relation('⫫'),
+            "coh" => relation('⌢'),
+            "ggg" => relation('⋙'),
+            "pitchfork" => relation('⋔'),
+            "supseteq" => relation('⊇'),
+            "gggtr" => relation('⋙'),
+            "prec" => relation('≺'),
+            "supseteqq" => relation('⫆'),
+            "gt" => relation('>'),
+            "precapprox" => relation('⪷'),
+            "thickapprox" => relation('≈'),
+            "gtrapprox" => relation('⪆'),
+            "preccurlyeq" => relation('≼'),
+            "thicksim" => relation('∼'),
+            "gtreqless" => relation('⋛'),
+            "preceq" => relation('⪯'),
+            "trianglelefteq" => relation('⊴'),
+            "coloneqq" | "colonequals" => relation('≔'),
+            "gtreqqless" => relation('⪌'),
+            "precsim" => relation('≾'),
+            "triangleq" => relation('≜'),
+            "Coloneqq" | "coloncolonequals" => relation('⩴'),
+            "gtrless" => relation('≷'),
+            "propto" => relation('∝'),
+            "trianglerighteq" => relation('⊵'),
+            "gtrsim" => relation('≳'),
+            "questeq" => relation('≟'),
+            "varpropto" => relation('∝'),
+            "imageof" => relation('⊷'),
+            "cong" => relation('≅'),
+            "risingdotseq" => relation('≓'),
+            "vartriangleleft" => relation('⊲'),
+            "curlyeqprec" => relation('⋞'),
+            "scoh" => relation('⌢'),
+            "vartriangleright" => relation('⊳'),
+            "curlyeqsucc" => relation('⋟'),
+            "le" => relation('≤'),
+            "shortmid" => E::Content(C::Relation { content: '∣', left_space: true, right_space: true, unicode_variant: false, small: true }),            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: true, small: true }),
+            "shortparallel" => E::Content(C::Relation { content: '∥', left_space: true, right_space: true, unicode_variant: false, small: true }),            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: true, small: true }),
+            "vdash" => relation('⊢'),
+            "dashv" => relation('⊣'),
+            "leq" => relation('≤'),
+            "vDash" => relation('⊨'),
+            "dblcolon" | "coloncolon" => relation('∷'),
+            "leqq" => relation('≦'),
+            "sim" => relation('∼'),
+            "Vdash" => relation('⊩'),
+            "doteq" => relation('≐'),
+            "leqslant" => relation('⩽'),
+            "simeq" => relation('≃'),
+            "Dash" => relation('⊫'),
+            "Doteq" => relation('≑'),
+            "lessapprox" => relation('⪅'),
+            "Vvdash" => relation('⊪'),
+            "doteqdot" => relation('≑'),
+            "lesseqgtr" => relation('⋚'),
+            "smallfrown" => relation('⌢'),
+            "veeeq" => relation('≚'),
+            "eqeq" => relation('⩵'),
+            "lesseqqgtr" => relation('⪋'),
+            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: false, small: true }),
+            "wedgeq" => relation('≙'),
+            "bowtie" | "Join" => relation('⋈'),
+            // Negated relations
+            "gnapprox" => relation('⪊'),
+            "ngeqslant" => relation('≱'),
+            "nsubset" => relation('⊄'),
+            "nVdash" => relation('⊮'),
+            "gneq" => relation('⪈'),
+            "ngtr" => relation('≯'),
+            "nsubseteq" => relation('⊈'),
+            "precnapprox" => relation('⪹'),
+            "gneqq" => relation('≩'),
+            "nleq" => relation('≰'),
+            "nsubseteqq" => relation('⊈'),
+            "precneqq" => relation('⪵'),
+            "gnsim" => relation('⋧'),
+            "nleqq" => relation('≰'),
+            "nsucc" => relation('⊁'),
+            "precnsim" => relation('⋨'),
+            "nleqslant" => relation('≰'),
+            "nsucceq" => relation('⋡'),
+            "subsetneq" => relation('⊊'),
+            "lnapprox" => relation('⪉'),
+            "nless" => relation('≮'),
+            "nsupset" => relation('⊅'),
+            "subsetneqq" => relation('⫋'),
+            "lneq" => relation('⪇'),
+            "nmid" => relation('∤'),
+            "nsupseteq" => relation('⊉'),
+            "succnapprox" => relation('⪺'),
+            "lneqq" => relation('≨'),
+            "notin" => relation('∉'),
+            "nsupseteqq" => relation('⊉'),
+            "succneqq" => relation('⪶'),
+            "lnsim" => relation('⋦'),
+            "ntriangleleft" => relation('⋪'),
+            "succnsim" => relation('⋩'),
+            "nparallel" => relation('∦'),
+            "ntrianglelefteq" => relation('⋬'),
+            "supsetneq" => relation('⊋'),
+            "ncong" => relation('≆'),
+            "nprec" => relation('⊀'),
+            "ntriangleright" => relation('⋫'),
+            "supsetneqq" => relation('⫌'),
+            "ne" => relation('≠'),
+            "npreceq" => relation('⋠'),
+            "ntrianglerighteq" => relation('⋭'),
+            "neq" => relation('≠'),
+            "nshortmid" => relation('∤'),
+            "nvdash" => relation('⊬'),
+            "ngeq" => relation('≱'),
+            "nshortparallel" => E::Content(C::Relation { content: '∦', left_space: true, right_space: true, unicode_variant: false, small: true }),            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: true, small: true }),
+            "nvDash" => relation('⊭'),
+            "varsupsetneq" => relation('⊋'),
+            "ngeqq" => relation('≱'),
+            "nsim" => relation('≁'),
+            "nVDash" => relation('⊯'),
+            "varsupsetneqq" => E::Content(C::Relation { content: '⫌', left_space: true, right_space: true, unicode_variant: true, small: false }),
+            "varsubsetneqq" => E::Content(C::Relation { content: '⫋', left_space: true, right_space: true, unicode_variant: true, small: false }),
+            "varsubsetneq" => E::Content(C::Relation { content: '⊊', left_space: true, right_space: true, unicode_variant: true, small: false }),
+            "varsupsetneq" => E::Content(C::Relation { content: '⊋', left_space: true, right_space: true, unicode_variant: true, small: false }),
+            "gvertneqq" => E::Content(C::Relation { content: '≩', left_space: true, right_space: true, unicode_variant: true, small: false }),
+            "lvertneqq" => E::Content(C::Relation { content: '≨', left_space: true, right_space: true, unicode_variant: true, small: false }),
             "Eqcolon" | "minuscoloncolon" => {
                 self.multi_event([
-                    E::Content(C::Operator(
-                        op!('−', {right_space: Some((0., DimensionUnit::Em))}),
-                    )),
-                    E::Content(C::Operator(op!('∷'))),
+                    E::Content(C::BinaryOp {
+                        content: '−',
+                        left_space: true,
+                        right_space: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '∷',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "Eqqcolon" => {
                 self.multi_event([
-                    E::Content(C::Operator(
-                        op!('=', {right_space: Some((0., DimensionUnit::Em))}),
-                    )),
-                    E::Content(C::Operator(op!('∷'))),
+                    E::Content(C::Relation {
+                        content: '=',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '∷',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "approxcolon" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        '≈',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: '≈',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: ':',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "colonapprox" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        '≈',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: ':',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '≈',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "approxcoloncolon" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        '≈',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    E::Content(C::Operator(
-                        op! {':', {left_space: Some((0., DimensionUnit::Em))}},
-                    )),
+                    E::Content(C::Relation {
+                        content: '≈',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '∷',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "Colonapprox" | "coloncolonapprox" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    E::Content(C::Operator(op! {
-                        '≈',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: '∷',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '≈',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "coloneq" | "colonminus" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        '-',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: ':',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::BinaryOp {
+                        content: '−',
+                        left_space: false,
+                        right_space: true,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "Coloneq" | "coloncolonminus" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    E::Content(C::Operator(op! {
-                        '-',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: '∷',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::BinaryOp {
+                        content: '−',
+                        left_space: false,
+                        right_space: true,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "colonsim" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        '∼',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: ':',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '∼',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
             "Colonsim" | "coloncolonsim" => {
                 self.multi_event([
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {right_space: Some((0., DimensionUnit::Em))}
-                    })),
-                    E::Content(C::Operator(op! {
-                        ':',
-                        {
-                            left_space: Some((0., DimensionUnit::Em)),
-                            right_space: Some((0., DimensionUnit::Em))
-                        }
-                    })),
-                    E::Content(C::Operator(op! {
-                        '∼',
-                        {left_space: Some((0., DimensionUnit::Em))}
-                    })),
+                    E::Content(C::Relation {
+                        content: '∷',
+                        left_space: true,
+                        right_space: false,
+                        unicode_variant: false,
+                        small: false,
+                    }),
+                    E::Content(C::Relation {
+                        content: '∼',
+                        left_space: false,
+                        right_space: true,
+                        unicode_variant: false,
+                        small: false,
+                    }),
                 ]);
                 return Ok(());
             }
-            // Negated relations
-            "gnapprox" => operator(op!('⪊')),
-            "ngeqslant" => operator(op!('≱')),
-            "nsubset" => operator(op!('⊄')),
-            "nVdash" => operator(op!('⊮')),
-            "gneq" => operator(op!('⪈')),
-            "ngtr" => operator(op!('≯')),
-            "nsubseteq" => operator(op!('⊈')),
-            "precnapprox" => operator(op!('⪹')),
-            "gneqq" => operator(op!('≩')),
-            "nleq" => operator(op!('≰')),
-            "nsubseteqq" => operator(op!('⊈')),
-            "precneqq" => operator(op!('⪵')),
-            "gnsim" => operator(op!('⋧')),
-            "nleqq" => operator(op!('≰')),
-            "nsucc" => operator(op!('⊁')),
-            "precnsim" => operator(op!('⋨')),
-            "nleqslant" => operator(op!('≰')),
-            "nsucceq" => operator(op!('⋡')),
-            "subsetneq" => operator(op!('⊊')),
-            "lnapprox" => operator(op!('⪉')),
-            "nless" => operator(op!('≮')),
-            "nsupset" => operator(op!('⊅')),
-            "subsetneqq" => operator(op!('⫋')),
-            "lneq" => operator(op!('⪇')),
-            "nmid" => operator(op!('∤')),
-            "nsupseteq" => operator(op!('⊉')),
-            "succnapprox" => operator(op!('⪺')),
-            "lneqq" => operator(op!('≨')),
-            "notin" => operator(op!('∉')),
-            "nsupseteqq" => operator(op!('⊉')),
-            "succneqq" => operator(op!('⪶')),
-            "lnsim" => operator(op!('⋦')),
-            "ntriangleleft" => operator(op!('⋪')),
-            "succnsim" => operator(op!('⋩')),
-            "nparallel" => operator(op!('∦')),
-            "ntrianglelefteq" => operator(op!('⋬')),
-            "supsetneq" => operator(op!('⊋')),
-            "ncong" => operator(op!('≆')),
-            "nprec" => operator(op!('⊀')),
-            "ntriangleright" => operator(op!('⋫')),
-            "supsetneqq" => operator(op!('⫌')),
-            "ne" => operator(op!('≠')),
-            "npreceq" => operator(op!('⋠')),
-            "ntrianglerighteq" => operator(op!('⋭')),
-            "neq" => operator(op!('≠')),
-            "nshortmid" => operator(op!('∤')),
-            "nvdash" => operator(op!('⊬')),
-            "ngeq" => operator(op!('≱')),
-            "nshortparallel" => operator(op!('∦', {size: Some((0.7, DimensionUnit::Em))})),
-            "nvDash" => operator(op!('⊭')),
-            "varsupsetneq" => operator(op!('⊋')),
-            "ngeqq" => operator(op!('≱')),
-            "nsim" => operator(op!('≁')),
-            "nVDash" => operator(op!('⊯')),
-            "varsupsetneqq" => operator(op!('⫌', {unicode_variant: true})),
-            "varsubsetneqq" => operator(op!('⫋', {unicode_variant: true})),
-            "varsubsetneq" => operator(op!('⊊', {unicode_variant: true})),
-            "gvertneqq" => operator(op!('≩', {unicode_variant: true})),
-            "lvertneqq" => operator(op!('≨', {unicode_variant: true})),
 
             ////////////
             // Arrows //
             ////////////
-            "circlearrowleft" => operator(op!('↺')),
-            "Leftrightarrow" => operator(op!('⇔')),
-            "restriction" => operator(op!('↾')),
-            "circlearrowright" => operator(op!('↻')),
-            "leftrightarrows" => operator(op!('⇆')),
-            "rightarrow" => operator(op!('→')),
-            "curvearrowleft" => operator(op!('↶')),
-            "leftrightharpoons" => operator(op!('⇋')),
-            "Rightarrow" => operator(op!('⇒')),
-            "curvearrowright" => operator(op!('↷')),
-            "leftrightsquigarrow" => operator(op!('↭')),
-            "rightarrowtail" => operator(op!('↣')),
-            "dashleftarrow" => operator(op!('⇠')),
-            "Lleftarrow" => operator(op!('⇚')),
-            "rightharpoondown" => operator(op!('⇁')),
-            "dashrightarrow" => operator(op!('⇢')),
-            "longleftarrow" => operator(op!('⟵')),
-            "rightharpoonup" => operator(op!('⇀')),
-            "downarrow" => operator(op!('↓')),
-            "Longleftarrow" => operator(op!('⟸')),
-            "rightleftarrows" => operator(op!('⇄')),
-            "Downarrow" => operator(op!('⇓')),
-            "longleftrightarrow" => operator(op!('⟷')),
-            "rightleftharpoons" => operator(op!('⇌')),
-            "downdownarrows" => operator(op!('⇊')),
-            "Longleftrightarrow" => operator(op!('⟺')),
-            "rightrightarrows" => operator(op!('⇉')),
-            "downharpoonleft" => operator(op!('⇃')),
-            "longmapsto" => operator(op!('⟼')),
-            "rightsquigarrow" => operator(op!('⇝')),
-            "downharpoonright" => operator(op!('⇂')),
-            "longrightarrow" => operator(op!('⟶')),
-            "Rrightarrow" => operator(op!('⇛')),
-            "Longrightarrow" => operator(op!('⟹')),
-            "Rsh" => operator(op!('↱')),
-            "hookleftarrow" => operator(op!('↩')),
-            "looparrowleft" => operator(op!('↫')),
-            "searrow" => operator(op!('↘')),
-            "hookrightarrow" => operator(op!('↪')),
-            "looparrowright" => operator(op!('↬')),
-            "swarrow" => operator(op!('↙')),
-            "Lsh" => operator(op!('↰')),
-            "mapsfrom" => operator(op!('↤')),
-            "twoheadleftarrow" => operator(op!('↞')),
-            "twoheadrightarrow" => operator(op!('↠')),
-            "leadsto" => operator(op!('⇝')),
-            "nearrow" => operator(op!('↗')),
-            "uparrow" => operator(op!('↑')),
-            "leftarrow" => operator(op!('←')),
-            "nleftarrow" => operator(op!('↚')),
-            "Uparrow" => operator(op!('⇑')),
-            "Leftarrow" => operator(op!('⇐')),
-            "nLeftarrow" => operator(op!('⇍')),
-            "updownarrow" => operator(op!('↕')),
-            "leftarrowtail" => operator(op!('↢')),
-            "nleftrightarrow" => operator(op!('↮')),
-            "Updownarrow" => operator(op!('⇕')),
-            "leftharpoondown" => operator(op!('↽')),
-            "nLeftrightarrow" => operator(op!('⇎')),
-            "upharpoonleft" => operator(op!('↿')),
-            "leftharpoonup" => operator(op!('↼')),
-            "nrightarrow" => operator(op!('↛')),
-            "upharpoonright" => operator(op!('↾')),
-            "leftleftarrows" => operator(op!('⇇')),
-            "nRightarrow" => operator(op!('⇏')),
-            "upuparrows" => operator(op!('⇈')),
-            "leftrightarrow" => operator(op!('↔')),
-            "nwarrow" => operator(op!('↖')),
+            "circlearrowleft" => relation('↺'),
+            "Leftrightarrow" => relation('⇔'),
+            "restriction" => relation('↾'),
+            "circlearrowright" => relation('↻'),
+            "leftrightarrows" => relation('⇆'),
+            "rightarrow" => relation('→'),
+            "curvearrowleft" => relation('↶'),
+            "leftrightharpoons" => relation('⇋'),
+            "Rightarrow" => relation('⇒'),
+            "curvearrowright" => relation('↷'),
+            "leftrightsquigarrow" => relation('↭'),
+            "rightarrowtail" => relation('↣'),
+            "dashleftarrow" => relation('⇠'),
+            "Lleftarrow" => relation('⇚'),
+            "rightharpoondown" => relation('⇁'),
+            "dashrightarrow" => relation('⇢'),
+            "longleftarrow" => relation('⟵'),
+            "rightharpoonup" => relation('⇀'),
+            "downarrow" => relation('↓'),
+            "Longleftarrow" => relation('⟸'),
+            "rightleftarrows" => relation('⇄'),
+            "Downarrow" => relation('⇓'),
+            "longleftrightarrow" => relation('⟷'),
+            "rightleftharpoons" => relation('⇌'),
+            "downdownarrows" => relation('⇊'),
+            "Longleftrightarrow" => relation('⟺'),
+            "rightrightarrows" => relation('⇉'),
+            "downharpoonleft" => relation('⇃'),
+            "longmapsto" => relation('⟼'),
+            "rightsquigarrow" => relation('⇝'),
+            "downharpoonright" => relation('⇂'),
+            "longrightarrow" => relation('⟶'),
+            "Rrightarrow" => relation('⇛'),
+            "Longrightarrow" => relation('⟹'),
+            "Rsh" => relation('↱'),
+            "hookleftarrow" => relation('↩'),
+            "looparrowleft" => relation('↫'),
+            "searrow" => relation('↘'),
+            "hookrightarrow" => relation('↪'),
+            "looparrowright" => relation('↬'),
+            "swarrow" => relation('↙'),
+            "Lsh" => relation('↰'),
+            "mapsfrom" => relation('↤'),
+            "twoheadleftarrow" => relation('↞'),
+            "twoheadrightarrow" => relation('↠'),
+            "leadsto" => relation('⇝'),
+            "nearrow" => relation('↗'),
+            "uparrow" => relation('↑'),
+            "leftarrow" => relation('←'),
+            "nleftarrow" => relation('↚'),
+            "Uparrow" => relation('⇑'),
+            "Leftarrow" => relation('⇐'),
+            "nLeftarrow" => relation('⇍'),
+            "updownarrow" => relation('↕'),
+            "leftarrowtail" => relation('↢'),
+            "nleftrightarrow" => relation('↮'),
+            "Updownarrow" => relation('⇕'),
+            "leftharpoondown" => relation('↽'),
+            "nLeftrightarrow" => relation('⇎'),
+            "upharpoonleft" => relation('↿'),
+            "leftharpoonup" => relation('↼'),
+            "nrightarrow" => relation('↛'),
+            "upharpoonright" => relation('↾'),
+            "leftleftarrows" => relation('⇇'),
+            "nRightarrow" => relation('⇏'),
+            "upuparrows" => relation('⇈'),
+            "leftrightarrow" => relation('↔'),
+            "nwarrow" => relation('↖'),
 
             ///////////////
             // Fractions //
@@ -1309,29 +1468,20 @@ impl<'a> Parser<'a> {
                     }
                 };
 
-                self.buffer.push(I::Event(E::Begin(G::LeftRight)));
+                self.buffer.push(I::Event(E::Begin(G::LeftRight(ldelim.map(|c| c.0), rdelim.map(|c| c.0)))));
                 if let Some(style) = display_style {
                     self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
-                }
-                if let Some(ldelim) = ldelim {
-                    self.buffer.push(I::Event(E::Content(C::Operator(op!(ldelim)))));
                 }
                 
                 self.fraction_like(bar_size)?;
                 
-                if let Some(rdelim) = rdelim {
-                    self.buffer.push(I::Event(E::Content(C::Operator(op!(rdelim)))));
-                }
                 self.buffer.push(I::Event(E::End));
                 return Ok(())
             }
             "binom" => {
-                self.buffer.extend([I::Event(E::Begin(G::LeftRight)),
-                                    I::Event(E::Content(C::Operator(op!('('))))]);
+                self.buffer.push(I::Event(E::Begin(G::LeftRight(Some('('), Some(')')))));
                 self.fraction_like(None)?;
-                self.buffer.extend([I::Event(E::Content(C::Operator(op!(')')))),
-                                    I::Event(E::End)]);
-                return Ok(())
+                E::End
             }
             "cfrac" => {
                 self.buffer.extend([I::Event(E::Begin(G::Internal)),
@@ -1423,7 +1573,7 @@ impl<'a> Parser<'a> {
                     .next()
                     .expect("the control sequence contains one of the matched characters"),
             ),
-            "|" => operator(op!('∥', {stretchy: Some(false)})),
+            "|" => ident('∥'),
             "text" => return self.text_argument(),
             "not" => {
                 self.buffer
@@ -1437,9 +1587,9 @@ impl<'a> Parser<'a> {
                 if number > 255 {
                     return Err(ErrorKind::InvalidCharNumber);
                 }
-                E::Content(C::Identifier(ID::Char(
-                                char::from_u32(number as u32).expect("the number is a valid char since it is less than 256")
-                                )))
+                E::Content(C::Ordinary(
+                    char::from_u32(number as u32).expect("the number is a valid char since it is less than 256")
+                ))
             },
             "relax" => {
                 return if self.state.invalidate_relax {
@@ -1466,54 +1616,33 @@ impl<'a> Parser<'a> {
                 let Argument::Group(argument) = lex::argument(self.current_string())? else {
                     return Err(ErrorKind::Argument);
                 };
-                let mut closing = None;
-                let environment = match argument {
-                    "array" => Grouping::Array,
-                    "matrix" => Grouping::Matrix,
+                let (environment, wrap) = match argument {
+                    "array" => (G::Array, None),
+                    "matrix" => (G::Matrix, None),
                     "pmatrix" => {
-                        self.buffer.extend([
-                            I::Event(E::Begin(G::LeftRight)),
-                            I::Event(E::Content(C::Operator(op!('(')))),
-                        ]);
-                        closing = Some(op!(')'));
-                        Grouping::Matrix
+                        (G::Matrix, Some(G::LeftRight(Some('('), Some(')'))))
                     },
                     "bmatrix" => {
-                        self.buffer.extend([
-                            I::Event(E::Begin(G::LeftRight)),
-                            I::Event(E::Content(C::Operator(op!('[')))),
-                        ]);
-                        closing = Some(op!(']'));
-                        Grouping::Matrix
+                        (G::Matrix, Some(G::LeftRight(Some('['), Some(']'))))
                     },
                     "vmatrix" => {
-                        self.buffer.extend([
-                            I::Event(E::Begin(G::LeftRight)),
-                            I::Event(E::Content(C::Operator(op!('|')))),
-                        ]);
-                        closing = Some(op!('|'));
-                        Grouping::Matrix
+                        (G::Matrix, Some(G::LeftRight(Some('|'), Some('|'))))
                     },
                     "Vmatrix" => {
-                        self.buffer.extend([
-                            I::Event(E::Begin(G::LeftRight)),
-                            I::Event(E::Content(C::Operator(op!('‖')))),
-                        ]);
-                        closing = Some(op!('‖'));
-                        Grouping::Matrix
+                        (G::Matrix, Some(G::LeftRight(Some('‖'), Some('‖'))))
                     },
                     "Bmatrix" => {
-                        self.buffer.extend([
-                            I::Event(E::Begin(G::LeftRight)),
-                            I::Event(E::Content(C::Operator(op!('{')))),
-                        ]);
-                        closing = Some(op!('}'));
-                        Grouping::Matrix
+                        (G::Matrix, Some(G::LeftRight(Some('{'), Some('}'))))
                     },
-                    "cases" => Grouping::Cases,
-                    "align" => Grouping::Align,
+                    "cases" => (G::Cases, None),
+                    "align" => (G::Align, None),
                     _ => return Err(ErrorKind::Environment),
                 };
+
+                if let Some(wrap) = wrap {
+                    self.buffer.push(I::Event(E::Begin(wrap)));
+                }
+                
                 // TODO: correctly spot deeper environment of the same type.
                 let content = lex::group_content(
                     self.current_string(),
@@ -1525,11 +1654,9 @@ impl<'a> Parser<'a> {
                     I::SubGroup { content, allows_alignment: true },
                     I::Event(E::End)
                 ]);
-                if let Some(closing) = closing {
-                    self.buffer.extend([
-                        I::Event(E::Content(C::Operator(closing))),
-                        I::Event(E::End)
-                    ]);
+
+                if wrap.is_some() {
+                    self.buffer.push(I::Event(E::End));
                 }
                 return Ok(());
             }
@@ -1538,7 +1665,8 @@ impl<'a> Parser<'a> {
 
             // Delimiters
             cs if control_sequence_delimiter_map(cs).is_some() => {
-                operator(op!(control_sequence_delimiter_map(cs).unwrap(), {stretchy: Some(false)}))
+                let (content, ty) = control_sequence_delimiter_map(cs).unwrap();
+                E::Content(C::Delimiter { content, size: None, ty })
             }
 
             // Spacing
@@ -1559,13 +1687,11 @@ impl<'a> Parser<'a> {
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
-    fn em_sized_delim(&mut self, size: f32) -> InnerResult<()> {
+    fn sized_delim(&mut self, size: DelimiterSize) -> InnerResult<()> {
         let current = self.current_string();
-        let delimiter = lex::delimiter(current)?;
+        let (content, ty) = lex::delimiter(current)?;
         self.buffer
-            .push(I::Event(E::Content(C::Operator(
-                op!(delimiter, {size: Some((size, DimensionUnit::Em))}),
-            ))));
+            .push(I::Event(E::Content(C::Delimiter { content, size: Some(size), ty })));
         Ok(())
     }
 
@@ -1592,7 +1718,7 @@ impl<'a> Parser<'a> {
     }
 
     /// Accent commands. parse the argument, and overset the accent.
-    fn accent(&mut self, accent: O) -> InnerResult<()> {
+    fn accent(&mut self, accent: char, stretchy: bool) -> InnerResult<()> {
         let argument = lex::argument(self.current_string())?;
         self.buffer.push(I::Event(E::Script {
             ty: ST::Superscript,
@@ -1600,14 +1726,15 @@ impl<'a> Parser<'a> {
         }));
         self.handle_argument(argument)?;
         self.buffer
-            .push(I::Event(E::Content(C::Operator(
-                accent,
-            ))));
+            .push(I::Event(E::Content(C::UnaryOp {
+                content: accent,
+                stretchy,
+            })));
         Ok(())
     }
 
     /// Underscript commands. parse the argument, and underset the accent.
-    fn underscript(&mut self, content: O) -> InnerResult<()> {
+    fn underscript(&mut self, content: char) -> InnerResult<()> {
         let argument = lex::argument(self.current_string())?;
         self.buffer.push(I::Event(E::Script {
             ty: ST::Subscript,
@@ -1615,9 +1742,10 @@ impl<'a> Parser<'a> {
         }));
         self.handle_argument(argument)?;
         self.buffer
-            .push(I::Event(E::Content(C::Operator(
+            .push(I::Event(E::Content(C::UnaryOp {
                 content,
-            ))));
+                stretchy: true,
+            })));
 
         Ok(())
     }
@@ -1676,12 +1804,18 @@ fn relation(rel: char) -> E<'static> {
         left_space: false,
         right_space: false,
         unicode_variant: false,
+        small: false,
     })
 }
 
 #[inline]
 fn unary(op: char) -> E<'static> {
     E::Content(C::UnaryOp{ content: op, stretchy: false })
+}
+
+#[inline]
+fn binary(op: char) -> E<'static> {
+    E::Content(C::BinaryOp{ content: op, left_space: true, right_space: true, small: false })
 }
 
 // TODO implementations:

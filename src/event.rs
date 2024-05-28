@@ -4,7 +4,7 @@
 //! A stream of `Result<Event, ParserError>`s is produced by the [`Parser`], which can then be typeset/rendered
 //! by a renderer. This crate only provides a simple `mathml` renderer available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
-//! 
+//!
 //! [`Parser`]: crate::parser::Parser
 //! [`push_mathml`]: crate::mathml::push_mathml
 //! [`write_mathml`]: crate::mathml::write_mathml
@@ -12,7 +12,7 @@
 use crate::attribute::{Dimension, Font};
 
 /// All events that can be produced by the parser.
-/// 
+///
 /// When an [`Event`] is referreing to an "_element_", it is referring to the next logical unit of
 /// content in the stream. This can be a single content element, a group, a visual element, etc.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -48,7 +48,7 @@ pub enum Event<'a> {
     /// This state change only applies to the current group nesting and deeper groups.
     StateChange(StateChange<'a>),
     /// This event specifies an alignment mark in a mathematical environment.
-    /// 
+    ///
     /// This event is only used when inside a `Grouping` that allows it.
     Alignment,
     /// This event specifies a line break in a mathematical environment.
@@ -73,19 +73,13 @@ pub enum Content<'a> {
     Ordinary(char),
     /// A unary operator, such as `+`, `-`, `!`, etc. This includes stuff that normally go in under
     /// and overscripts which may be stretchy.
-    UnaryOp{
-        content: char,
-        stretchy: bool
-    },
+    UnaryOp { content: char, stretchy: bool },
     /// A large operator, such as `\sum`, `\int`, `\prod`, etc.
     ///
     // TODO: Deny movable limits in renderer
-    LargeOp { 
-        content: char,
-        small: bool,
-    },
+    LargeOp { content: char, small: bool },
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
-    BinaryOp { 
+    BinaryOp {
         content: char,
         left_space: bool,
         right_space: bool,
@@ -97,11 +91,14 @@ pub enum Content<'a> {
         left_space: bool,
         right_space: bool,
         unicode_variant: bool,
+        small: bool,
     },
-    /// An opening delimiter, such as `(`, `[`, `{`, etc.
-    Opening(char),
-    /// A closing delimiter, such as `)`, `]`, `}`, etc.
-    Closing(char),
+    /// An opening, closing, or fence delimiter, such as `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
+    Delimiter {
+        content: char,
+        size: Option<DelimiterSize>,
+        ty: DelimiterType,
+    },
     /// A punctuation character, such as `,`, `.`, `;`, etc.
     Punctuation(char),
 }
@@ -131,49 +128,6 @@ pub enum Content<'a> {
 // Delimiters (should be slplit): F G
 // Punctuation: M
 
-/// Represents a mathematical operator.
-///
-/// This variant ecompasses many different types of operators, such as binary operators,
-/// relation, large operators, delimiters, etc. Specifically, it represents an operator
-/// according to the [_MathML Core_ specification](https://w3c.github.io/mathml-core/#operator-fence-separator-or-accent-mo).
-/// 
-/// > In MathML the list of things that should "render as an operator" includes a number of
-/// > notations that are not mathematical operators in the ordinary sense. Besides ordinary
-/// > operators with infix, prefix, or postfix forms, these include fence characters such as
-/// > braces, parentheses, and "absolute value" bars; separators such as comma and semicolon; and
-/// > mathematical accents such as a bar or tilde over a symbol.
-#[derive(Debug, Clone, Copy, Default, PartialEq)]
-pub struct Operator {
-    /// The operator's unicode content.
-    pub content: char,
-    /// Whether or not the operator should be stretchy.
-    ///
-    /// This usually applies to delimiters, for instance when `\left( ... \right)` are used.
-    pub stretchy: Option<bool>,
-    /// Whether or not the operator should explicitly set `movablelimits="false"` on the matml
-    /// tag.
-    ///
-    /// TODO: This is very specific to the mathml renderer, and should thus be moved into the
-    /// renderer's logic.
-    pub deny_movable_limits: bool,
-    /// If this is set to true, the unicode character VS1 (U+20D2) is added to the operator. This
-    /// is used to allow for special negation operators, such as `\varsupsetneqq` (⫌︀).
-    pub unicode_variant: bool,
-    /// How much space should be added to the left of the operator, if any.
-    /// 
-    /// If this is `None`, then the spacing should follow the default spacing rules.
-    pub left_space: Option<Dimension>,
-    /// How much space should be added to the right of the operator.
-    ///
-    /// If this is `None`, then the spacing should follow the default spacing rules.
-    pub right_space: Option<Dimension>,
-    /// The size specific size the operator should have.
-    ///
-    /// This is only specified when a command such as `\shortmid` is used, which produces a
-    /// smaller form of another operator.
-    pub size: Option<Dimension>,
-}
-
 /// An identifier can either be a single character, or a string (e.g., a command such as `sin`,
 /// `lim`, etc.).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -196,7 +150,7 @@ pub enum Visual {
     Fraction(Option<Dimension>),
     /// The "negation" operator as in "not equal" (≠) or "does not exist" (∄). This applies to the
     /// next event in the stream.
-    /// 
+    ///
     /// This event can occur before an arbitrary event, not just a `Content` event. It is left to
     /// the renderer to determine how to apply the negation. In `LaTeX`, the renderer usually
     /// generates an akward looking negation across the next element, when it does not correspond
@@ -290,9 +244,31 @@ pub enum Grouping {
     Internal,
     Normal,
     // TODO: make LeftRight own its delimiters, when changing the Event API.
-    LeftRight,
+    LeftRight(Option<char>, Option<char>),
     Array,
     Matrix,
     Cases,
     Align,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DelimiterSize {
+    /// Corresponds to `\bigl`, `\bigr`, etc.
+    Big,
+    /// Corresponds to `\Bigl`, `\Bigr`, etc.
+    BIG,
+    /// Corresponds to `\biggl`, `\biggr`, etc.
+    Bigg,
+    /// Corresponds to `\Biggl`, `\Biggr`, etc.
+    BIGG,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum DelimiterType {
+    /// Corresponds to the left delimiter.
+    Open,
+    /// Corresponds to a delimiter that is neither an opening nor a closing delimiter.
+    Fence,
+    /// Corresponds to the right delimiter.
+    Close,
 }
