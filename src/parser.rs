@@ -52,9 +52,6 @@ pub struct Parser<'a> {
     /// When a token is parsed, it is first pushed to this stack, then suffixes are checked
     /// (superscript, and subscript), and then the event is moved from the buffer to the instruction stack.
     buffer: Vec<Instruction<'a>>,
-
-    /// The current state of the parser
-    state: ParserState,
 }
 
 // TODO: When using macros, one should truly just prepend the extended macro to the start of the
@@ -63,7 +60,7 @@ pub struct Parser<'a> {
 // outputed by current string is always fully formed.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
-        let mut instruction_stack = Vec::with_capacity(64);
+        let mut instruction_stack = Vec::with_capacity(32);
         instruction_stack.push(Instruction::SubGroup {
             content: input,
             allows_alignment: false,
@@ -75,156 +72,6 @@ impl<'a> Parser<'a> {
             buffer,
             state: ParserState::default(),
         }
-    }
-
-    /// Get the current string we are parsing.
-    ///
-    /// This function guarantees that the string returned is not empty.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the top instruction of the stack is not a [`SubGroup`].
-    fn current_string(&mut self) -> &mut &'a str {
-        match self
-            .instruction_stack
-            .last_mut()
-            .expect("there is something in the stack")
-        {
-            Instruction::SubGroup { content: s, .. } => s,
-            _ => unreachable!(""),
-        }
-    }
-
-    fn allows_alignment(&self) -> bool {
-        match self
-            .instruction_stack
-            .last()
-            .expect("there is something in the stack")
-        {
-            Instruction::SubGroup {
-                allows_alignment, ..
-            } => *allows_alignment,
-            _ => unreachable!(),
-        }
-    }
-
-    /// Handles the superscript and/or subscript following what was parsed previously.
-    ///
-    /// Follows the design decisions described in [`design/suffixes.md`].
-    fn handle_suffixes(&mut self) -> InnerResult<Option<Event<'a>>> {
-        if self.state.skip_suffixes {
-            return Ok(None);
-        }
-
-        let mut script_position = if self.state.above_below_suffix_default {
-            ScriptPosition::Movable
-        } else {
-            ScriptPosition::Right
-        };
-
-        if self.state.allow_suffix_modifiers {
-            if let Some(limits) = lex::limit_modifiers(self.current_string()) {
-                if limits {
-                    script_position = ScriptPosition::AboveBelow;
-                } else {
-                    script_position = ScriptPosition::Right;
-                }
-            }
-        }
-        let str = self.current_string();
-        *str = str.trim_start();
-
-        let Some(next_char) = str.chars().next() else {
-            return Ok(None);
-        };
-        let subscript_first = match next_char {
-            '^' => false,
-            '_' => true,
-            _ => return Ok(None),
-        };
-        *str = &str[1..];
-
-        let ty = self.rhs_suffixes(subscript_first)?;
-        Ok(Some(Event::Script {
-            ty,
-            position: script_position,
-        }))
-    }
-
-    fn rhs_suffixes(&mut self, subscript_first: bool) -> InnerResult<ScriptType> {
-        let first_suffix_start = self.buffer.len();
-        let arg = lex::argument(self.current_string())?;
-        self.handle_argument(arg)?;
-        let second_suffix_start = self.buffer.len();
-        let str = self.current_string();
-        let next_char = str.chars().next();
-        if (next_char == Some('_') && !subscript_first)
-            || (next_char == Some('^') && subscript_first)
-        {
-            *str = &str[1..];
-            let arg = lex::argument(str)?;
-            self.handle_argument(arg)?;
-        } else if next_char == Some('_') || next_char == Some('^') {
-            return Err(if subscript_first {
-                ErrorKind::DoubleSubscript
-            } else {
-                ErrorKind::DoubleSuperscript
-            });
-        }
-        let second_suffix_end = self.buffer.len();
-
-        Ok(
-            if !subscript_first && second_suffix_start != second_suffix_end {
-                self.instruction_stack.extend(
-                    self.buffer[first_suffix_start..second_suffix_start]
-                        .iter()
-                        .rev(),
-                );
-                self.instruction_stack.extend(
-                    self.buffer
-                        .drain(first_suffix_start..)
-                        .skip(second_suffix_start - first_suffix_start)
-                        .rev(),
-                );
-                ScriptType::SubSuperscript
-            } else {
-                let suffixes = self.buffer.drain(first_suffix_start..);
-                self.instruction_stack.extend(suffixes.rev());
-                if second_suffix_start != second_suffix_end {
-                    ScriptType::SubSuperscript
-                } else if subscript_first {
-                    ScriptType::Subscript
-                } else {
-                    ScriptType::Superscript
-                }
-            },
-        )
-    }
-
-    /// Parse an arugment and pushes the argument to the stack surrounded by a
-    /// group: [..., EndGroup, Argument, BeginGroup], when the argument is a subgroup.
-    /// Otherwise, it pushes the argument to the stack ungrouped.
-    fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
-        match argument {
-            Argument::Token(token) => {
-                self.state.invalidate_relax = true;
-                match token {
-                    Token::ControlSequence(cs) => self.handle_primitive(cs)?,
-                    Token::Character(c) => self.handle_char_token(c)?,
-                };
-            }
-            Argument::Group(group) => {
-                self.buffer.extend([
-                    Instruction::Event(Event::Begin(Grouping::Normal)),
-                    Instruction::SubGroup {
-                        content: group,
-                        allows_alignment: false,
-                    },
-                    Instruction::Event(Event::End),
-                ]);
-            }
-        };
-        Ok(())
     }
 
     /// Return the context surrounding the error reported.
@@ -283,52 +130,81 @@ impl<'a> Iterator for Parser<'a> {
                     _ => unreachable!(),
                 }))
             }
-            Some(Instruction::SubGroup {
-                content,
-                ..
-            }) if content.trim_start().is_empty() => {
+            Some(Instruction::SubGroup { content, .. }) if content.trim_start().is_empty() => {
                 self.instruction_stack.pop();
                 self.next()
             }
             Some(Instruction::SubGroup {
                 content,
-                ..
+                allows_alignment,
             }) => {
-                // 1. Parse the next token and output everything to the staging stack.
-                // TODO: when try blocks hit stable, we should use them. (Please be stable soon!)
-                let token = match lex::token(content) {
-                    Ok(token) => token,
-                    Err(err) => return Some(Err(self.error_with_context(err))),
+                let state = ParserState {
+                    allows_alignment: *allows_alignment,
+                    ..Default::default()
                 };
-                let maybe_err = match token {
-                    // TODO: when expanding a user defined macro, we do not want to check for
-                    // suffixes.
-                    Token::ControlSequence(cs) => self.handle_primitive(cs),
-                    Token::Character(c) => self.handle_char_token(c),
-                };
-                if let Err(err) = maybe_err {
-                    return Some(Err(self.error_with_context(err)));
+
+                let inner = InnerParser::new(content, &mut self.buffer, state);
+
+                let (desc, rest) = inner.parse_next();
+                *content = rest;
+
+                match desc {
+                    Err(e) => return Some(Err(self.error_with_context(e))),
+                    Ok(Some((desc)) => {
+                        self.instruction_stack
+                            .extend(self.buffer.drain(desc.end..).rev());
+                        if desc.subscript_start > desc.superscript_start {
+                            self.instruction_stack.extend(
+                                self.buffer[desc.superscript_start..desc.subscript_start]
+                                    .iter()
+                                    .rev(),
+                            );
+                            self.instruction_stack.extend(
+                                self.buffer
+                                    .drain(desc.superscript_start..)
+                                    .skip(desc.subscript_start - desc.superscript_start)
+                                    .rev(),
+                            );
+                        } else {
+                            self.instruction_stack
+                                .extend(self.buffer.drain(desc.subscript_start..).rev());
+                        }
+                    }
+                    Ok(None) => {}
                 }
-
-                // 2. Check for suffixes, to complete the atom.
-                let suffix = match self.handle_suffixes() {
-                    Err(err) => return Some(Err(self.error_with_context(err))),
-                    Ok(suffix) => suffix,
-                };
-
-                // 3. Drain the staging stack to the instruction stack.
+                
                 self.instruction_stack.extend(self.buffer.drain(..).rev());
-                if let Some(suffix) = suffix {
-                    self.instruction_stack.push(Instruction::Event(suffix));
-                }
-
-                self.state = ParserState::default();
                 self.next()
             }
             None => None,
         }
     }
 }
+
+// if !subscript_first && second_suffix_start != second_suffix_end {
+//     self.instruction_stack.extend(
+//         self.buffer[first_suffix_start..second_suffix_start]
+//             .iter()
+//             .rev(),
+//     );
+//     self.instruction_stack.extend(
+//         self.buffer
+//             .drain(first_suffix_start..)
+//             .skip(second_suffix_start - first_suffix_start)
+//             .rev(),
+//     );
+//     ScriptType::SubSuperscript
+// } else {
+//     let suffixes = self.buffer.drain(first_suffix_start..);
+//     self.instruction_stack.extend(suffixes.rev());
+//     if second_suffix_start != second_suffix_end {
+//         ScriptType::SubSuperscript
+//     } else if subscript_first {
+//         ScriptType::Subscript
+//     } else {
+//         ScriptType::Superscript
+//     }
+// },
 
 struct ScriptDescriptor {
     subscript_start: usize,
@@ -351,8 +227,161 @@ impl<'a> InnerParser<'a> {
         }
     }
 
-    fn parse(self) -> ScriptDescriptor {
-        todo!()
+    /// Handles the superscript and/or subscript following what was parsed previously.
+    fn handle_suffixes(&mut self) -> Option<InnerResult<(Event<'a>, ScriptDescriptor)>> {
+        if self.state.skip_suffixes {
+            return None;
+        }
+
+        let mut script_position = if self.state.above_below_suffix_default {
+            ScriptPosition::Movable
+        } else {
+            ScriptPosition::Right
+        };
+
+        if self.state.allow_suffix_modifiers {
+            if let Some(limits) = lex::limit_modifiers(&mut self.content) {
+                if limits {
+                    script_position = ScriptPosition::AboveBelow;
+                } else {
+                    script_position = ScriptPosition::Right;
+                }
+            }
+        }
+
+        self.content = self.content.trim_start();
+
+        let Some(next_char) = self.content.chars().next() else {
+            return None;
+        };
+        let subscript_first = match next_char {
+            '^' => false,
+            '_' => true,
+            _ => return None,
+        };
+        self.content = &self.content[1..];
+
+        Some(self.rhs_suffixes(subscript_first).map(|(ty, sd)| {
+            (
+                Event::Script {
+                    ty,
+                    position: script_position,
+                },
+                sd,
+            )
+        }))
+    }
+
+    fn rhs_suffixes(
+        &mut self,
+        subscript_first: bool,
+    ) -> InnerResult<(ScriptType, ScriptDescriptor)> {
+        let first_suffix_start = self.buffer.len();
+        let arg = lex::argument(&mut self.content)?;
+        self.handle_argument(arg)?;
+        let second_suffix_start = self.buffer.len();
+        let next_char = self.content.chars().next();
+        if (next_char == Some('_') && !subscript_first)
+            || (next_char == Some('^') && subscript_first)
+        {
+            self.content = &self.content[1..];
+            let arg = lex::argument(&mut self.content)?;
+            self.handle_argument(arg)?;
+        } else if next_char == Some('_') || next_char == Some('^') {
+            return Err(if subscript_first {
+                ErrorKind::DoubleSubscript
+            } else {
+                ErrorKind::DoubleSuperscript
+            });
+        }
+        let second_suffix_end = self.buffer.len();
+
+        Ok(if second_suffix_start == second_suffix_end {
+            if subscript_first {
+                (
+                    ScriptType::Subscript,
+                    ScriptDescriptor {
+                        subscript_start: first_suffix_start,
+                        superscript_start: second_suffix_start,
+                        end: second_suffix_start,
+                    },
+                )
+            } else {
+                (
+                    ScriptType::Superscript,
+                    ScriptDescriptor {
+                        subscript_start: second_suffix_start,
+                        superscript_start: first_suffix_start,
+                        end: second_suffix_start,
+                    },
+                )
+            }
+        } else {
+            (
+                ScriptType::SubSuperscript,
+                if subscript_first {
+                    ScriptDescriptor {
+                        subscript_start: first_suffix_start,
+                        superscript_start: second_suffix_start,
+                        end: second_suffix_end,
+                    }
+                } else {
+                    ScriptDescriptor {
+                        subscript_start: second_suffix_start,
+                        superscript_start: first_suffix_start,
+                        end: second_suffix_end,
+                    }
+                },
+            )
+        })
+    }
+
+    /// Parse an arugment and pushes the argument to the stack surrounded by a
+    /// group: [..., EndGroup, Argument, BeginGroup], when the argument is a subgroup.
+    /// Otherwise, it pushes the argument to the stack ungrouped.
+    fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
+        match argument {
+            Argument::Token(token) => {
+                self.state.invalidate_relax = true;
+                match token {
+                    Token::ControlSequence(cs) => self.handle_primitive(cs)?,
+                    Token::Character(c) => self.handle_char_token(c)?,
+                };
+            }
+            Argument::Group(group) => {
+                self.buffer.extend([
+                    Instruction::Event(Event::Begin(Grouping::Normal)),
+                    Instruction::SubGroup {
+                        content: group,
+                        allows_alignment: false,
+                    },
+                    Instruction::Event(Event::End),
+                ]);
+            }
+        };
+        Ok(())
+    }
+
+    fn parse(&mut self) -> InnerResult<Option<(Event<'a>, ScriptDescriptor)>> {
+        // 1. Parse the next token and output everything to the staging stack.
+        let token = lex::token(&mut self.content)?;
+        match token {
+            // TODO: when expanding a user defined macro, we do not want to check for
+            // suffixes.
+            Token::ControlSequence(cs) => self.handle_primitive(cs)?,
+            Token::Character(c) => self.handle_char_token(c)?,
+        };
+
+        // 2. Check for suffixes, to complete the atom.
+        if let Some(suffix) = self.handle_suffixes() {
+            return Ok(Some(suffix?));
+        }
+
+        Ok(None)
+    }
+
+    fn parse_next(mut self) -> (InnerResult<Option<(Event<'a>, ScriptDescriptor)>>, &'a str) {
+        (self.parse(), self.content)
     }
 }
 

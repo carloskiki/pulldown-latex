@@ -10,6 +10,8 @@ pub struct ParserState {
     pub skip_suffixes: bool,
     /// Whether we can parse the `\relax` command.
     pub invalidate_relax: bool,
+    /// Whether the parser is in a subgroup where alignments with `&` and `\\`/`\cr` are allowed.
+    pub allows_alignment: bool,
 }
 
 impl Default for ParserState {
@@ -19,6 +21,7 @@ impl Default for ParserState {
             above_below_suffix_default: false,
             skip_suffixes: false,
             invalidate_relax: false,
+            allows_alignment: false,
         }
     }
 }
