@@ -11,12 +11,10 @@ use crate::{
 };
 
 use super::{
-    lex,
-    tables::{char_delimiter_map, control_sequence_delimiter_map, is_primitive_color, token_to_delim},
-    Argument, CharToken, ErrorKind, InnerResult, Instruction as I, Parser, Token,
+    lex, tables::{char_delimiter_map, control_sequence_delimiter_map, is_binary, is_primitive_color, is_relation, token_to_delim}, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I, Token
 };
 
-impl<'a> Parser<'a> {
+impl<'a, 'b> InnerParser<'a, 'b> {
     /// Handle a character token, returning a corresponding event.
     ///
     /// This function specially treats numbers as `mi`.
@@ -28,34 +26,24 @@ impl<'a> Parser<'a> {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
             '_' => {
-                let script = E::Script {
-                    ty: self.rhs_suffixes(true)?,
-                    position: SP::Right,
-                };
                 self.buffer.extend([
-                    I::Event(script),
                     I::Event(E::Begin(G::Internal)),
                 ]);
-                self.state.skip_suffixes = true;
+                self.content = token.as_str();
                 E::End
             }
             '^' => {
-                let script = E::Script {
-                    ty: self.rhs_suffixes(false)?,
-                    position: SP::Right,
-                };
                 self.buffer.extend([
-                    I::Event(script),
                     I::Event(E::Begin(G::Internal)),
                 ]);
-                self.state.skip_suffixes = true;
+                self.content = token.as_str();
                 E::End
             }
             '$' => return Err(ErrorKind::MathShift),
             '#' => return Err(ErrorKind::HashSign),
-            '&' if self.allows_alignment() => E::Alignment,
+            '&' if self.state.allows_alignment => E::Alignment,
             '{' => {
-                let str = self.current_string();
+                let str = &mut self.content;
                 let group = lex::group_content(str, "{", "}")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
@@ -67,6 +55,10 @@ impl<'a> Parser<'a> {
             '}' => {
                 return Err(ErrorKind::UnbalancedGroup(None))
             },
+
+            // Special ( ~ = nobreak space)
+            // TODO:
+            '~' => todo!(),
 
             '0'..='9' => {
                 let content = token.as_str();
@@ -80,138 +72,35 @@ impl<'a> Parser<'a> {
                     len -= 1;
                 }
                 let (number, rest) = content.split_at(len);
-                *self.current_string() = rest;
+                self.content = rest;
                 self.buffer
                     .push(I::Event(E::Content(C::Number(number))));
                 return Ok(())
-            }
-
-            c if char_delimiter_map(c).is_some() => {
-                let (content, ty) = char_delimiter_map(c).unwrap();
-                E::Content(C::Delimiter {
-                    content,
-                    size: None,
-                    ty,
-                })
             }
             // Punctuation
             '.' | ',' | ';' => E::Content(C::Punctuation(token.into())),
 
 
-            // TODO: 
-            // Varying
-            // Varing is a binary when:
-            // 1. preceded by closing
-            // 2. preceded by unary
-            // 3. preceded by punctuation
-            // 4. preceded by number
-            // 5. preceded by normal
-            // and:
-            // 1. followed by closing
-            // 2. followed by unary
-            // 4. followed by number
-            // 5. followed by normal
-            //
-            // If the current item is a Bin atom, and if this was the first atom in the list,
-            // or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
-            // Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
-            // 
-            // If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
-            // was Bin, change that previous Bin to Ord. Continue with Rule 17.
-            '-' => Content::BinaryOp { content: '−', left_space: true, right_space: true, small: false },
-            '+' | '±' | '∓' => todo!(),
+            '-' => binary('−'),
+            '*' => binary('∗'),
+            c if is_binary(c) => binary(c),
+            c if is_relation(c) => relation(c),
                 
             // Things
-            '*' => Content::BinaryOp { content: '∗', left_space: true, right_space: true, small: false },
-            '\'' => Content::UnaryOp { content: '′', stretchy: false },
+            '\'' => ident('′'),
 
-            // Special ( ~ = nobreak space)
-            // TODO:
-            '~' => todo!(),
-
-            // U - Unary
-            // 0021;U
-            // 00AC;U
-            // 2200;U
-            // 2201;U
-            // 2203;U
-            // 2204;U
-            // 2206;U
-            // 2207;U
-
-
-            // F - Fence - unpaired delimiter (often used as opening or closing)
-            // 007C;F
-            // 2016;F
-            // 2980;F
-            // 2982;F
-            // 2999;F
-            // 299A;F
-
-            // O - Opening - usually paired with closing delimiter
-            // 0028;O
-            // 005B;O
-            // 007B;O
-            // 301A;O
-            // 2308;O
-            // 230A;O
-            // 231C;O
-            // 231E;O
-            // 2329;O
-            // 2772;O
-            // 27E6;O
-            // 27E8;O
-            // 27EA;O
-            // 27EC;O
-            // 27EE;O
-            // 2983;O
-            // 2985;O
-            // 2987;O
-            // 2989;O
-            // 298D;O
-            // 298F;O
-            // 2991;O
-            // 2993;O
-            // 2995;O
-            // 2997;O
-            // 29D8;O
-            // 29DA;O
-            // 29FC;O
-            // 3008;O
-
-            // C - Closing - usually paired with opening delimiter
-            // 0029;C
-            // 005D;C
-            // 007D;C
-            // 2309;C
-            // 230B;C
-            // 231D;C
-            // 231F;C
-            // 232A;C
-            // 2773;C
-            // 27E7;C
-            // 27E9;C
-            // 27EB;C
-            // 27ED;C
-            // 27EF;C
-            // 2984;C
-            // 2986;C
-            // 2988;C
-            // 298A;C
-            // 298C;C
-            // 298E;C
-            // 2990;C
-            // 2992;C
-            // 2994;C
-            // 2996;C
-            // 2998;C
-            // 29D9;C
-            // 29DB;C
-            // 29FD;C
-            // 3009;C
-            // 301B;C
-
-            // B - Binary
+            c if char_delimiter_map(c).is_some() => {
+                let (content, ty) = char_delimiter_map(c).unwrap();
+                if ty == DelimiterType::Fence {
+                    ident(content)
+                } else {
+                E::Content(C::Delimiter {
+                    content,
+                    size: None,
+                    ty,
+                })
+                }
+            }
             
             c => ident(c),
         });
@@ -234,7 +123,7 @@ impl<'a> Parser<'a> {
             }
             "operatorname" => {
                 self.state.allow_suffix_modifiers = true;
-                let argument = lex::argument(self.current_string())?;
+                let argument = lex::argument(&mut self.content)?;
                 match argument {
                     Argument::Token(Token::ControlSequence(_)) => {
                         return Err(ErrorKind::ControlSequenceAsArgument)
@@ -249,7 +138,7 @@ impl<'a> Parser<'a> {
             }
             "bmod" => E::Content(C::Function("mod")),
             "pmod" => {
-                let argument = lex::argument(self.current_string())?;
+                let argument = lex::argument(&mut self.content)?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Internal)),
                     I::Event(E::Content(C::Delimiter {
@@ -372,7 +261,7 @@ impl<'a> Parser<'a> {
             ///////////////////////////
             // Symbols & Punctuation //
             ///////////////////////////
-            "dots" => if self.current_string().trim_start().starts_with(['.', ',']) {
+            "dots" => if self.content.trim_start().starts_with(['.', ',']) {
                 ident('…')
             } else {
                 ident('⋯')
@@ -511,7 +400,7 @@ impl<'a> Parser<'a> {
             ////////////////////////
             "color" => {
                 let Argument::Group(color) =
-                    lex::argument(self.current_string())?
+                    lex::argument(&mut self.content)?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -526,7 +415,7 @@ impl<'a> Parser<'a> {
                 }))
             },
             "textcolor" => {
-                let str = self.current_string();
+                let str = &mut self.content;
                 let Argument::Group(color) =
                     lex::argument(str)?
                 else {
@@ -547,7 +436,7 @@ impl<'a> Parser<'a> {
             }
             "colorbox" => {
                 let Argument::Group(color) =
-                    lex::argument(self.current_string())?
+                    lex::argument(&mut self.content)?
                 else {
                     return Err(ErrorKind::Argument);
                 };
@@ -562,7 +451,7 @@ impl<'a> Parser<'a> {
                 E::End
             }
             "fcolorbox" => {
-                let str = self.current_string();
+                let str = &mut self.content;
                 let Argument::Group(frame_color) =
                     lex::argument(str)?
                 else {
@@ -598,7 +487,7 @@ impl<'a> Parser<'a> {
             "Bigg" | "Biggl" | "Biggr" | "Biggm" => return self.sized_delim(DelimiterSize::BIGG),
 
             "left" => {
-                let curr_str = self.current_string();
+                let curr_str = &mut self.content;
                 let opening = if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     None
@@ -606,7 +495,7 @@ impl<'a> Parser<'a> {
                     Some(lex::delimiter(curr_str)?.0)
                 };
 
-                let curr_str = self.current_string();
+                let curr_str = &mut self.content;
                 let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
                 let closing = if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
@@ -624,7 +513,7 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
             "middle" => {
-                let delimiter = lex::delimiter(self.current_string())?;
+                let delimiter = lex::delimiter(&mut self.content)?;
                 E::Content(C::Delimiter {
                     content: delimiter.0,
                     size: Some(DelimiterSize::Big),
@@ -722,13 +611,13 @@ impl<'a> Parser<'a> {
             "underparen" => return self.underscript('⏝'),
 
             // Primes
-            "prime" => unary('′'),
-            "dprime" => unary('″'),
-            "trprime" => unary('‴'),
-            "qprime" => unary('⁗'),
-            "backprime" => unary('‵'),
-            "backdprime" => unary('‶'),
-            "backtrprime" => unary('‷'),
+            "prime" => ident('′'),
+            "dprime" => ident('″'),
+            "trprime" => ident('‴'),
+            "qprime" => ident('⁗'),
+            "backprime" => ident('‵'),
+            "backdprime" => ident('‶'),
+            "backtrprime" => ident('‷'),
 
             /////////////
             // Spacing //
@@ -771,7 +660,7 @@ impl<'a> Parser<'a> {
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
-                let dimension = lex::dimension(self.current_string())?;
+                let dimension = lex::dimension(&mut self.content)?;
                 E::Space {
                     width: Some(dimension),
                     height: None,
@@ -779,7 +668,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "hskip" => {
-                let glue = lex::glue(self.current_string())?;
+                let glue = lex::glue(&mut self.content)?;
                 E::Space {
                     width: Some(glue.0),
                     height: None,
@@ -788,7 +677,7 @@ impl<'a> Parser<'a> {
             }
             "mkern" => {
                 let dimension =
-                    lex::dimension(self.current_string())?;
+                    lex::dimension(&mut self.content)?;
                 if dimension.1 == DimensionUnit::Mu {
                     E::Space {
                         width: Some(dimension),
@@ -800,7 +689,7 @@ impl<'a> Parser<'a> {
                 }
             }
             "mskip" => {
-                let glue = lex::glue(self.current_string())?;
+                let glue = lex::glue(&mut self.content)?;
                 if glue.0.1 == DimensionUnit::Mu
                     && glue.1.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
                     && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu) {
@@ -815,7 +704,7 @@ impl<'a> Parser<'a> {
             }
             "hspace" => {
                 let Argument::Group(mut argument) =
-                    lex::argument(self.current_string())?
+                    lex::argument(&mut self.content)?
                 else {
                     return Err(ErrorKind::DimensionArgument);
                 };
@@ -846,14 +735,14 @@ impl<'a> Parser<'a> {
             ////////////////////////
             // Logic & Set Theory //
             ////////////////////////
-            "forall" => unary('∀'),
-            "therefore" => unary('∴'),
-            "exists" => unary('∃'),
-            "because" => unary('∵'),
-            "complement" => unary('∁'),
-            "nexists" => unary('∄'),
-            "neg" | "lnot" => unary('¬'),
+            "forall" => ident('∀'),
+            "exists" => ident('∃'),
+            "complement" => ident('∁'),
+            "nexists" => ident('∄'),
+            "neg" | "lnot" => ident('¬'),
             
+            "therefore" => relation('∴'),
+            "because" => relation('∵'),
             "subset" => relation('⊂'),
             "supset" => relation('⊃'),
             "strictif" => relation('⥽'),
@@ -1058,8 +947,8 @@ impl<'a> Parser<'a> {
             "vartriangleright" => relation('⊳'),
             "curlyeqsucc" => relation('⋟'),
             "le" => relation('≤'),
-            "shortmid" => E::Content(C::Relation { content: '∣', left_space: true, right_space: true, unicode_variant: false, small: true }),            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: true, small: true }),
-            "shortparallel" => E::Content(C::Relation { content: '∥', left_space: true, right_space: true, unicode_variant: false, small: true }),            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: true, small: true }),
+            "shortmid" => E::Content(C::Relation { content: '∣', left_space: true, right_space: true, unicode_variant: false, small: true }),
+            "shortparallel" => E::Content(C::Relation { content: '∥', left_space: true, right_space: true, unicode_variant: false, small: true }),
             "vdash" => relation('⊢'),
             "dashv" => relation('⊣'),
             "leq" => relation('≤'),
@@ -1133,9 +1022,8 @@ impl<'a> Parser<'a> {
             "nshortmid" => relation('∤'),
             "nvdash" => relation('⊬'),
             "ngeq" => relation('≱'),
-            "nshortparallel" => E::Content(C::Relation { content: '∦', left_space: true, right_space: true, unicode_variant: false, small: true }),            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: true, small: true }),
+            "nshortparallel" => E::Content(C::Relation { content: '∦', left_space: true, right_space: true, unicode_variant: false, small: true }),
             "nvDash" => relation('⊭'),
-            "varsupsetneq" => relation('⊋'),
             "ngeqq" => relation('≱'),
             "nsim" => relation('≁'),
             "nVDash" => relation('⊯'),
@@ -1413,7 +1301,7 @@ impl<'a> Parser<'a> {
             }
             // TODO: better errors for this
             "genfrac" => {
-                let str = self.current_string();
+                let str = &mut self.content;
                 let ldelim_argument = lex::argument(str)?;
                 let ldelim = match ldelim_argument {
                     Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
@@ -1509,9 +1397,9 @@ impl<'a> Parser<'a> {
                     ty: ST::Superscript,
                     position: SP::AboveBelow,
                 }));
-                let over = lex::argument(self.current_string())?;
+                let over = lex::argument(&mut self.content)?;
                 self.handle_argument(over)?;
-                let base = lex::argument(self.current_string())?;
+                let base = lex::argument(&mut self.content)?;
                 self.handle_argument(base)?;
                 return Ok(());
             }
@@ -1520,9 +1408,9 @@ impl<'a> Parser<'a> {
                     ty: ST::Subscript,
                     position: SP::AboveBelow,
                 }));
-                let under = lex::argument(self.current_string())?;
+                let under = lex::argument(&mut self.content)?;
                 self.handle_argument(under)?;
-                let base = lex::argument(self.current_string())?;
+                let base = lex::argument(&mut self.content)?;
                 self.handle_argument(base)?;
                 return Ok(());
             }
@@ -1532,11 +1420,11 @@ impl<'a> Parser<'a> {
             //////////////
             "sqrt" => {
                 if let Some(index) =
-                    lex::optional_argument(self.current_string())?
+                    lex::optional_argument(&mut self.content)?
                 {
                     self.buffer
                         .push(I::Event(E::Visual(V::Root)));
-                    let arg = lex::argument(self.current_string())?;
+                    let arg = lex::argument(&mut self.content)?;
                     self.handle_argument(arg)?;
                     self.buffer.push(I::SubGroup {
                         content: index,
@@ -1545,7 +1433,7 @@ impl<'a> Parser<'a> {
                 } else {
                     self.buffer
                         .push(I::Event(E::Visual(V::SquareRoot)));
-                    let arg = lex::argument(self.current_string())?;
+                    let arg = lex::argument(&mut self.content)?;
                     self.handle_argument(arg)?;
                 }
                 return Ok(());
@@ -1578,18 +1466,19 @@ impl<'a> Parser<'a> {
             "not" => {
                 self.buffer
                     .push(I::Event(E::Visual(V::Negation)));
-                let argument = lex::argument(self.current_string())?;
+                let argument = lex::argument(&mut self.content)?;
                 self.handle_argument(argument)?;
                 return Ok(());
             }
             "char" => {
-                let number = lex::unsigned_integer(self.current_string())?;
+                let number = lex::unsigned_integer(&mut self.content)?;
                 if number > 255 {
                     return Err(ErrorKind::InvalidCharNumber);
                 }
-                E::Content(C::Ordinary(
-                    char::from_u32(number as u32).expect("the number is a valid char since it is less than 256")
-                ))
+                E::Content(C::Ordinary {
+                    content: char::from_u32(number as u32).expect("the number is a valid char since it is less than 256"),
+                    stretchy: false,
+                })
             },
             "relax" => {
                 return if self.state.invalidate_relax {
@@ -1600,9 +1489,7 @@ impl<'a> Parser<'a> {
             }
 
             "begingroup" => {
-                let str = self
-                    .current_string();
-                let group = lex::group_content(str, "begingroup", "endgroup")?;
+                let group = lex::group_content(&mut self.content, "begingroup", "endgroup")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                     I::SubGroup { content: group, allows_alignment: false },
@@ -1613,7 +1500,7 @@ impl<'a> Parser<'a> {
             "endgroup" => return Err(ErrorKind::UnbalancedGroup(None)),
 
             "begin" => {
-                let Argument::Group(argument) = lex::argument(self.current_string())? else {
+                let Argument::Group(argument) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
                 let (environment, wrap) = match argument {
@@ -1645,7 +1532,7 @@ impl<'a> Parser<'a> {
                 
                 // TODO: correctly spot deeper environment of the same type.
                 let content = lex::group_content(
-                    self.current_string(),
+                    &mut self.content,
                     &format!(r"\begin{{{argument}}}"),
                     &format!(r"\end{{{argument}}}")
                 )?;
@@ -1661,7 +1548,7 @@ impl<'a> Parser<'a> {
                 return Ok(());
             }
             "end" => return Err(ErrorKind::UnbalancedGroup(None)),
-            "\\" | "cr" if self.allows_alignment() => E::NewLine,
+            "\\" | "cr" if self.state.allows_alignment => E::NewLine,
 
             // Delimiters
             cs if control_sequence_delimiter_map(cs).is_some() => {
@@ -1688,7 +1575,7 @@ impl<'a> Parser<'a> {
 
     /// Return a delimiter with the given size from the next character in the parser.
     fn sized_delim(&mut self, size: DelimiterSize) -> InnerResult<()> {
-        let current = self.current_string();
+        let current = &mut self.content;
         let (content, ty) = lex::delimiter(current)?;
         self.buffer
             .push(I::Event(E::Content(C::Delimiter { content, size: Some(size), ty })));
@@ -1697,7 +1584,7 @@ impl<'a> Parser<'a> {
 
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string())?;
+        let argument = lex::argument(&mut self.content)?;
         self.buffer.extend([
             I::Event(E::Begin(G::Internal)),
             I::Event(E::StateChange(SC::Font(font))),
@@ -1719,14 +1606,14 @@ impl<'a> Parser<'a> {
 
     /// Accent commands. parse the argument, and overset the accent.
     fn accent(&mut self, accent: char, stretchy: bool) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string())?;
+        let argument = lex::argument(&mut self.content)?;
         self.buffer.push(I::Event(E::Script {
             ty: ST::Superscript,
             position: SP::AboveBelow,
         }));
         self.handle_argument(argument)?;
         self.buffer
-            .push(I::Event(E::Content(C::UnaryOp {
+            .push(I::Event(E::Content(C::Ordinary {
                 content: accent,
                 stretchy,
             })));
@@ -1735,14 +1622,14 @@ impl<'a> Parser<'a> {
 
     /// Underscript commands. parse the argument, and underset the accent.
     fn underscript(&mut self, content: char) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string())?;
+        let argument = lex::argument(&mut self.content)?;
         self.buffer.push(I::Event(E::Script {
             ty: ST::Subscript,
             position: SP::AboveBelow,
         }));
         self.handle_argument(argument)?;
         self.buffer
-            .push(I::Event(E::Content(C::UnaryOp {
+            .push(I::Event(E::Content(C::Ordinary {
                 content,
                 stretchy: true,
             })));
@@ -1770,7 +1657,7 @@ impl<'a> Parser<'a> {
     }
 
     fn text_argument(&mut self) -> InnerResult<()> {
-        let argument = lex::argument(self.current_string())?;
+        let argument = lex::argument(&mut self.content)?;
         self.buffer
             .push(I::Event(E::Content(C::Text(
                 match argument {
@@ -1784,9 +1671,9 @@ impl<'a> Parser<'a> {
 
     fn fraction_like(&mut self, bar_size: Option<(f32, DimensionUnit)>) -> InnerResult<()> {
         self.buffer.push(I::Event(E::Visual(V::Fraction(bar_size))));
-        let numerator = lex::argument(self.current_string())?;
+        let numerator = lex::argument(&mut self.content)?;
         self.handle_argument(numerator)?;
-        let denominator = lex::argument(self.current_string())?;
+        let denominator = lex::argument(&mut self.content)?;
         self.handle_argument(denominator)?;
         Ok(())
     }
@@ -1794,7 +1681,10 @@ impl<'a> Parser<'a> {
 
 #[inline]
 fn ident(ident: char) -> E<'static> {
-    E::Content(C::Ordinary(ident))
+    E::Content(C::Ordinary {
+        content: ident,
+        stretchy: false
+    })
 }
 
 #[inline]
@@ -1806,11 +1696,6 @@ fn relation(rel: char) -> E<'static> {
         unicode_variant: false,
         small: false,
     })
-}
-
-#[inline]
-fn unary(op: char) -> E<'static> {
-    E::Content(C::UnaryOp{ content: op, stretchy: false })
 }
 
 #[inline]

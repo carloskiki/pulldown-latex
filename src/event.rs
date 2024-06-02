@@ -69,11 +69,9 @@ pub enum Content<'a> {
     /// `\operatorname{arccotan}`.
     Function(&'a str),
     /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and stuff that do not have
-    /// any spacing around them.
-    Ordinary(char),
-    /// A unary operator, such as `+`, `-`, `!`, etc. This includes stuff that normally go in under
-    /// and overscripts which may be stretchy.
-    UnaryOp { content: char, stretchy: bool },
+    /// any spacing around them. This includes stuff that normally go in under and overscripts
+    /// which may be stretchy, such as `→`, `‾`, etc.
+    Ordinary { content: char, stretchy: bool },
     /// A large operator, such as `\sum`, `\int`, `\prod`, etc.
     ///
     // TODO: Deny movable limits in renderer

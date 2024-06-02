@@ -9,7 +9,7 @@ use crate::{
     attribute::{tex_to_css_em, Font},
     config::{DisplayMode, RenderConfig},
     event::{
-        ColorChange, ColorTarget, Content, Event, Identifier, Operator, ScriptPosition, ScriptType,
+        ColorChange, ColorTarget, Content, Event, Identifier, ScriptPosition, ScriptType,
         StateChange, Style, Visual,
     },
 };
@@ -150,8 +150,7 @@ where
                     })?;
                     self.writer.write_all(b"</mn>")
                 }
-                Content::Identifier(ident) => match ident {
-                    Identifier::Str(str) => {
+                Content::Function(str) => {
                         self.open_tag("mi", None, false)?;
                         self.writer.write_all(if str.chars().count() == 1 {
                             b" mathvariant=\"normal\">"
@@ -173,7 +172,13 @@ where
                             self.writer.write_all(to_append.as_bytes())
                         }
                     }
-                    Identifier::Char(content) => {
+                Content::Ordinary {
+                    content,
+                    stretchy
+                } => {
+                    if stretchy {
+                        todo!()
+                    } else {
                         self.open_tag("mi", None, false)?;
                         let content = match (
                             self.state().font,
@@ -577,3 +582,24 @@ where
 {
     MathmlWriter::new(parser, writer, config).write()
 }
+
+// TODO: 
+// Varying
+// Varing is a binary when:
+// 1. preceded by closing
+// 2. preceded by unary
+// 3. preceded by punctuation
+// 4. preceded by number
+// 5. preceded by normal
+// and:
+// 1. followed by closing
+// 2. followed by unary
+// 4. followed by number
+// 5. followed by normal
+//
+// If the current item is a Bin atom, and if this was the first atom in the list,
+// or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
+// Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
+// 
+// If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
+// was Bin, change that previous Bin to Ord. Continue with Rule 17.
