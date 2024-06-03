@@ -52,7 +52,6 @@ where
         &mut self,
         tag: &str,
         additional_style: Option<&str>,
-        close: bool,
     ) -> io::Result<()> {
         let State {
             text_color,
@@ -62,18 +61,6 @@ where
             font: _,
         } = *self.state();
         write!(self.writer, "<{}", tag)?;
-        if text_color.is_none()
-            && border_color.is_none()
-            && background_color.is_none()
-            && style.is_none()
-        {
-            if close {
-                return self.writer.write_all(b">");
-            } else {
-                return Ok(());
-            }
-        }
-
         let mut style_written = false;
         if let Some(text_color) = text_color {
             write!(self.writer, "style=\"color: {}", text_color)?;
@@ -122,9 +109,6 @@ where
                 args.0, args.1
             )?;
         }
-        if close {
-            self.writer.write_all(b">")?;
-        }
         Ok(())
     }
 
@@ -133,15 +117,18 @@ where
     }
 
     fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
+        let mut buf = [0u8; 4];
         match event {
             Ok(Event::Content(content)) => match content {
                 Content::Text(text) => {
-                    self.open_tag("mtext", None, true)?;
+                    self.open_tag("mtext", None)?;
+                    self.writer.write_all(b">")?;
                     self.writer.write_all(text.as_bytes())?;
                     self.writer.write_all(b"</mtext>")
                 }
                 Content::Number(number) => {
-                    self.open_tag("mn", None, true)?;
+                    self.open_tag("mn", None)?;
+                    self.writer.write_all(b">")?;
                     let buf = &mut [0u8; 4];
                     number.chars().try_for_each(|c| {
                         let content = self.state().font.map_or(c, |v| v.map_char(c));
@@ -150,8 +137,9 @@ where
                     })?;
                     self.writer.write_all(b"</mn>")
                 }
+                // TODO: script shenanigans and parens vs. no parens.
                 Content::Function(str) => {
-                        self.open_tag("mi", None, false)?;
+                        self.open_tag("mi", None)?;
                         self.writer.write_all(if str.chars().count() == 1 {
                             b" mathvariant=\"normal\">"
                         } else {
@@ -179,7 +167,7 @@ where
                     if stretchy {
                         todo!()
                     } else {
-                        self.open_tag("mi", None, false)?;
+                        self.open_tag("mi", None)?;
                         let content = match (
                             self.state().font,
                             self.config.math_style.should_be_upright(content),
@@ -209,46 +197,63 @@ where
                         self.writer.write_all(b"</mi>")
                     }
                 },
-                Content::Operator(Operator {
-                    content,
-                    stretchy,
-                    deny_movable_limits,
-                    unicode_variant,
-                    left_space,
-                    right_space,
-                    size,
-                }) => {
-                    self.open_tag("mo", None, false)?;
-                    if let Some(stretchy) = stretchy {
-                        write!(self.writer, " stretchy=\"{}\"", stretchy)?;
+                // TODO: Follow plain tex's rules for spacing:
+                // Varing is a binary when:
+                // 1. preceded by closing
+                // 3. preceded by punctuation
+                // 4. preceded by number
+                // 5. preceded by normal
+                // and:
+                // 1. followed by closing
+                // 4. followed by number
+                // 5. followed by normal
+                //
+                // If the current item is a Bin atom, and if this was the first atom in the list,
+                // or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
+                // Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
+                // 
+                // If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
+                // was Bin, change that previous Bin to Ord. Continue with Rule 17.
+                Content::BinaryOp { content, left_space, right_space, small } => {
+                    self.open_tag("mo", small.then_some("font-size: 70%"))?;
+                    self.writer.write_all(b">")?;
+                    self.writer.write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                    self.writer.write_all(b"</mo>")
+                },
+                Content::Relation { content, left_space, right_space, unicode_variant, small } => {
+                    self.open_tag("mo", small.then_some("font-size: 70%"))?;
+                    if !left_space {
+                        self.writer.write_all(b" lspace=\"0em\"")?;
                     }
-                    if deny_movable_limits {
-                        self.writer.write_all(b" movablelimits=\"false\"")?;
-                    }
-                    if let Some(left_space) = left_space {
-                        write!(self.writer, " lspace=\"{}em\"", tex_to_css_em(left_space))?;
-                    }
-                    if let Some(right_space) = right_space {
-                        write!(self.writer, " rspace=\"{}em\"", tex_to_css_em(right_space))?;
-                    }
-                    if let Some(size) = size {
-                        let size = tex_to_css_em(size);
-                        write!(self.writer, " minsize=\"{}em\"", size)?;
-                        write!(self.writer, " maxsize=\"{}em\"", size)?;
+                    if !right_space {
+                        self.writer.write_all(b" rspace=\"0em\"")?;
                     }
                     self.writer.write_all(b">")?;
-                    let buf = &mut [0u8; 4];
-                    let bytes = content.encode_utf8(buf).as_bytes();
-                    self.writer.write_all(bytes)?;
+                    self.writer.write_all(content.encode_utf8(&mut buf).as_bytes())?;
                     if unicode_variant {
                         self.writer.write_all("\u{20D2}".as_bytes())?;
                     }
-                    if self.env_stack.last().map(|env| env.env) == Some(EnvironmentType::Negate) {
-                        self.writer.write_all("\u{0338}".as_bytes())?;
-                        self.env_stack.pop();
-                    }
+                    // TODO: handle negation.
                     self.writer.write_all(b"</mo>")
-                }
+                },
+                
+                Content::LargeOp { content, small } => {
+                    self.open_tag("mo", None)?;
+                    if small {
+                        self.writer.write_all(b" largeop=\"false\"")?;
+                    }
+                    self.writer.write_all(b"movablelimits=\"false\" form=\"prefix\">")?;
+                    self.writer.write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                    self.writer.write_all(b"</mo>")
+                },
+                Content::Delimiter { content, size, ty } => todo!(),
+                Content::Punctuation(content) => {
+                    self.open_tag("mo", None)?;
+                    self.writer.write_all(b">")?;
+                    self.writer.write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                    self.writer.write_all(b"</mo>")
+                
+                },
             },
             Ok(Event::Begin(_)) => {
                 let mut font = self.state().font;
@@ -265,7 +270,8 @@ where
                     }
                     self.input.next();
                 }
-                self.open_tag("mrow", None, true)?;
+                self.open_tag("mrow", None)?;
+                self.writer.write_all(b">")?;
                 self.state_stack.push(State {
                     font,
                     text_color: None,
@@ -294,7 +300,7 @@ where
                 Visual::Fraction(dim) => {
                     self.env_stack
                         .push(Environment::new(EnvironmentType::Fraction));
-                    self.open_tag("mfrac", None, false)?;
+                    self.open_tag("mfrac", None)?;
                     if let Some(dim) = dim {
                         write!(self.writer, " linethickness=\"{}em\"", tex_to_css_em(dim))?;
                     }
@@ -302,11 +308,13 @@ where
                 }
                 Visual::SquareRoot => {
                     self.env_stack.push(Environment::new(EnvironmentType::Sqrt));
-                    self.open_tag("msqrt", None, true)
+                    self.open_tag("msqrt", None)?;
+                    self.writer.write_all(b">")
                 }
                 Visual::Root => {
                     self.env_stack.push(Environment::new(EnvironmentType::Root));
-                    self.open_tag("mroot", None, true)
+                    self.open_tag("mroot", None)?;
+                    self.writer.write_all(b">")
                 }
                 Visual::Negation => {
                     self.env_stack
@@ -342,7 +350,8 @@ where
                     append: "",
                 };
                 self.env_stack.push(Environment::new(env));
-                self.open_tag(env.tag(), None, true)
+                self.open_tag(env.tag(), None)?;
+                self.writer.write_all(b">")
             }
 
             Ok(Event::Space {
@@ -583,23 +592,3 @@ where
     MathmlWriter::new(parser, writer, config).write()
 }
 
-// TODO: 
-// Varying
-// Varing is a binary when:
-// 1. preceded by closing
-// 2. preceded by unary
-// 3. preceded by punctuation
-// 4. preceded by number
-// 5. preceded by normal
-// and:
-// 1. followed by closing
-// 2. followed by unary
-// 4. followed by number
-// 5. followed by normal
-//
-// If the current item is a Bin atom, and if this was the first atom in the list,
-// or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
-// Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
-// 
-// If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
-// was Bin, change that previous Bin to Ord. Continue with Rule 17.
