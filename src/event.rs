@@ -77,17 +77,10 @@ pub enum Content<'a> {
     // TODO: Deny movable limits in renderer
     LargeOp { content: char, small: bool },
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
-    BinaryOp {
-        content: char,
-        left_space: bool,
-        right_space: bool,
-        small: bool,
-    },
+    BinaryOp { content: char, small: bool },
     /// A relation, such as `=`, `≠`, `≈`, etc.
     Relation {
         content: char,
-        left_space: bool,
-        right_space: bool,
         unicode_variant: bool,
         small: bool,
     },
@@ -125,14 +118,6 @@ pub enum Content<'a> {
 // Stretchy stuff: A I
 // Delimiters (should be slplit): F G
 // Punctuation: M
-
-/// An identifier can either be a single character, or a string (e.g., a command such as `sin`,
-/// `lim`, etc.).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Identifier<'a> {
-    Str(&'a str),
-    Char(char),
-}
 
 /// Modifies the visual representation of the following event(s)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -241,7 +226,7 @@ pub enum ColorTarget {
 pub enum Grouping {
     Internal,
     Normal,
-    // TODO: make LeftRight own its delimiters, when changing the Event API.
+    Relation,
     LeftRight(Option<char>, Option<char>),
     Array,
     Matrix,
@@ -259,6 +244,17 @@ pub enum DelimiterSize {
     Bigg,
     /// Corresponds to `\Biggl`, `\Biggr`, etc.
     BIGG,
+}
+
+impl DelimiterSize {
+    pub fn to_em(&self) -> f32 {
+        match self {
+            DelimiterSize::Big => 1.2,
+            DelimiterSize::BIG => 1.8,
+            DelimiterSize::Bigg => 2.4,
+            DelimiterSize::BIGG => 3.,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

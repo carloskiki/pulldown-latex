@@ -27,14 +27,14 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
             '_' => {
                 self.buffer.extend([
-                    I::Event(E::Begin(G::Internal)),
+                    I::Event(E::Begin(G::Normal)),
                 ]);
                 self.content = token.as_str();
                 E::End
             }
             '^' => {
                 self.buffer.extend([
-                    I::Event(E::Begin(G::Internal)),
+                    I::Event(E::Begin(G::Normal)),
                 ]);
                 self.content = token.as_str();
                 E::End
@@ -136,6 +136,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 }
             }
             "bmod" => E::Content(C::Function("mod")),
+            // TODO: use left right.
             "pmod" => {
                 let argument = lex::argument(&mut self.content)?;
                 self.buffer.extend([
@@ -511,6 +512,8 @@ impl<'a, 'b> InnerParser<'a, 'b> {
 
                 return Ok(());
             }
+            // TODO: Check the conditions for this op. Does it need to be
+            // within a left-right group?
             "middle" => {
                 let delimiter = lex::delimiter(&mut self.content)?;
                 E::Content(C::Delimiter {
@@ -793,7 +796,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "sqcup" => binary('⊔'),
             "sqcap" => binary('⊓'),
             "lessdot" => binary('⋖'),
-            "smallsetminus" => E::Content(C::BinaryOp { content: '∖', left_space: true, right_space: true, small: false }),
+            "smallsetminus" => E::Content(C::BinaryOp { content: '∖', small: false }),
             "barwedge" => binary('⌅'),
             "curlyvee" => binary('⋎'),
             "curlywedge" => binary('⋏'),
@@ -946,8 +949,8 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "vartriangleright" => relation('⊳'),
             "curlyeqsucc" => relation('⋟'),
             "le" => relation('≤'),
-            "shortmid" => E::Content(C::Relation { content: '∣', left_space: true, right_space: true, unicode_variant: false, small: true }),
-            "shortparallel" => E::Content(C::Relation { content: '∥', left_space: true, right_space: true, unicode_variant: false, small: true }),
+            "shortmid" => E::Content(C::Relation { content: '∣', unicode_variant: false, small: true }),
+            "shortparallel" => E::Content(C::Relation { content: '∥', unicode_variant: false, small: true }),
             "vdash" => relation('⊢'),
             "dashv" => relation('⊣'),
             "leq" => relation('≤'),
@@ -969,7 +972,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "veeeq" => relation('≚'),
             "eqeq" => relation('⩵'),
             "lesseqqgtr" => relation('⪋'),
-            "smallsmile" => E::Content(C::Relation { content: '⌣', left_space: true, right_space: true, unicode_variant: false, small: true }),
+            "smallsmile" => E::Content(C::Relation { content: '⌣', unicode_variant: false, small: true }),
             "wedgeq" => relation('≙'),
             "bowtie" | "Join" => relation('⋈'),
             // Negated relations
@@ -1021,201 +1024,84 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "nshortmid" => relation('∤'),
             "nvdash" => relation('⊬'),
             "ngeq" => relation('≱'),
-            "nshortparallel" => E::Content(C::Relation { content: '∦', left_space: true, right_space: true, unicode_variant: false, small: true }),
+            "nshortparallel" => E::Content(C::Relation { content: '∦', unicode_variant: false, small: true }),
             "nvDash" => relation('⊭'),
             "ngeqq" => relation('≱'),
             "nsim" => relation('≁'),
             "nVDash" => relation('⊯'),
-            "varsupsetneqq" => E::Content(C::Relation { content: '⫌', left_space: true, right_space: true, unicode_variant: true, small: false }),
-            "varsubsetneqq" => E::Content(C::Relation { content: '⫋', left_space: true, right_space: true, unicode_variant: true, small: false }),
-            "varsubsetneq" => E::Content(C::Relation { content: '⊊', left_space: true, right_space: true, unicode_variant: true, small: false }),
-            "varsupsetneq" => E::Content(C::Relation { content: '⊋', left_space: true, right_space: true, unicode_variant: true, small: false }),
-            "gvertneqq" => E::Content(C::Relation { content: '≩', left_space: true, right_space: true, unicode_variant: true, small: false }),
-            "lvertneqq" => E::Content(C::Relation { content: '≨', left_space: true, right_space: true, unicode_variant: true, small: false }),
+            "varsupsetneqq" => E::Content(C::Relation { content: '⫌', unicode_variant: true, small: false }),
+            "varsubsetneqq" => E::Content(C::Relation { content: '⫋', unicode_variant: true, small: false }),
+            "varsubsetneq" => E::Content(C::Relation { content: '⊊', unicode_variant: true, small: false }),
+            "varsupsetneq" => E::Content(C::Relation { content: '⊋', unicode_variant: true, small: false }),
+            "gvertneqq" => E::Content(C::Relation { content: '≩', unicode_variant: true, small: false }),
+            "lvertneqq" => E::Content(C::Relation { content: '≨', unicode_variant: true, small: false }),
             "Eqcolon" | "minuscoloncolon" => {
-                self.multi_event([
-                    E::Content(C::BinaryOp {
-                        content: '−',
-                        left_space: true,
-                        right_space: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '∷',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    binary('−'),
+                    relation('∷'),
                 ]);
                 return Ok(());
             }
             "Eqqcolon" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: '=',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '∷',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation('='),
+                    relation('∷'),
                 ]);
                 return Ok(());
             }
             "approxcolon" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: '≈',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: ':',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation('≈'),
+                    relation(':'),
                 ]);
                 return Ok(());
             }
             "colonapprox" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: ':',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '≈',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation(':'),
+                    relation('≈'),
                 ]);
                 return Ok(());
             }
             "approxcoloncolon" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: '≈',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '∷',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation('≈'),
+                    relation('∷'),
                 ]);
                 return Ok(());
             }
             "Colonapprox" | "coloncolonapprox" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: '∷',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '≈',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation('∷'),
+                    relation('≈'),
                 ]);
                 return Ok(());
             }
             "coloneq" | "colonminus" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: ':',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::BinaryOp {
-                        content: '−',
-                        left_space: false,
-                        right_space: true,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation(':'),
+                    binary('−'),
                 ]);
                 return Ok(());
             }
             "Coloneq" | "coloncolonminus" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: '∷',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::BinaryOp {
-                        content: '−',
-                        left_space: false,
-                        right_space: true,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation('∷'),
+                    binary('−')
                 ]);
                 return Ok(());
             }
             "colonsim" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: ':',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '∼',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation(':'),
+                    relation('∼'),
                 ]);
                 return Ok(());
             }
             "Colonsim" | "coloncolonsim" => {
-                self.multi_event([
-                    E::Content(C::Relation {
-                        content: '∷',
-                        left_space: true,
-                        right_space: false,
-                        unicode_variant: false,
-                        small: false,
-                    }),
-                    E::Content(C::Relation {
-                        content: '∼',
-                        left_space: false,
-                        right_space: true,
-                        unicode_variant: false,
-                        small: false,
-                    }),
+                self.multi_relation([
+                    relation('∷'),
+                    relation('∼'),
                 ]);
                 return Ok(());
             }
@@ -1438,13 +1324,13 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 return Ok(());
             }
             "surd" => {
-                self.multi_event([
-                    E::Visual(V::SquareRoot),
-                    E::Space {
+                self.buffer.extend([
+                    I::Event(E::Visual(V::SquareRoot)),
+                    I::Event(E::Space {
                         width: Some((0., DimensionUnit::Em)),
                         height: Some((0.7, DimensionUnit::Em)),
                         depth: None,
-                    },
+                    }),
                 ]);
                 return Ok(());
             }
@@ -1565,8 +1451,8 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     }
 
     /// Handle a control sequence that outputs more than one event.
-    fn multi_event<const N: usize>(&mut self, events: [E<'a>; N]) {
-        self.buffer.push(I::Event(E::Begin(G::Internal)));
+    fn multi_relation<const N: usize>(&mut self, events: [E<'a>; N]) {
+        self.buffer.push(I::Event(E::Begin(G::Relation)));
         self.buffer
             .extend(events.into_iter().map(I::Event));
         self.buffer.push(I::Event(E::End));
@@ -1690,8 +1576,6 @@ fn ordinary(ident: char) -> E<'static> {
 fn relation(rel: char) -> E<'static> {
     E::Content(C::Relation {
         content: rel,
-        left_space: false,
-        right_space: false,
         unicode_variant: false,
         small: false,
     })
@@ -1699,7 +1583,7 @@ fn relation(rel: char) -> E<'static> {
 
 #[inline]
 fn binary(op: char) -> E<'static> {
-    E::Content(C::BinaryOp{ content: op, left_space: true, right_space: true, small: false })
+    E::Content(C::BinaryOp{ content: op, small: false })
 }
 
 // TODO implementations:

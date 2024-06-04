@@ -624,7 +624,7 @@ fn floor_char_boundary(str: &str, index: usize) -> usize {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Content, Identifier, Visual};
+    use crate::event::{Content, Visual};
 
     use super::*;
 
@@ -675,7 +675,7 @@ mod tests {
                 Event::Content(Content::Number("2")),
                 Event::Begin(Grouping::Normal),
                 Event::Content(Content::Number("1")),
-                Event::Content(Content::BinaryOp { content: '+', left_space: true, right_space: true, small: false }),
+                Event::Content(Content::BinaryOp { content: '+', small: false }),
                 Event::Content(Content::Number("3")),
                 Event::End,
             ]
