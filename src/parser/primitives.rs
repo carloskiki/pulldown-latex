@@ -6,7 +6,7 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-       ColorChange as CC, ColorTarget as CT, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
+       ColorChange as CC, ColorTarget as CT, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V, ArrayColumn as AC
     },
 };
 
@@ -57,8 +57,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             },
 
             // Special ( ~ = nobreak space)
-            // TODO:
-            '~' => todo!(),
+            // TODO: Make this a `Spacing` event
+            '~' => {
+                E::Content(C::Text("&nbsp;"))
+            },
 
             '0'..='9' => {
                 let content = token.as_str();
@@ -1348,7 +1350,8 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             ),
             "|" => ordinary('∥'),
             "text" => return self.text_argument(),
-            "not" => {
+            // TODO: should cancel be its own event?
+            "not" | "cancel" => {
                 self.buffer
                     .push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
@@ -1384,13 +1387,35 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             }
             "endgroup" => return Err(ErrorKind::UnbalancedGroup(None)),
 
+            // TODO: ensure claims that the alignment and newlines event are generated __only__
+            // when it is allowed to.
             "begin" => {
                 let Argument::Group(argument) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
+
+                let mut style = None;
                 let (environment, wrap) = match argument {
-                    "array" => (G::Array, None),
+                    "array" =>  {
+                        let Argument::Group(array_columns_str) = lex::argument(&mut self.content)? else {
+                            return Err(ErrorKind::Argument);
+                        };
+
+                        let array_columns = array_columns_str.chars().map(|c| Ok(match c {
+                            'c' => AC::Center,
+                            'l' => AC::Left,
+                            'r' => AC::Right,
+                            '|' => AC::VerticalLine,
+                            _ => return Err(ErrorKind::Argument), 
+                        })).collect::<Result<_, _>>()?;
+                        
+                        (G::Array(array_columns), None)  
+                    },
                     "matrix" => (G::Matrix, None),
+                    "smallmatrix" => {
+                        style = Some(S::Text);
+                        (G::Matrix, None)
+                    }
                     "pmatrix" => {
                         (G::Matrix, Some(G::LeftRight(Some('('), Some(')'))))
                     },
@@ -1411,9 +1436,12 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     _ => return Err(ErrorKind::Environment),
                 };
 
-                if let Some(wrap) = wrap {
+                let wrap_used = if let Some(wrap) = wrap {
                     self.buffer.push(I::Event(E::Begin(wrap)));
-                }
+                    true
+                } else {
+                    false
+                };
                 
                 // TODO: correctly spot deeper environment of the same type.
                 let content = lex::group_content(
@@ -1421,13 +1449,16 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     &format!(r"\begin{{{argument}}}"),
                     &format!(r"\end{{{argument}}}")
                 )?;
+                self.buffer.push(I::Event(E::Begin(environment)));
+                if let Some(style) = style {
+                    self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
+                }
                 self.buffer.extend([
-                    I::Event(E::Begin(environment)),
                     I::SubGroup { content, allows_alignment: true },
                     I::Event(E::End)
                 ]);
 
-                if wrap.is_some() {
+                if wrap_used {
                     self.buffer.push(I::Event(E::End));
                 }
                 return Ok(());

@@ -15,7 +15,7 @@ use crate::attribute::{Dimension, Font};
 ///
 /// When an [`Event`] is referreing to an "_element_", it is referring to the next logical unit of
 /// content in the stream. This can be a single content element, a group, a visual element, etc.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Event<'a> {
     /// The event is a [`Content`] element.
     Content(Content<'a>),
@@ -222,16 +222,24 @@ pub enum ColorTarget {
     Border,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Grouping {
     Internal,
     Normal,
     Relation,
     LeftRight(Option<char>, Option<char>),
-    Array,
+    Array(Box<[ArrayColumn]>),
     Matrix,
     Cases,
     Align,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ArrayColumn {
+    Left,
+    Center,
+    Right,
+    VerticalLine,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

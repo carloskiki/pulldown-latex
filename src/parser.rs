@@ -151,17 +151,25 @@ impl<'a> Iterator for Parser<'a> {
                     Err(e) => return Some(Err(self.error_with_context(e))),
                     Ok(Some((e, desc))) => {
                         if desc.subscript_start > desc.superscript_start {
-                            self.instruction_stack.extend(
-                                self.buffer[desc.superscript_start..desc.subscript_start]
-                                    .iter()
-                                    .rev(),
-                            );
-                            self.instruction_stack.extend(
-                                self.buffer
-                                    .drain(desc.superscript_start..)
-                                    .skip(desc.subscript_start - desc.superscript_start)
-                                    .rev(),
-                            );
+                            let content = self.buffer.drain(desc.superscript_start..).rev();
+                            let added_len = content.len();
+                            
+                            self.instruction_stack.reserve(added_len);
+                            let spare = &mut self.instruction_stack.spare_capacity_mut()[..added_len];
+                            let mut idx = desc.subscript_start - desc.superscript_start;
+
+                            for e in content {
+                                if idx == added_len {
+                                    idx = 0;
+                                }
+                                spare[idx].write(e);
+                                idx += 1;
+                            }
+
+                            // Safety: The new length is less than the vector's capacity because we
+                            // reserved `added_len` previously. Every element in the vector up to
+                            // that new length is also initialized by the loop.
+                            unsafe { self.instruction_stack.set_len(self.instruction_stack.len() + added_len) };
                         } else {
                             self.instruction_stack
                                 .extend(self.buffer.drain(desc.subscript_start..).rev());
@@ -170,7 +178,7 @@ impl<'a> Iterator for Parser<'a> {
                     }
                     Ok(None) => None,
                 };
-                
+
                 self.instruction_stack.extend(self.buffer.drain(..).rev());
                 if let Some(e) = suffix_event {
                     self.instruction_stack.push(Instruction::Event(e));
@@ -210,7 +218,6 @@ impl<'a> Iterator for Parser<'a> {
 struct ScriptDescriptor {
     subscript_start: usize,
     superscript_start: usize,
-    end: usize,
 }
 
 pub struct InnerParser<'a, 'b> {
@@ -226,115 +233,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             buffer,
             state,
         }
-    }
-
-    /// Handles the superscript and/or subscript following what was parsed previously.
-    fn handle_suffixes(&mut self) -> Option<InnerResult<(Event<'a>, ScriptDescriptor)>> {
-        if self.state.skip_suffixes {
-            return None;
-        }
-
-        let mut script_position = if self.state.above_below_suffix_default {
-            ScriptPosition::Movable
-        } else {
-            ScriptPosition::Right
-        };
-
-        if self.state.allow_suffix_modifiers {
-            if let Some(limits) = lex::limit_modifiers(&mut self.content) {
-                if limits {
-                    script_position = ScriptPosition::AboveBelow;
-                } else {
-                    script_position = ScriptPosition::Right;
-                }
-            }
-        }
-
-        self.content = self.content.trim_start();
-
-        let Some(next_char) = self.content.chars().next() else {
-            return None;
-        };
-        let subscript_first = match next_char {
-            '^' => false,
-            '_' => true,
-            _ => return None,
-        };
-        self.content = &self.content[1..];
-
-        Some(self.rhs_suffixes(subscript_first).map(|(ty, sd)| {
-            (
-                Event::Script {
-                    ty,
-                    position: script_position,
-                },
-                sd,
-            )
-        }))
-    }
-
-    fn rhs_suffixes(
-        &mut self,
-        subscript_first: bool,
-    ) -> InnerResult<(ScriptType, ScriptDescriptor)> {
-        let first_suffix_start = self.buffer.len();
-        let arg = lex::argument(&mut self.content)?;
-        self.handle_argument(arg)?;
-        let second_suffix_start = self.buffer.len();
-        let next_char = self.content.chars().next();
-        if (next_char == Some('_') && !subscript_first)
-            || (next_char == Some('^') && subscript_first)
-        {
-            self.content = &self.content[1..];
-            let arg = lex::argument(&mut self.content)?;
-            self.handle_argument(arg)?;
-        } else if next_char == Some('_') || next_char == Some('^') {
-            return Err(if subscript_first {
-                ErrorKind::DoubleSubscript
-            } else {
-                ErrorKind::DoubleSuperscript
-            });
-        }
-        let second_suffix_end = self.buffer.len();
-
-        Ok(if second_suffix_start == second_suffix_end {
-            if subscript_first {
-                (
-                    ScriptType::Subscript,
-                    ScriptDescriptor {
-                        subscript_start: first_suffix_start,
-                        superscript_start: second_suffix_start,
-                        end: second_suffix_start,
-                    },
-                )
-            } else {
-                (
-                    ScriptType::Superscript,
-                    ScriptDescriptor {
-                        subscript_start: second_suffix_start,
-                        superscript_start: first_suffix_start,
-                        end: second_suffix_start,
-                    },
-                )
-            }
-        } else {
-            (
-                ScriptType::SubSuperscript,
-                if subscript_first {
-                    ScriptDescriptor {
-                        subscript_start: first_suffix_start,
-                        superscript_start: second_suffix_start,
-                        end: second_suffix_end,
-                    }
-                } else {
-                    ScriptDescriptor {
-                        subscript_start: second_suffix_start,
-                        superscript_start: first_suffix_start,
-                        end: second_suffix_end,
-                    }
-                },
-            )
-        })
     }
 
     /// Parse an arugment and pushes the argument to the stack surrounded by a
@@ -432,7 +330,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     ScriptDescriptor {
                         subscript_start: first_suffix_start,
                         superscript_start: second_suffix_start,
-                        end: second_suffix_start,
                     },
                 )
             } else {
@@ -444,7 +341,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     ScriptDescriptor {
                         subscript_start: second_suffix_start,
                         superscript_start: first_suffix_start,
-                        end: second_suffix_start,
                     },
                 )
             }
@@ -458,13 +354,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     ScriptDescriptor {
                         subscript_start: first_suffix_start,
                         superscript_start: second_suffix_start,
-                        end: second_suffix_end,
                     }
                 } else {
                     ScriptDescriptor {
                         subscript_start: second_suffix_start,
                         superscript_start: first_suffix_start,
-                        end: second_suffix_end,
                     }
                 },
             )
@@ -514,7 +408,7 @@ enum Argument<'a> {
     Group(&'a str),
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) enum Instruction<'a> {
     /// Send the event
     Event(Event<'a>),
@@ -643,11 +537,14 @@ mod tests {
                     position: ScriptPosition::AboveBelow
                 },
                 Event::Begin(Grouping::Normal),
-                Event::Content(Content::Ordinary{ content: 'y', stretchy: false }),
+                Event::Content(Content::Ordinary {
+                    content: 'y',
+                    stretchy: false
+                }),
                 Event::End,
                 Event::Content(Content::Ordinary {
                     content: '‾',
-                    stretchy: true,
+                    stretchy: false,
                 }),
             ]
         );
@@ -675,7 +572,10 @@ mod tests {
                 Event::Content(Content::Number("2")),
                 Event::Begin(Grouping::Normal),
                 Event::Content(Content::Number("1")),
-                Event::Content(Content::BinaryOp { content: '+', small: false }),
+                Event::Content(Content::BinaryOp {
+                    content: '+',
+                    small: false
+                }),
                 Event::Content(Content::Number("3")),
                 Event::End,
             ]
