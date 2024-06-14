@@ -64,10 +64,12 @@ pub enum Content<'a> {
     Text(&'a str),
     /// A number, which can include decimal points and commas.
     Number(&'a str),
-
     /// A function identifier, such as `sin`, `lim`, or a custom function with
     /// `\operatorname{arccotan}`.
     Function(&'a str),
+    /// A relation made up of multiple characters such as `:=` (\coloneqq), or made with combining
+    /// characters such as `⫋︀` (\varsubsetneqq).
+    MultiRelation(&'a str),
     /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and stuff that do not have
     /// any spacing around them. This includes stuff that normally go in under and overscripts
     /// which may be stretchy, such as `→`, `‾`, etc.
@@ -226,7 +228,6 @@ pub enum ColorTarget {
 pub enum Grouping {
     Internal,
     Normal,
-    Relation,
     LeftRight(Option<char>, Option<char>),
     Array(Box<[ArrayColumn]>),
     Matrix,

@@ -1031,82 +1031,22 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "ngeqq" => relation('≱'),
             "nsim" => relation('≁'),
             "nVDash" => relation('⊯'),
-            "varsupsetneqq" => E::Content(C::Relation { content: '⫌', unicode_variant: true, small: false }),
-            "varsubsetneqq" => E::Content(C::Relation { content: '⫋', unicode_variant: true, small: false }),
-            "varsubsetneq" => E::Content(C::Relation { content: '⊊', unicode_variant: true, small: false }),
-            "varsupsetneq" => E::Content(C::Relation { content: '⊋', unicode_variant: true, small: false }),
-            "gvertneqq" => E::Content(C::Relation { content: '≩', unicode_variant: true, small: false }),
-            "lvertneqq" => E::Content(C::Relation { content: '≨', unicode_variant: true, small: false }),
-            "Eqcolon" | "minuscoloncolon" => {
-                self.multi_relation([
-                    binary('−'),
-                    relation('∷'),
-                ]);
-                return Ok(());
-            }
-            "Eqqcolon" => {
-                self.multi_relation([
-                    relation('='),
-                    relation('∷'),
-                ]);
-                return Ok(());
-            }
-            "approxcolon" => {
-                self.multi_relation([
-                    relation('≈'),
-                    relation(':'),
-                ]);
-                return Ok(());
-            }
-            "colonapprox" => {
-                self.multi_relation([
-                    relation(':'),
-                    relation('≈'),
-                ]);
-                return Ok(());
-            }
-            "approxcoloncolon" => {
-                self.multi_relation([
-                    relation('≈'),
-                    relation('∷'),
-                ]);
-                return Ok(());
-            }
-            "Colonapprox" | "coloncolonapprox" => {
-                self.multi_relation([
-                    relation('∷'),
-                    relation('≈'),
-                ]);
-                return Ok(());
-            }
-            "coloneq" | "colonminus" => {
-                self.multi_relation([
-                    relation(':'),
-                    binary('−'),
-                ]);
-                return Ok(());
-            }
-            "Coloneq" | "coloncolonminus" => {
-                self.multi_relation([
-                    relation('∷'),
-                    binary('−')
-                ]);
-                return Ok(());
-            }
-            "colonsim" => {
-                self.multi_relation([
-                    relation(':'),
-                    relation('∼'),
-                ]);
-                return Ok(());
-            }
-            "Colonsim" | "coloncolonsim" => {
-                self.multi_relation([
-                    relation('∷'),
-                    relation('∼'),
-                ]);
-                return Ok(());
-            }
+            "varsupsetneqq" => E::Content(C::MultiRelation("⫌︀")),
+            "varsubsetneqq" => E::Content(C::MultiRelation("⫋︀")),
+            "varsubsetneq" => E::Content(C::MultiRelation("⊊︀")),
+            "varsupsetneq" => E::Content(C::MultiRelation("⊋︀")),
+            "gvertneqq" => E::Content(C::MultiRelation("≩︀")),
+            "lvertneqq" => E::Content(C::MultiRelation("≨︀")),
+            "Eqcolon" | "minuscoloncolon" => E::Content(C::MultiRelation("−∷")),
+            "Eqqcolon" => E::Content(C::MultiRelation("=∷")),
+            "approxcolon" => E::Content(C::MultiRelation("≈:")),
+            "colonapprox" => E::Content(C::MultiRelation(":≈")),
+            "approxcoloncolon" => E::Content(C::MultiRelation("≈∷")),
+            "Colonapprox" | "coloncolonapprox" => E::Content(C::MultiRelation("∷≈")),
+            "coloneq" | "colonminus" => E::Content(C::MultiRelation(":−")),
+            "Coloneq" | "coloncolonminus" => E::Content(C::MultiRelation("∷−")),
+            "colonsim" => E::Content(C::MultiRelation(":∼")),
+            "Colonsim" | "coloncolonsim" => E::Content(C::MultiRelation("∷∼")),
 
             ////////////
             // Arrows //
@@ -1479,14 +1419,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         };
         self.buffer.push(I::Event(event));
         Ok(())
-    }
-
-    /// Handle a control sequence that outputs more than one event.
-    fn multi_relation<const N: usize>(&mut self, events: [E<'a>; N]) {
-        self.buffer.push(I::Event(E::Begin(G::Relation)));
-        self.buffer
-            .extend(events.into_iter().map(I::Event));
-        self.buffer.push(I::Event(E::End));
     }
 
     /// Return a delimiter with the given size from the next character in the parser.
