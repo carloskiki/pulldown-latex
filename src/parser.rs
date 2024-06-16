@@ -241,7 +241,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
         match argument {
             Argument::Token(token) => {
-                self.state.invalidate_relax = true;
+                self.state.handling_argument = true;
                 match token {
                     Token::ControlSequence(cs) => self.handle_primitive(cs)?,
                     Token::Character(c) => self.handle_char_token(c)?,
@@ -491,6 +491,8 @@ pub(crate) enum ErrorKind {
     UnknownPrimitive,
     #[error("control sequence found as argument to a command that does not support them")]
     ControlSequenceAsArgument,
+    #[error("subscript and/or superscript found as argument to a command")]
+    ScriptAsArgument,
     #[error("enpty control sequence")]
     EmptyControlSequence,
     #[error("unkown color. colors must either be predefined or in the form `#RRGGBB`")]

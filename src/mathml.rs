@@ -554,17 +554,12 @@ where
             }
             Content::Relation {
                 content,
-                unicode_variant,
                 small,
             } => {
                 self.open_tag("mo", small.then_some("font-size: 70%"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
-                if unicode_variant {
-                    // unicode variant selector
-                    self.writer.write_all("\u{FE00}".as_bytes())?;
-                }
                 if negate {
                     self.writer.write_all("\u{0338}".as_bytes())?;
                 }

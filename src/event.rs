@@ -83,7 +83,6 @@ pub enum Content<'a> {
     /// A relation, such as `=`, `≠`, `≈`, etc.
     Relation {
         content: char,
-        unicode_variant: bool,
         small: bool,
     },
     /// An opening, closing, or fence delimiter, such as `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.

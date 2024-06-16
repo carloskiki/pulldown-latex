@@ -25,7 +25,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         let instruction = I::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
+            // TODO: This obviously does not work
             '_' => {
+                if self.state.handling_argument {
+                    return Err(ErrorKind::ScriptAsArgument)
+                }
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                 ]);
@@ -33,6 +37,9 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 E::End
             }
             '^' => {
+                if self.state.handling_argument {
+                    return Err(ErrorKind::ScriptAsArgument)
+                }
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                 ]);
@@ -951,8 +958,8 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "vartriangleright" => relation('⊳'),
             "curlyeqsucc" => relation('⋟'),
             "le" => relation('≤'),
-            "shortmid" => E::Content(C::Relation { content: '∣', unicode_variant: false, small: true }),
-            "shortparallel" => E::Content(C::Relation { content: '∥', unicode_variant: false, small: true }),
+            "shortmid" => E::Content(C::Relation { content: '∣', small: true }),
+            "shortparallel" => E::Content(C::Relation { content: '∥', small: true }),
             "vdash" => relation('⊢'),
             "dashv" => relation('⊣'),
             "leq" => relation('≤'),
@@ -974,7 +981,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "veeeq" => relation('≚'),
             "eqeq" => relation('⩵'),
             "lesseqqgtr" => relation('⪋'),
-            "smallsmile" => E::Content(C::Relation { content: '⌣', unicode_variant: false, small: true }),
+            "smallsmile" => E::Content(C::Relation { content: '⌣', small: true }),
             "wedgeq" => relation('≙'),
             "bowtie" | "Join" => relation('⋈'),
             // Negated relations
@@ -1026,7 +1033,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "nshortmid" => relation('∤'),
             "nvdash" => relation('⊬'),
             "ngeq" => relation('≱'),
-            "nshortparallel" => E::Content(C::Relation { content: '∦', unicode_variant: false, small: true }),
+            "nshortparallel" => E::Content(C::Relation { content: '∦', small: true }),
             "nvDash" => relation('⊭'),
             "ngeqq" => relation('≱'),
             "nsim" => relation('≁'),
@@ -1119,12 +1126,36 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "upuparrows" => relation('⇈'),
             "leftrightarrow" => relation('↔'),
             "nwarrow" => relation('↖'),
+            "xleftarrow" => {
+                let above = lex::argument(&mut self.content)?;
+                self.buffer.extend([
+                   I::Event(E::Script {
+                        ty: ST::Superscript,
+                        position: SP::AboveBelow,
+                    }),
+                    I::Event(relation('⟵'))
+                ]);
+                self.handle_argument(above)?;
+                return Ok(());
+            },
+            "xrightarrow" => {
+                let above = lex::argument(&mut self.content)?;
+                self.buffer.extend([
+                   I::Event(E::Script {
+                        ty: ST::Superscript,
+                        position: SP::AboveBelow,
+                    }),
+                    I::Event(relation('⟶'))
+                ]);
+                self.handle_argument(above)?;
+                return Ok(());
+            },
 
             ///////////////
             // Fractions //
             ///////////////
             "frac" => {
-                return self.fraction_like(None);
+                return self.fraction_like(None, None, None, None);
             }
             // TODO: better errors for this
             "genfrac" => {
@@ -1183,51 +1214,42 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     }
                 };
 
-                self.buffer.push(I::Event(E::Begin(G::LeftRight(ldelim.map(|c| c.0), rdelim.map(|c| c.0)))));
-                if let Some(style) = display_style {
-                    self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
-                }
+                self.fraction_like(ldelim.map(|d| d.0), rdelim.map(|d| d.0), bar_size, display_style)?;
                 
-                self.fraction_like(bar_size)?;
-                
-                self.buffer.push(I::Event(E::End));
                 return Ok(())
             }
-            "binom" => {
-                self.buffer.push(I::Event(E::Begin(G::LeftRight(Some('('), Some(')')))));
-                self.fraction_like(None)?;
-                E::End
-            }
-            "cfrac" => {
-                self.buffer.extend([I::Event(E::Begin(G::Internal)),
-                                    I::Event(E::StateChange(SC::Style(S::Display)))]);
-                self.fraction_like(None)?;
-                self.buffer.push(I::Event(E::End));
+            "cfrac" | "dfrac" => {
+                self.fraction_like(None, None, None, Some(S::Display))?;
                 return Ok(())
             }
             "tfrac" => {
-                self.buffer.extend([I::Event(E::Begin(G::Internal)),
-                                    I::Event(E::StateChange(SC::Style(S::Text)))]);
-                self.fraction_like(None)?;
-                self.buffer.push(I::Event(E::End));
+                self.fraction_like(None, None, None, Some(S::Text))?;
                 return Ok(())
             }
-            "dfrac" => {
-                self.buffer.extend([I::Event(E::Begin(G::Internal)),
-                                    I::Event(E::StateChange(SC::Style(S::Script)))]);
-                self.fraction_like(None)?;
-                self.buffer.push(I::Event(E::End));
+            "binom" => {
+                self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), None)?;
                 return Ok(())
             }
-            "overset" => {
+            "dbinom" => {
+                self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), Some(S::Display))?;
+                return Ok(())
+            }
+            "tbinom" => {
+                self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), Some(S::Text))?;
+                return Ok(())
+            }
+            "overset" | "stackrel" => {
                 self.buffer.push(I::Event(E::Script {
                     ty: ST::Superscript,
                     position: SP::AboveBelow,
                 }));
+                let before_over_index = self.buffer.len();
                 let over = lex::argument(&mut self.content)?;
                 self.handle_argument(over)?;
+                let over_events = self.buffer.split_off(before_over_index);
                 let base = lex::argument(&mut self.content)?;
                 self.handle_argument(base)?;
+                self.buffer.extend(over_events);
                 return Ok(());
             }
             "underset" => {
@@ -1235,10 +1257,13 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     ty: ST::Subscript,
                     position: SP::AboveBelow,
                 }));
+                let before_under_index = self.buffer.len();
                 let under = lex::argument(&mut self.content)?;
                 self.handle_argument(under)?;
+                let under_events = self.buffer.split_off(before_under_index);
                 let base = lex::argument(&mut self.content)?;
                 self.handle_argument(base)?;
+                self.buffer.extend(under_events);
                 return Ok(());
             }
 
@@ -1309,7 +1334,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 })
             },
             "relax" => {
-                return if self.state.invalidate_relax {
+                return if self.state.handling_argument {
                     Err(ErrorKind::Relax)
                 } else {
                     Ok(())
@@ -1517,12 +1542,33 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         Ok(())
     }
 
-    fn fraction_like(&mut self, bar_size: Option<(f32, DimensionUnit)>) -> InnerResult<()> {
+    fn fraction_like(
+        &mut self,
+        open: Option<char>,
+        close: Option<char>,
+        bar_size: Option<(f32, DimensionUnit)>,
+        style: Option<S>
+    ) -> InnerResult<()> {
+        let open_close_group = open.is_some() || close.is_some();
+        if open_close_group {
+            self.buffer.push(I::Event(E::Begin(G::LeftRight(open, close))));
+        }
+        if let Some(style) = style {
+            if !open_close_group {
+                self.buffer.push(I::Event(E::Begin(G::Internal)));
+            }
+            self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
+        };
+        
         self.buffer.push(I::Event(E::Visual(V::Fraction(bar_size))));
         let numerator = lex::argument(&mut self.content)?;
         self.handle_argument(numerator)?;
         let denominator = lex::argument(&mut self.content)?;
         self.handle_argument(denominator)?;
+        if open_close_group || style.is_some() {
+            self.buffer.push(I::Event(E::End));
+        }
+                  
         Ok(())
     }
 }
@@ -1539,7 +1585,6 @@ fn ordinary(ident: char) -> E<'static> {
 fn relation(rel: char) -> E<'static> {
     E::Content(C::Relation {
         content: rel,
-        unicode_variant: false,
         small: false,
     })
 }

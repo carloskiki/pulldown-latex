@@ -8,8 +8,11 @@ pub struct ParserState {
     pub above_below_suffix_default: bool,
     /// Whether the parser should skip suffix parsing for the current event.
     pub skip_suffixes: bool,
-    /// Whether we can parse the `\relax` command.
-    pub invalidate_relax: bool,
+    /// Whether we are currently handling an arument to a control sequence.
+    /// 
+    /// This affects things like whether we can parse the `\relax` command and
+    /// subscripts/superscripts.
+    pub handling_argument: bool,
     /// Whether the parser is in a subgroup where alignments with `&` and `\\`/`\cr` are allowed.
     pub allows_alignment: bool,
 }
@@ -20,7 +23,7 @@ impl Default for ParserState {
             allow_suffix_modifiers: false,
             above_below_suffix_default: false,
             skip_suffixes: false,
-            invalidate_relax: false,
+            handling_argument: false,
             allows_alignment: false,
         }
     }

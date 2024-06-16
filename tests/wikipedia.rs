@@ -208,19 +208,19 @@ round_trip!(combined_sub_superscript, r"x_2^3", r"{x_2}^3");
 
 round_trip!(super_super, r"10^{10^{8}}");
 
-// round_trip!(
-//     preceding_and_or_additional,
+round_trip!(
+    preceding_and_or_additional,
 //     r"\sideset{_1^2}{_3^4}\prod_a^b",
-//     r"{}_1^2\!\Omega_3^4"
-// );
+    r"{}_1^2\!\Omega_3^4"
+);
 
-// round_trip!(
-//     stacking,
-//     r"\overset{\alpha}{\omega}",
-//     r"\underset{\alpha}{\omega}",
-//     r"\overset{\alpha}{\underset{\gamma}{\omega}}",
-//     r"\stackrel{\alpha}{\omega}"
-// );
+round_trip!(
+    stacking,
+    r"\overset{\alpha}{\omega}",
+    r"\underset{\alpha}{\omega}",
+    r"\overset{\alpha}{\underset{\gamma}{\omega}}",
+    r"\stackrel{\alpha}{\omega}"
+);
 
 round_trip!(
     derivatives,
@@ -239,10 +239,10 @@ round_trip!(
 
 round_trip!(arc, r"\overset{\frown} {AB}");
 
-// round_trip!(
-//     arrows_example,
-//     r"A \xleftarrow{n+\mu-1} B \xrightarrow[T]{n\pm i-1} C"
-// );
+round_trip!(
+    arrows_example,
+    r"A \xleftarrow{n+\mu-1} B \xrightarrow[T]{n\pm i-1} C"
+);
 
 round_trip!(
     overbraces,
@@ -316,12 +316,12 @@ round_trip!(
     r"\cfrac{x}{1 + \cfrac{\cancel{y}}{\cancel{y}}} = \cfrac{x}{2}"
 );
 
-// round_trip!(
-//     binomials,
-//     r"\binom{n}{k}",
-//     r"\tbinom{n}{k}",
-//     r"\dbinom{n}{k}"
-// );
+round_trip!(
+    binomials,
+    r"\binom{n}{k}",
+    r"\tbinom{n}{k}",
+    r"\dbinom{n}{k}"
+);
 
 round_trip!(
     matrices,
