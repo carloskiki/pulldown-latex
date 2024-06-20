@@ -50,7 +50,7 @@ where
         }
     }
 
-    fn open_tag(&mut self, tag: &str, additional_style: Option<&str>) -> io::Result<()> {
+    fn open_tag(&mut self, tag: &str, classes: Option<&str>) -> io::Result<()> {
         let State {
             text_color,
             border_color,
@@ -102,16 +102,11 @@ where
                 style_written = true;
             }
         }
-        if let Some(additional_style) = additional_style {
-            if style_written {
-                write!(self.writer, "; {}", additional_style)?;
-            } else {
-                write!(self.writer, " style=\"{}", additional_style)?;
-                style_written = true;
-            }
-        }
         if style_written {
             self.writer.write_all(b"\"")?;
+        }
+        if let Some(classes) = classes {
+            write!(self.writer, " style=\"{}\"", classes)?;
         }
         Ok(())
     }
@@ -131,34 +126,34 @@ where
             // Array: requires a column specification.
             // Cases: Only one alignment allowed, has considerable (probably \quad) space between columns.
             Ok(Event::Begin(grouping)) => {
-                let mut font = self.state().font;
-                let old_state = self.state_stack.last_mut().expect("state stack is empty");
-                while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
-                    match state_change {
-                        StateChange::Font(new_font) => font = *new_font,
-                        StateChange::Color(ColorChange { color, target }) => match target {
-                            ColorTarget::Text => old_state.text_color = Some(color),
-                            ColorTarget::Background => old_state.background_color = Some(color),
-                            ColorTarget::Border => old_state.border_color = Some(color),
-                        },
-                        StateChange::Style(style) => old_state.style = Some(*style),
-                    }
-                    self.input.next();
-                }
-                let mut new_state = State::default();
+                // Mathematical environments do something different with state compared to things
+                // like left/right and {}.
+                //
+                // - They do not inherit state from their parent, their state is reset to default
+                // upon entering.
+                // - State changes occuring within them are also reset when crossing alignments or
+                // newlines (`&` or `\\`).
+                //
+                // For these reasons, they don't use the `open_tag` method.
                 self.previous_atom = None;
+                if grouping.is_math_env() {
+                    self.state_stack.push(State::default())
+                } else {
+                    let last_state = *self.state_stack.last().expect("state stack is empty");
+                    self.state_stack.extend([last_state, last_state]);
+                    while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
+                        let state_change = *state_change;
+                        self.handle_state_change(state_change);
+                        self.input.next();
+                    }
+                    self.open_tag("mrow", None)?;
+                    self.writer.write_all(b">")?;
+                    self.state_stack.pop();
+                }
 
                 let env_group = match grouping {
-                    Grouping::Internal | Grouping::Normal => {
-                        new_state.font = font;
-                        self.open_tag("mrow", None)?;
-                        self.writer.write_all(b">")?;
-                        EnvGrouping::Normal
-                    }
+                    Grouping::Normal => EnvGrouping::Normal,
                     Grouping::LeftRight(opening, closing) => {
-                        new_state.font = font;
-                        self.open_tag("mrow", None)?;
-                        self.writer.write_all(b">")?;
                         if let Some(delim) = opening {
                             self.open_tag("mo", None)?;
                             self.writer.write_all(b" stretchy=\"true\">")?;
@@ -171,54 +166,56 @@ where
                         EnvGrouping::LeftRight { closing }
                     }
                     Grouping::Align => {
-                        self.open_tag("mtable", None)?;
-                        self.writer.write_all(b"><mtr><mtd style=\"text-align: right; text-align: -webkit-right; text-align: -moz-right\">")?;
+                        self.writer
+                            .write_all(b"<mtable><mtr><mtd class=\"menv-right-align\">")?;
                         EnvGrouping::Align { left_align: false }
                     }
                     Grouping::Matrix => {
-                        self.open_tag("mtable", None)?;
-                        self.writer.write_all(b"><mtr><mtd>")?;
+                        self.writer.write_all(b"<mtable><mtr><mtd>")?;
                         EnvGrouping::Matrix
                     }
                     Grouping::Cases => {
-                        self.open_tag("mrow", None)?;
-                        self.writer.write_all(b">")?;
-                        self.writer.write_all(b"><mo stretchy=\"true\">{</mo><mtable><mtr><mtd style=\"text-align: left\">")?;
+                        self.writer.write_all(b"<mrow><mo stretchy=\"true\">{</mo><mtable><mtr><mtd class=\"menv-left-align\">")?;
                         EnvGrouping::Cases { used_align: false }
                     }
                     Grouping::Array(cols) => {
                         let mut index = 0;
-                        let additional_style = match (cols.first(), cols.last()) {
+                        self.writer.write_all(b"<mtable")?;
+                        match (cols.first(), cols.last()) {
                             (Some(ArrayColumn::VerticalLine), Some(ArrayColumn::VerticalLine)) => {
                                 index += 1;
-                                Some(
-                                "border-left: 0.06em solid; border-right: 0.06em solid; border-collapse: collapse;"
-                                )
+                                self.writer
+                                    .write_all(b" class=\"menv-left-border menv-right-border\"")?
                             }
-                            (Some(ArrayColumn::VerticalLine), None) => {
+                            (Some(ArrayColumn::VerticalLine), _) => {
                                 index += 1;
-                                Some("border-left: 0.06em solid; border-collapse: collapse;")
+                                self.writer.write_all(b" class=\"menv-left-border\"")?
                             }
-                            (None, Some(ArrayColumn::VerticalLine)) => {
-                                Some("border-right: 0.06em solid; border-collapse: collapse;")
+                            (_, Some(ArrayColumn::VerticalLine)) => {
+                                self.writer.write_all(b" class=\"menv-right-border\"")?
                             }
-                            _ => None,
-                        };
-                        self.open_tag("mtable", additional_style)?;
+                            (_, _) => {}
+                        }
                         self.writer.write_all(b"><mtr><mtd")?;
                         match cols[index] {
-                            ArrayColumn::Left => self.writer.write_all(b" style=\"text-align: left\""),
-                            ArrayColumn::Right => self.writer.write_all(b" style=\"text-align: right; text-align: -webkit-right; text-align: -moz-right\""),
-                            ArrayColumn::Center => self.writer.write_all(b">"),
-                            ArrayColumn::VerticalLine => panic!("vertical line in place of column alignment"),
-                        }?;
+                            ArrayColumn::Left => {
+                                self.writer.write_all(b" class=\"menv-left-align\"")?
+                            }
+                            ArrayColumn::Right => {
+                                self.writer.write_all(b" class=\"menv-right-align\"")?
+                            }
+                            ArrayColumn::Center => {}
+                            ArrayColumn::VerticalLine => {
+                                panic!("vertical line in place of column alignment")
+                            }
+                        };
+                        self.writer.write_all(b">")?;
                         EnvGrouping::Array {
                             cols,
                             cols_index: index + 1,
                         }
                     }
                 };
-                self.state_stack.push(new_state);
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
             }
@@ -272,7 +269,7 @@ where
                             self.input.next();
                         }
                         _ => {
-                            self.open_tag("mrow", Some("background: linear-gradient(to top left, rgba(0,0,0,0) 0%, rgba(0,0,0,0) calc(50% - 0.8px), rgba(0,0,0,1) 50%, rgba(0,0,0,0) calc(50% + 0.8px), rgba(0,0,0,0) 100%)"))?;
+                            self.open_tag("mrow", Some("negated"))?;
                             self.writer.write_all(b">")?;
                             self.env_stack.push(Environment::from(visual));
                         }
@@ -331,16 +328,7 @@ where
                 self.writer.write_all(b" />")
             }
             Ok(Event::StateChange(state_change)) => {
-                let state = self.state_stack.last_mut().expect("state stack is empty");
-                match state_change {
-                    StateChange::Font(font) => state.font = font,
-                    StateChange::Color(ColorChange { color, target }) => match target {
-                        ColorTarget::Text => state.text_color = Some(color),
-                        ColorTarget::Border => state.border_color = Some(color),
-                        ColorTarget::Background => state.background_color = Some(color),
-                    },
-                    StateChange::Style(style) => state.style = Some(style),
-                }
+                self.handle_state_change(state_change);
                 Ok(())
             }
             Ok(Event::NewLine) => {
@@ -349,25 +337,30 @@ where
                 match self.env_stack.last_mut() {
                     Some(Environment::Group(EnvGrouping::Cases { .. })) => self
                         .writer
-                        .write_all(b"</mtd></mtr><mtr><mtd style=\"text-align: left\">"),
+                        .write_all(b"</mtd></mtr><mtr><mtd class=\"menv-left-align\">"),
                     Some(Environment::Group(EnvGrouping::Matrix)) => {
                         self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
                     }
-                    Some(Environment::Group(EnvGrouping::Align { left_align })) => {
-                        *left_align = false;
-                        self.writer
-                            .write_all(b"</mtd></mtr><mtr><mtd style=\"text-align: left\">")
-                    }
+                    Some(Environment::Group(EnvGrouping::Align)) => self
+                        .writer
+                        .write_all(b"</mtd></mtr><mtr class=\"menv-align-row\"><mtd>"),
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
                         *cols_index =
                             (cols.first() == Some(&ArrayColumn::VerticalLine)) as usize + 1;
                         self.writer.write_all(b"</mtd></mtr><mtr><mtd")?;
                         match cols[*cols_index - 1] {
-                            ArrayColumn::Left => self.writer.write_all(b" style=\"text-align: left\""),
-                            ArrayColumn::Right => self.writer.write_all(b" style=\"text-align: right; text-align: -webkit-right; text-align: -moz-right\">"),
-                            ArrayColumn::Center => self.writer.write_all(b">"),
-                            ArrayColumn::VerticalLine => panic!("vertical line in place of column alignment"),
+                            ArrayColumn::Left => {
+                                self.writer.write_all(b" class=\"menv-left-align\"")?
+                            }
+                            ArrayColumn::Right => {
+                                self.writer.write_all(b" class=\"menv-right-align\"")?
+                            }
+                            ArrayColumn::Center => {}
+                            ArrayColumn::VerticalLine => {
+                                panic!("vertical line in place of column alignment")
+                            }
                         }
+                        self.writer.write_all(b">")
                     }
                     _ => panic!("math env does not support newlines"),
                 }
@@ -379,35 +372,32 @@ where
                     // Left align both
                     Some(Environment::Group(EnvGrouping::Cases { used_align: false })) => self
                         .writer
-                        .write_all(b"</mtd><mtd style=\"text-align: left\">"),
+                        .write_all(b"</mtd><mtd class=\"menv-left-align\">"),
                     // Center align all
                     Some(Environment::Group(EnvGrouping::Matrix)) => {
                         self.writer.write_all(b"</mtd><mtd>")
                     }
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
-                        self.writer.write_all(b"</mtd><mtd style=\"")?;
+                        self.writer.write_all(b"</mtd><mtd class=\"")?;
                         if cols[*cols_index] == ArrayColumn::VerticalLine {
-                            self.writer.write_all(b"border-left: 0.06em solid; ")?;
+                            self.writer.write_all(b"menv-left-border ")?;
                             *cols_index += 1;
                         }
                         self.writer.write_all(match cols[*cols_index] {
-                            ArrayColumn::Left => b"text-align: left\">",
-                            ArrayColumn::Right => b"text-align: right; text-align: -webkit-right; text-align: -moz-right\">",
+                            ArrayColumn::Left => b"menv-left-align\">",
+                            ArrayColumn::Right => b"menv-right-align\">",
                             ArrayColumn::Center => b"\">",
-                            ArrayColumn::VerticalLine => panic!("vertical line in place of column alignment"),
+                            ArrayColumn::VerticalLine => {
+                                panic!("vertical line in place of column alignment")
+                            }
                         })?;
                         *cols_index += 1;
                         Ok(())
                     }
-                    Some(Environment::Group(EnvGrouping::Align { left_align })) => {
-                        *left_align = !*left_align;
-                        write!(
-                            self.writer,
-                            "</mtd><mtd style=\"text-align: {}\">",
-                            if *left_align { "left" } else { "right" }
-                        )
+                    Some(Environment::Group(EnvGrouping::Align)) => {
+                        write!(self.writer, "</mtd><mtd>",)
                     }
-                    _ => panic!("alignment outside of environment"),
+                    _ => panic!("alignment not allowed in current environment"),
                 }
             }
             Err(e) => {
@@ -533,7 +523,10 @@ where
                                 | Content::Number(_)
                                 | Content::LargeOp { .. }
                                 | Content::Ordinary { .. }
-                                | Content::Delimiter { ty: DelimiterType::Open, .. }
+                                | Content::Delimiter {
+                                    ty: DelimiterType::Open,
+                                    ..
+                                }
                         )))
                 ) {
                     self.set_previous_atom(Atom::Bin);
@@ -543,7 +536,7 @@ where
                     "mi"
                 };
 
-                self.open_tag(tag, small.then_some("font-size: 70%"))?;
+                self.open_tag(tag, small.then_some("small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
@@ -552,11 +545,8 @@ where
                 }
                 write!(self.writer, "</{}>", tag)
             }
-            Content::Relation {
-                content,
-                small,
-            } => {
-                self.open_tag("mo", small.then_some("font-size: 70%"))?;
+            Content::Relation { content, small } => {
+                self.open_tag("mo", small.then_some("small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
@@ -623,6 +613,19 @@ where
                 self.set_previous_atom(Atom::Rel);
                 self.writer.write_all(b"</mo>")
             }
+        }
+    }
+
+    fn handle_state_change(&mut self, state_change: StateChange<'a>) {
+        let state = self.state_stack.last_mut().expect("state stack is empty");
+        match state_change {
+            StateChange::Font(font) => state.font = font,
+            StateChange::Color(ColorChange { color, target }) => match target {
+                ColorTarget::Text => state.text_color = Some(color),
+                ColorTarget::Border => state.border_color = Some(color),
+                ColorTarget::Background => state.background_color = Some(color),
+            },
+            StateChange::Style(style) => state.style = Some(style),
         }
     }
 
@@ -733,9 +736,7 @@ enum EnvGrouping {
     Cases {
         used_align: bool,
     },
-    Align {
-        left_align: bool,
-    },
+    Align,
 }
 
 #[derive(Debug, Clone, PartialEq)]

@@ -225,13 +225,17 @@ pub enum ColorTarget {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Grouping {
-    Internal,
     Normal,
     LeftRight(Option<char>, Option<char>),
     Array(Box<[ArrayColumn]>),
     Matrix,
     Cases,
     Align,
+}
+impl Grouping {
+    pub(crate) fn is_math_env(&self) -> bool {
+        matches!(self, Self::Array(_) | Self::Matrix | Self::Cases | Self::Align)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

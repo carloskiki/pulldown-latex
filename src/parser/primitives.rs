@@ -149,7 +149,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "pmod" => {
                 let argument = lex::argument(&mut self.content)?;
                 self.buffer.extend([
-                    I::Event(E::Begin(G::Internal)),
+                    I::Event(E::Begin(G::Normal)),
                     I::Event(E::Content(C::Delimiter {
                         content: '(',
                         size: None,
@@ -1459,7 +1459,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
         self.buffer.extend([
-            I::Event(E::Begin(G::Internal)),
+            I::Event(E::Begin(G::Normal)),
             I::Event(E::StateChange(SC::Font(font))),
         ]);
         match argument {
@@ -1555,7 +1555,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         }
         if let Some(style) = style {
             if !open_close_group {
-                self.buffer.push(I::Event(E::Begin(G::Internal)));
+                self.buffer.push(I::Event(E::Begin(G::Normal)));
             }
             self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
         };
