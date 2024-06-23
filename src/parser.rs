@@ -190,31 +190,6 @@ impl<'a> Iterator for Parser<'a> {
     }
 }
 
-// if !subscript_first && second_suffix_start != second_suffix_end {
-//     self.instruction_stack.extend(
-//         self.buffer[first_suffix_start..second_suffix_start]
-//             .iter()
-//             .rev(),
-//     );
-//     self.instruction_stack.extend(
-//         self.buffer
-//             .drain(first_suffix_start..)
-//             .skip(second_suffix_start - first_suffix_start)
-//             .rev(),
-//     );
-//     ScriptType::SubSuperscript
-// } else {
-//     let suffixes = self.buffer.drain(first_suffix_start..);
-//     self.instruction_stack.extend(suffixes.rev());
-//     if second_suffix_start != second_suffix_end {
-//         ScriptType::SubSuperscript
-//     } else if subscript_first {
-//         ScriptType::Subscript
-//     } else {
-//         ScriptType::Superscript
-//     }
-// },
-
 struct ScriptDescriptor {
     subscript_start: usize,
     superscript_start: usize,
