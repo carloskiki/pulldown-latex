@@ -6,12 +6,12 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-       ColorChange as CC, ColorTarget as CT, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V, ArrayColumn as AC
+       ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
     },
 };
 
 use super::{
-    lex, tables::{char_delimiter_map, control_sequence_delimiter_map, is_binary, is_primitive_color, is_relation, token_to_delim}, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I, Token
+    lex::{self, optional_argument}, tables::{char_delimiter_map, control_sequence_delimiter_map, is_binary, is_primitive_color, is_relation, token_to_delim}, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I, Token
 };
 
 impl<'a, 'b> InnerParser<'a, 'b> {
@@ -1360,44 +1360,145 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 };
 
                 let mut style = None;
-                let (environment, wrap) = match argument {
-                    "array" =>  {
-                        let Argument::Group(array_columns_str) = lex::argument(&mut self.content)? else {
-                            return Err(ErrorKind::Argument);
-                        };
 
-                        let array_columns = array_columns_str.chars().map(|c| Ok(match c {
-                            'c' => AC::Center,
-                            'l' => AC::Left,
-                            'r' => AC::Right,
-                            '|' => AC::VerticalLine,
-                            _ => return Err(ErrorKind::Argument), 
-                        })).collect::<Result<_, _>>()?;
-                        
-                        (G::Array(array_columns), None)  
+                let (environment, wrap) = match argument {
+                    "array" => {
+                        (self.array_environment()?, None)
                     },
-                    "matrix" => (G::Matrix, None),
+                    "darray" => {
+                        style = Some(S::Display);
+                        (self.array_environment()?, None)
+                    },
+                    "matrix" => (G::Matrix {
+                        alignment: ColumnAlignment::Center,
+                    }, None),
+                    "matrix*" => {
+                        (G::Matrix {
+                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center)
+                        }, None)
+                    },
                     "smallmatrix" => {
                         style = Some(S::Text);
-                        (G::Matrix, None)
+                        (G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        }, None)
                     }
                     "pmatrix" => {
-                        (G::Matrix, Some(G::LeftRight(Some('('), Some(')'))))
+                        (G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        }, Some(G::LeftRight(Some('('), Some(')'))))
+                    },
+                    "pmatrix*" => {
+                        (G::Matrix {
+                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
+                        }, Some(G::LeftRight(Some('('), Some(')'))))
                     },
                     "bmatrix" => {
-                        (G::Matrix, Some(G::LeftRight(Some('['), Some(']'))))
+                        (G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        }, Some(G::LeftRight(Some('['), Some(']'))))
+                    },
+                    "bmatrix*" => {
+                        (G::Matrix {
+                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
+                        }, Some(G::LeftRight(Some('['), Some(']'))))
                     },
                     "vmatrix" => {
-                        (G::Matrix, Some(G::LeftRight(Some('|'), Some('|'))))
+                        (G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        }, Some(G::LeftRight(Some('|'), Some('|'))))
+                    },
+                    "vmatrix*" => {
+                        (G::Matrix {
+                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
+                        }, Some(G::LeftRight(Some('|'), Some('|'))))
                     },
                     "Vmatrix" => {
-                        (G::Matrix, Some(G::LeftRight(Some('‖'), Some('‖'))))
+                        (G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        }, Some(G::LeftRight(Some('‖'), Some('‖'))))
+                    },
+                    "Vmatrix*" => {
+                        (G::Matrix {
+                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
+                        }, Some(G::LeftRight(Some('‖'), Some('‖'))))
                     },
                     "Bmatrix" => {
-                        (G::Matrix, Some(G::LeftRight(Some('{'), Some('}'))))
+                        (G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        }, Some(G::LeftRight(Some('{'), Some('}'))))
                     },
-                    "cases" => (G::Cases, None),
-                    "align" => (G::Align, None),
+                    "Bmatrix*" => {
+                        (G::Matrix {
+                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
+                        }, Some(G::LeftRight(Some('{'), Some('}'))))
+                    },
+                    "cases" => (G::Cases {
+                        left: true,
+                    }, None),
+                    "dcases" => {
+                        style = Some(S::Display);
+                        (G::Cases {
+                            left: true,
+                        }, None)
+                    },
+                    "rcases" => (G::Cases {
+                        left: false,
+                    }, None),
+                    "drcases" => {
+                        style = Some(S::Display);
+                        (G::Cases {
+                            left: false,
+                        }, None)
+                    },
+                    "equation" => todo!(),
+                    "equation*" => todo!(),
+                    "align" => (G::Align {
+                        eq_numbers: true,
+                    }, None),
+                    "align*" => (G::Align {
+                        eq_numbers: false,
+                    }, None),
+                    "aligned" => (G::Aligned, None),
+                    "gather" => (G::Gather {
+                        eq_numbers: true,
+                    }, None),
+                    "gather*" => (G::Gather {
+                        eq_numbers: false,
+                    }, None),
+                    "gathered" => (G::Gathered, None),
+                    "alignat" => {
+                        let pairs = match lex::argument(&mut self.content)? {
+                            Argument::Group(mut content) => lex::unsigned_integer(&mut content),
+                            _ => Err(ErrorKind::Argument),
+                        }?;
+                        (G::Alignat { pairs, eq_numbers: true }, None)
+                    },
+                    "alignat*" => {
+                        let pairs = match lex::argument(&mut self.content)? {
+                            Argument::Group(mut content) => lex::unsigned_integer(&mut content),
+                            _ => Err(ErrorKind::Argument),
+                        }?;
+                        (G::Alignat { pairs, eq_numbers: false }, None)
+                    },
+                    "alignedat" => {
+                        let pairs = match lex::argument(&mut self.content)? {
+                            Argument::Group(mut content) => lex::unsigned_integer(&mut content),
+                            _ => Err(ErrorKind::Argument),
+                        }?;
+                        (G::Alignedat { pairs }, None)
+                    },
+                    "subarray" => {
+                        let alignment = match lex::argument(&mut self.content)? {
+                            Argument::Group("l") => ColumnAlignment::Left,
+                            Argument::Group("c") => ColumnAlignment::Center,
+                            Argument::Group("r") => ColumnAlignment::Right,
+                            _ => return Err(ErrorKind::Argument),
+                        };
+                        (G::SubArray { alignment }, None)
+                    },
+                    "multline" => (G::Multline, None),
+                    "split" => (G::Split, None),
                     _ => return Err(ErrorKind::Environment),
                 };
 
@@ -1570,6 +1671,33 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         }
                   
         Ok(())
+    }
+
+    fn array_environment(&mut self) -> InnerResult<G> {
+        let Argument::Group(array_columns_str) = lex::argument(&mut self.content)? else {
+            return Err(ErrorKind::Argument);
+        };
+
+        let array_columns = array_columns_str.chars().map(|c| Ok(match c {
+            'c' => AC::Column(ColumnAlignment::Center),
+            'l' => AC::Column(ColumnAlignment::Left),
+            'r' => AC::Column(ColumnAlignment::Right),
+            '|' => AC::VerticalLine,
+            _ => return Err(ErrorKind::Argument), 
+        })).collect::<Result<_, _>>()?;
+        
+        Ok(G::Array(array_columns))
+    }
+
+    fn optional_alignment(&mut self) -> InnerResult<Option<ColumnAlignment>> {
+        let alignment = lex::optional_argument(&mut self.content)?;
+        Ok(match alignment {
+            Some("c") => Some(ColumnAlignment::Center),
+            Some("l") => Some(ColumnAlignment::Left),
+            Some("r") => Some(ColumnAlignment::Right),
+            None => None,
+            _ => return Err(ErrorKind::Argument),
+        })
     }
 }
 

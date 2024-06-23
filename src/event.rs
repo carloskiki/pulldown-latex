@@ -228,21 +228,59 @@ pub enum Grouping {
     Normal,
     LeftRight(Option<char>, Option<char>),
     Array(Box<[ArrayColumn]>),
-    Matrix,
-    Cases,
-    Align,
+    Matrix {
+        alignment: ColumnAlignment,
+    },
+    Cases {
+        left: bool,
+    },
+    Equation {
+        eq_numbers: bool,
+    },
+    Align {
+        eq_numbers: bool,
+    },
+    Aligned,
+    // According to what was specified
+    SubArray {
+        alignment: ColumnAlignment,
+    },
+    // Same as align, but without space between columns, and specified number of left right
+    // pairs.
+    Alignat {
+        pairs: usize,
+        eq_numbers: bool,
+    },
+    Alignedat {
+        pairs: usize,
+    },
+    // All center
+    Gather {
+        eq_numbers: bool,
+    },
+    Gathered,
+    // First: left, last: right, in between: center
+    Multline,
+    // Only one alignment allowed, right, left just like `align`
+    Split,
 }
+
 impl Grouping {
     pub(crate) fn is_math_env(&self) -> bool {
-        matches!(self, Self::Array(_) | Self::Matrix | Self::Cases | Self::Align)
+        !matches!(self, Self::Normal | Self::LeftRight(_, _))
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum ArrayColumn {
+pub enum ColumnAlignment {
     Left,
     Center,
     Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ArrayColumn {
+    Column(ColumnAlignment),
     VerticalLine,
 }
 
