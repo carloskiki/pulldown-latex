@@ -248,11 +248,11 @@ pub enum Grouping {
     // Same as align, but without space between columns, and specified number of left right
     // pairs.
     Alignat {
-        pairs: usize,
+        pairs: u16,
         eq_numbers: bool,
     },
     Alignedat {
-        pairs: usize,
+        pairs: u16,
     },
     // All center
     Gather {

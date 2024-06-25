@@ -63,7 +63,7 @@ impl<'a> Parser<'a> {
         let mut instruction_stack = Vec::with_capacity(32);
         instruction_stack.push(Instruction::SubGroup {
             content: input,
-            allows_alignment: false,
+            allowed_alignment_count: None,
         });
         let buffer = Vec::with_capacity(16);
         Self {
@@ -135,10 +135,10 @@ impl<'a> Iterator for Parser<'a> {
             }
             Some(Instruction::SubGroup {
                 content,
-                allows_alignment,
+                allowed_alignment_count,
             }) => {
                 let state = ParserState {
-                    allows_alignment: *allows_alignment,
+                    allowed_alignment_count: allowed_alignment_count.as_mut(),
                     ..Default::default()
                 };
 
@@ -198,11 +198,11 @@ struct ScriptDescriptor {
 pub struct InnerParser<'a, 'b> {
     content: &'a str,
     buffer: &'b mut Vec<Instruction<'a>>,
-    state: ParserState,
+    state: ParserState<'b>,
 }
 
 impl<'a, 'b> InnerParser<'a, 'b> {
-    fn new(content: &'a str, buffer: &'b mut Vec<Instruction<'a>>, state: ParserState) -> Self {
+    fn new(content: &'a str, buffer: &'b mut Vec<Instruction<'a>>, state: ParserState<'b>) -> Self {
         Self {
             content,
             buffer,
@@ -227,7 +227,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     Instruction::Event(Event::Begin(Grouping::Normal)),
                     Instruction::SubGroup {
                         content: group,
-                        allows_alignment: false,
+                        allowed_alignment_count: None,
                     },
                     Instruction::Event(Event::End),
                 ]);
@@ -390,8 +390,35 @@ pub(crate) enum Instruction<'a> {
     /// Parse the substring
     SubGroup {
         content: &'a str,
-        allows_alignment: bool,
+        allowed_alignment_count: Option<AlignmentCount>,
     },
+}
+
+#[derive(Debug, Clone)]
+struct AlignmentCount {
+    count: u16,
+    max: u16,
+}
+
+impl AlignmentCount {
+    fn new(max: u16) -> Self {
+        Self {
+            count: 0,
+            max,
+        }
+    }
+
+    fn reset(&mut self) {
+        self.count = 0;
+    }
+
+    fn increment(&mut self) {
+        self.count += 1;
+    }
+
+    fn can_increment(&self) -> bool {
+        self.count < self.max
+    }
 }
 
 /// Anything that could possibly go wrong while parsing.

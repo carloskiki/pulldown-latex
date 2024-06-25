@@ -1,6 +1,8 @@
+use super::AlignmentCount;
+
 /// State belonging to the parser that is reset every call to the `next` method of the parser.
-#[derive(Debug, Clone, Copy)]
-pub struct ParserState {
+#[derive(Debug)]
+pub struct ParserState<'a> {
     /// Whether the parser is currently parsing an operator that allows for its suffixes to be
     /// modifies by the commands `\nolimits`, `\limits`, and `\displaylimits`.
     pub allow_suffix_modifiers: bool,
@@ -13,18 +15,21 @@ pub struct ParserState {
     /// This affects things like whether we can parse the `\relax` command and
     /// subscripts/superscripts.
     pub handling_argument: bool,
-    /// Whether the parser is in a subgroup where alignments with `&` and `\\`/`\cr` are allowed.
-    pub allows_alignment: bool,
+    /// Number of `&` characters allowed in the current line of the current group.
+    ///
+    /// If `None`, then we are in a group where both `\\` (newlines) and `&` (alignments) are disallowed.
+    /// Otherwise, this is the number of `&` characters allowed in the current line.
+    pub allowed_alignment_count: Option<&'a mut AlignmentCount>,
 }
 
-impl Default for ParserState {
+impl<'a> Default for ParserState<'a> {
     fn default() -> Self {
         Self {
             allow_suffix_modifiers: false,
             above_below_suffix_default: false,
             skip_suffixes: false,
             handling_argument: false,
-            allows_alignment: false,
+            allowed_alignment_count: None,
         }
     }
 }
