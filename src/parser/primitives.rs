@@ -6,12 +6,20 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-       ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
+        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
+        DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP,
+        ScriptType as ST, StateChange as SC, Style as S, Visual as V,
     },
 };
 
 use super::{
-    lex, tables::{char_delimiter_map, control_sequence_delimiter_map, is_binary, is_primitive_color, is_relation, token_to_delim}, AlignmentCount, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I, Token
+    lex,
+    tables::{
+        char_delimiter_map, control_sequence_delimiter_map, is_binary, is_primitive_color,
+        is_relation, token_to_delim,
+    },
+    AlignmentCount, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I,
+    Token,
 };
 
 impl<'a, 'b> InnerParser<'a, 'b> {
@@ -58,7 +66,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                            .as_mut()
                            .expect("we have checked that `allowed_alignment_count` is Some")
                            .increment();
-                       E::Alignment  
+                        E::Alignment
                     },
             '{' => {
                 let str = &mut self.content;
@@ -99,15 +107,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             }
             // Punctuation
             '.' | ',' | ';' => E::Content(C::Punctuation(token.into())),
-            
             '\'' => ordinary('′'),
             '-' => binary('−'),
             '*' => binary('∗'),
-            
             c if is_binary(c) => binary(c),
             c if is_relation(c) => relation(c),
-                
-
             c if char_delimiter_map(c).is_some() => {
                 let (content, ty) = char_delimiter_map(c).unwrap();
                 if ty == DelimiterType::Fence {
@@ -120,7 +124,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 })
                 }
             }
-            
             c => ordinary(c),
         });
         self.buffer.push(instruction);
@@ -132,9 +135,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         let event = match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
-            | "coth" | "dim" | "sin" | "tanh" | "sgn" => {
-                E::Content(C::Function(control_sequence))
-            }
+            | "coth" | "dim" | "sin" | "tanh" | "sgn" => E::Content(C::Function(control_sequence)),
             "lim" | "Pr" | "sup" | "liminf" | "max" | "inf" | "gcd" | "limsup" | "min" => {
                 self.state.allow_suffix_modifiers = true;
                 self.state.above_below_suffix_default = true;
@@ -150,9 +151,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     Argument::Token(Token::Character(char_)) => {
                         E::Content(C::Function(char_.as_str()))
                     }
-                    Argument::Group(content) => {
-                        E::Content(C::Function(content))
-                    }
+                    Argument::Group(content) => E::Content(C::Function(content)),
                 }
             }
             "bmod" => E::Content(C::Function("mod")),
@@ -269,10 +268,12 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             ///////////////////////////
             // Symbols & Punctuation //
             ///////////////////////////
-            "dots" => if self.content.trim_start().starts_with(['.', ',']) {
-                ordinary('…')
-            } else {
-                ordinary('⋯')
+            "dots" => {
+                if self.content.trim_start().starts_with(['.', ',']) {
+                    ordinary('…')
+                } else {
+                    ordinary('⋯')
+                }
             }
             "ldots" | "dotso" | "dotsc" => ordinary('…'),
             "cdots" | "dotsi" | "dotsm" | "dotsb" | "idotsin" => ordinary('⋯'),
@@ -358,7 +359,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "whitesquaretickleft" => ordinary('⟤'),
             "whitesquaretickright" => ordinary('⟥'),
 
-
             ////////////////////////
             // Font state changes //
             ////////////////////////
@@ -407,13 +407,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             // Color state change //
             ////////////////////////
             "color" => {
-                let Argument::Group(color) =
-                    lex::argument(&mut self.content)?
-                else {
+                let Argument::Group(color) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
                 self.state.skip_suffixes = true;
-                
+
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
@@ -421,68 +419,70 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     color,
                     target: CT::Text,
                 }))
-            },
+            }
             "textcolor" => {
                 let str = &mut self.content;
-                let Argument::Group(color) =
-                    lex::argument(str)?
-                else {
+                let Argument::Group(color) = lex::argument(str)? else {
                     return Err(ErrorKind::Argument);
                 };
-                
+
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
                 let modified = lex::argument(str)?;
 
-                self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
-                    color,
-                    target: CT::Text,
-                })))]);
+                self.buffer.extend([
+                    I::Event(E::Begin(G::Normal)),
+                    I::Event(E::StateChange(SC::Color(CC {
+                        color,
+                        target: CT::Text,
+                    }))),
+                ]);
                 self.handle_argument(modified)?;
                 E::End
             }
             "colorbox" => {
-                let Argument::Group(color) =
-                    lex::argument(&mut self.content)?
-                else {
+                let Argument::Group(color) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
-                    color,
-                    target: CT::Background,
-                })))]);
+                self.buffer.extend([
+                    I::Event(E::Begin(G::Normal)),
+                    I::Event(E::StateChange(SC::Color(CC {
+                        color,
+                        target: CT::Background,
+                    }))),
+                ]);
                 self.text_argument()?;
                 E::End
             }
             "fcolorbox" => {
                 let str = &mut self.content;
-                let Argument::Group(frame_color) =
-                    lex::argument(str)?
-                else {
+                let Argument::Group(frame_color) = lex::argument(str)? else {
                     return Err(ErrorKind::Argument);
                 };
-                let Argument::Group(background_color) =
-                    lex::argument(str)?
-                else {
+                let Argument::Group(background_color) = lex::argument(str)? else {
                     return Err(ErrorKind::Argument);
                 };
                 if !is_primitive_color(frame_color) || !is_primitive_color(background_color) {
                     return Err(ErrorKind::UnknownColor);
                 }
-                self.buffer.extend([I::Event(E::Begin(G::Normal)), I::Event(E::StateChange(SC::Color(CC {
-                    color: frame_color,
-                    target: CT::Text,
-                }))), I::Event(E::StateChange(SC::Color(CC {
-                    color: background_color,
-                    target: CT::Background,
-                })))]);
+                self.buffer.extend([
+                    I::Event(E::Begin(G::Normal)),
+                    I::Event(E::StateChange(SC::Color(CC {
+                        color: frame_color,
+                        target: CT::Text,
+                    }))),
+                    I::Event(E::StateChange(SC::Color(CC {
+                        color: background_color,
+                        target: CT::Background,
+                    }))),
+                ]);
                 self.text_argument()?;
                 E::End
-            },
+            }
 
             ///////////////////////////////
             // Delimiters size modifiers //
@@ -514,7 +514,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
 
                 self.buffer.extend([
                     I::Event(E::Begin(G::LeftRight(opening, closing))),
-                    I::SubGroup { content: group_content, allowed_alignment_count: None },
+                    I::SubGroup {
+                        content: group_content,
+                        allowed_alignment_count: None,
+                    },
                     I::Event(E::End),
                 ]);
 
@@ -560,7 +563,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "iiint" => self.large_op('∭', false),
             "smallint" => {
                 self.state.allow_suffix_modifiers = true;
-                E::Content(C::LargeOp { content: '∫', small: true })
+                E::Content(C::LargeOp {
+                    content: '∫',
+                    small: true,
+                })
             }
             "iiiint" => self.large_op('⨌', false),
             "intcap" => self.large_op('⨙', false),
@@ -686,8 +692,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 }
             }
             "mkern" => {
-                let dimension =
-                    lex::dimension(&mut self.content)?;
+                let dimension = lex::dimension(&mut self.content)?;
                 if dimension.1 == DimensionUnit::Mu {
                     E::Space {
                         width: Some(dimension),
@@ -700,9 +705,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             }
             "mskip" => {
                 let glue = lex::glue(&mut self.content)?;
-                if glue.0.1 == DimensionUnit::Mu
+                if glue.0 .1 == DimensionUnit::Mu
                     && glue.1.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
-                    && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu) {
+                    && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
+                {
                     E::Space {
                         width: Some(glue.0),
                         height: None,
@@ -713,9 +719,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 }
             }
             "hspace" => {
-                let Argument::Group(mut argument) =
-                    lex::argument(&mut self.content)?
-                else {
+                let Argument::Group(mut argument) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::DimensionArgument);
                 };
                 let glue = lex::glue(&mut argument)?;
@@ -750,7 +754,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "complement" => ordinary('∁'),
             "nexists" => ordinary('∄'),
             "neg" | "lnot" => ordinary('¬'),
-            
+
             "therefore" => relation('∴'),
             "because" => relation('∵'),
             "subset" => relation('⊂'),
@@ -767,9 +771,9 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "gets" => relation('←'),
             "iff" => relation('⟺'),
             "notni" => relation('∌'),
-            
+
             "land" => binary('∧'),
-            
+
             "emptyset" => ordinary('∅'),
             "varnothing" => ordinary('⌀'),
 
@@ -804,7 +808,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "sqcup" => binary('⊔'),
             "sqcap" => binary('⊓'),
             "lessdot" => binary('⋖'),
-            "smallsetminus" => E::Content(C::BinaryOp { content: '∖', small: false }),
+            "smallsetminus" => E::Content(C::BinaryOp {
+                content: '∖',
+                small: false,
+            }),
             "barwedge" => binary('⌅'),
             "curlyvee" => binary('⋎'),
             "curlywedge" => binary('⋏'),
@@ -957,8 +964,14 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "vartriangleright" => relation('⊳'),
             "curlyeqsucc" => relation('⋟'),
             "le" => relation('≤'),
-            "shortmid" => E::Content(C::Relation { content: '∣', small: true }),
-            "shortparallel" => E::Content(C::Relation { content: '∥', small: true }),
+            "shortmid" => E::Content(C::Relation {
+                content: '∣',
+                small: true,
+            }),
+            "shortparallel" => E::Content(C::Relation {
+                content: '∥',
+                small: true,
+            }),
             "vdash" => relation('⊢'),
             "dashv" => relation('⊣'),
             "leq" => relation('≤'),
@@ -980,7 +993,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "veeeq" => relation('≚'),
             "eqeq" => relation('⩵'),
             "lesseqqgtr" => relation('⪋'),
-            "smallsmile" => E::Content(C::Relation { content: '⌣', small: true }),
+            "smallsmile" => E::Content(C::Relation {
+                content: '⌣',
+                small: true,
+            }),
             "wedgeq" => relation('≙'),
             "bowtie" | "Join" => relation('⋈'),
             // Negated relations
@@ -1032,7 +1048,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "nshortmid" => relation('∤'),
             "nvdash" => relation('⊬'),
             "ngeq" => relation('≱'),
-            "nshortparallel" => E::Content(C::Relation { content: '∦', small: true }),
+            "nshortparallel" => E::Content(C::Relation {
+                content: '∦',
+                small: true,
+            }),
             "nvDash" => relation('⊭'),
             "ngeqq" => relation('≱'),
             "nsim" => relation('≁'),
@@ -1128,27 +1147,27 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "xleftarrow" => {
                 let above = lex::argument(&mut self.content)?;
                 self.buffer.extend([
-                   I::Event(E::Script {
+                    I::Event(E::Script {
                         ty: ST::Superscript,
                         position: SP::AboveBelow,
                     }),
-                    I::Event(relation('⟵'))
+                    I::Event(relation('⟵')),
                 ]);
                 self.handle_argument(above)?;
                 return Ok(());
-            },
+            }
             "xrightarrow" => {
                 let above = lex::argument(&mut self.content)?;
                 self.buffer.extend([
-                   I::Event(E::Script {
+                    I::Event(E::Script {
                         ty: ST::Superscript,
                         position: SP::AboveBelow,
                     }),
-                    I::Event(relation('⟶'))
+                    I::Event(relation('⟶')),
                 ]);
                 self.handle_argument(above)?;
                 return Ok(());
-            },
+            }
 
             ///////////////
             // Fractions //
@@ -1161,21 +1180,29 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 let str = &mut self.content;
                 let ldelim_argument = lex::argument(str)?;
                 let ldelim = match ldelim_argument {
-                    Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
-                    Argument::Group(group) => if group.is_empty() {
-                        None
-                    } else {
-                        return Err(ErrorKind::Delimiter);
-                    },
+                    Argument::Token(token) => {
+                        Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?)
+                    }
+                    Argument::Group(group) => {
+                        if group.is_empty() {
+                            None
+                        } else {
+                            return Err(ErrorKind::Delimiter);
+                        }
+                    }
                 };
                 let rdelim_argument = lex::argument(str)?;
                 let rdelim = match rdelim_argument {
-                    Argument::Token(token) => Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?),
-                    Argument::Group(group) => if group.is_empty() {
-                        None
-                    } else {
-                        return Err(ErrorKind::Delimiter);
-                    },
+                    Argument::Token(token) => {
+                        Some(token_to_delim(token).ok_or(ErrorKind::Delimiter)?)
+                    }
+                    Argument::Group(group) => {
+                        if group.is_empty() {
+                            None
+                        } else {
+                            return Err(ErrorKind::Delimiter);
+                        }
+                    }
                 };
                 let bar_size_argument = lex::argument(str)?;
                 let bar_size = match bar_size_argument {
@@ -1192,50 +1219,63 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 let display_style_argument = lex::argument(str)?;
                 let display_style = match display_style_argument {
                     Argument::Token(t) => match t {
-                            Token::ControlSequence(_) => return Err(ErrorKind::Argument),
-                            Token::Character(c) => Some(match c.into() {
-                                '0' => S::Display,
-                                '1' => S::Text,
-                                '2' => S::Script,
-                                '3' => S::ScriptScript,
-                                _ => return Err(ErrorKind::Argument),
-                            }),
-                    },
-                    Argument::Group(group) => {
-                        match group {
-                            "0" => Some(S::Display),
-                            "1" => Some(S::Text),
-                            "2" => Some(S::Script),
-                            "3" => Some(S::ScriptScript),
-                            "" => None,
+                        Token::ControlSequence(_) => return Err(ErrorKind::Argument),
+                        Token::Character(c) => Some(match c.into() {
+                            '0' => S::Display,
+                            '1' => S::Text,
+                            '2' => S::Script,
+                            '3' => S::ScriptScript,
                             _ => return Err(ErrorKind::Argument),
-                        }
-                    }
+                        }),
+                    },
+                    Argument::Group(group) => match group {
+                        "0" => Some(S::Display),
+                        "1" => Some(S::Text),
+                        "2" => Some(S::Script),
+                        "3" => Some(S::ScriptScript),
+                        "" => None,
+                        _ => return Err(ErrorKind::Argument),
+                    },
                 };
 
-                self.fraction_like(ldelim.map(|d| d.0), rdelim.map(|d| d.0), bar_size, display_style)?;
-                
-                return Ok(())
+                self.fraction_like(
+                    ldelim.map(|d| d.0),
+                    rdelim.map(|d| d.0),
+                    bar_size,
+                    display_style,
+                )?;
+
+                return Ok(());
             }
             "cfrac" | "dfrac" => {
                 self.fraction_like(None, None, None, Some(S::Display))?;
-                return Ok(())
+                return Ok(());
             }
             "tfrac" => {
                 self.fraction_like(None, None, None, Some(S::Text))?;
-                return Ok(())
+                return Ok(());
             }
             "binom" => {
                 self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), None)?;
-                return Ok(())
+                return Ok(());
             }
             "dbinom" => {
-                self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), Some(S::Display))?;
-                return Ok(())
+                self.fraction_like(
+                    Some('('),
+                    Some(')'),
+                    Some((0., DimensionUnit::Em)),
+                    Some(S::Display),
+                )?;
+                return Ok(());
             }
             "tbinom" => {
-                self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), Some(S::Text))?;
-                return Ok(())
+                self.fraction_like(
+                    Some('('),
+                    Some(')'),
+                    Some((0., DimensionUnit::Em)),
+                    Some(S::Text),
+                )?;
+                return Ok(());
             }
             "overset" | "stackrel" => {
                 self.buffer.push(I::Event(E::Script {
@@ -1270,11 +1310,8 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             // Radicals //
             //////////////
             "sqrt" => {
-                if let Some(index) =
-                    lex::optional_argument(&mut self.content)?
-                {
-                    self.buffer
-                        .push(I::Event(E::Visual(V::Root)));
+                if let Some(index) = lex::optional_argument(&mut self.content)? {
+                    self.buffer.push(I::Event(E::Visual(V::Root)));
                     let arg = lex::argument(&mut self.content)?;
                     self.handle_argument(arg)?;
                     self.buffer.push(I::SubGroup {
@@ -1282,8 +1319,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                         allowed_alignment_count: None,
                     });
                 } else {
-                    self.buffer
-                        .push(I::Event(E::Visual(V::SquareRoot)));
+                    self.buffer.push(I::Event(E::Visual(V::SquareRoot)));
                     let arg = lex::argument(&mut self.content)?;
                     self.handle_argument(arg)?;
                 }
@@ -1316,8 +1352,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "text" => return self.text_argument(),
             // TODO: should cancel be its own event?
             "not" | "cancel" => {
-                self.buffer
-                    .push(I::Event(E::Visual(V::Negation)));
+                self.buffer.push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
                 self.handle_argument(argument)?;
                 return Ok(());
@@ -1328,10 +1363,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     return Err(ErrorKind::InvalidCharNumber);
                 }
                 E::Content(C::Ordinary {
-                    content: char::from_u32(number as u32).expect("the number is a valid char since it is less than 256"),
+                    content: char::from_u32(number as u32)
+                        .expect("the number is a valid char since it is less than 256"),
                     stretchy: false,
                 })
-            },
+            }
             "relax" => {
                 return if self.state.handling_argument {
                     Err(ErrorKind::Relax)
@@ -1344,7 +1380,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 let group = lex::group_content(&mut self.content, "begingroup", "endgroup")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
-                    I::SubGroup { content: group, allowed_alignment_count: None },
+                    I::SubGroup {
+                        content: group,
+                        allowed_alignment_count: None,
+                    },
                     I::Event(E::End),
                 ]);
                 return Ok(());
@@ -1362,131 +1401,171 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     "array" => {
                         let (grouping, count) = self.array_environment()?;
                         (grouping, None, count)
-                    },
+                    }
                     "darray" => {
                         style = Some(S::Display);
                         let (grouping, count) = self.array_environment()?;
                         (grouping, None, count)
-                    },
-                    "matrix" => (G::Matrix {
-                        alignment: ColumnAlignment::Center,
-                    }, None, u16::MAX),
-                    "matrix*" => {
-                        (G::Matrix {
-                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center)
-                        }, None, u16::MAX)
-                    },
+                    }
+                    "matrix" => (
+                        G::Matrix {
+                            alignment: ColumnAlignment::Center,
+                        },
+                        None,
+                        u16::MAX,
+                    ),
+                    "matrix*" => (
+                        G::Matrix {
+                            alignment: self
+                                .optional_alignment()?
+                                .unwrap_or(ColumnAlignment::Center),
+                        },
+                        None,
+                        u16::MAX,
+                    ),
                     "smallmatrix" => {
                         style = Some(S::Text);
-                        (G::Matrix {
-                            alignment: ColumnAlignment::Center,
-                        }, None, u16::MAX)
+                        (
+                            G::Matrix {
+                                alignment: ColumnAlignment::Center,
+                            },
+                            None,
+                            u16::MAX,
+                        )
                     }
-                    "pmatrix" => {
-                        (G::Matrix {
+                    "pmatrix" => (
+                        G::Matrix {
                             alignment: ColumnAlignment::Center,
-                        }, Some(G::LeftRight(Some('('), Some(')'))), u16::MAX)
-                    },
-                    "pmatrix*" => {
-                        (G::Matrix {
-                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
-                        }, Some(G::LeftRight(Some('('), Some(')'))), u16::MAX)
-                    },
-                    "bmatrix" => {
-                        (G::Matrix {
+                        },
+                        Some(G::LeftRight(Some('('), Some(')'))),
+                        u16::MAX,
+                    ),
+                    "pmatrix*" => (
+                        G::Matrix {
+                            alignment: self
+                                .optional_alignment()?
+                                .unwrap_or(ColumnAlignment::Center),
+                        },
+                        Some(G::LeftRight(Some('('), Some(')'))),
+                        u16::MAX,
+                    ),
+                    "bmatrix" => (
+                        G::Matrix {
                             alignment: ColumnAlignment::Center,
-                        }, Some(G::LeftRight(Some('['), Some(']'))), u16::MAX)
-                    },
-                    "bmatrix*" => {
-                        (G::Matrix {
-                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
-                        }, Some(G::LeftRight(Some('['), Some(']'))), u16::MAX)
-                    },
-                    "vmatrix" => {
-                        (G::Matrix {
+                        },
+                        Some(G::LeftRight(Some('['), Some(']'))),
+                        u16::MAX,
+                    ),
+                    "bmatrix*" => (
+                        G::Matrix {
+                            alignment: self
+                                .optional_alignment()?
+                                .unwrap_or(ColumnAlignment::Center),
+                        },
+                        Some(G::LeftRight(Some('['), Some(']'))),
+                        u16::MAX,
+                    ),
+                    "vmatrix" => (
+                        G::Matrix {
                             alignment: ColumnAlignment::Center,
-                        }, Some(G::LeftRight(Some('|'), Some('|'))), u16::MAX)
-                    },
-                    "vmatrix*" => {
-                        (G::Matrix {
-                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
-                        }, Some(G::LeftRight(Some('|'), Some('|'))), u16::MAX)
-                    },
-                    "Vmatrix" => {
-                        (G::Matrix {
+                        },
+                        Some(G::LeftRight(Some('|'), Some('|'))),
+                        u16::MAX,
+                    ),
+                    "vmatrix*" => (
+                        G::Matrix {
+                            alignment: self
+                                .optional_alignment()?
+                                .unwrap_or(ColumnAlignment::Center),
+                        },
+                        Some(G::LeftRight(Some('|'), Some('|'))),
+                        u16::MAX,
+                    ),
+                    "Vmatrix" => (
+                        G::Matrix {
                             alignment: ColumnAlignment::Center,
-                        }, Some(G::LeftRight(Some('‖'), Some('‖'))), u16::MAX)
-                    },
-                    "Vmatrix*" => {
-                        (G::Matrix {
-                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
-                        }, Some(G::LeftRight(Some('‖'), Some('‖'))), u16::MAX)
-                    },
-                    "Bmatrix" => {
-                        (G::Matrix {
+                        },
+                        Some(G::LeftRight(Some('‖'), Some('‖'))),
+                        u16::MAX,
+                    ),
+                    "Vmatrix*" => (
+                        G::Matrix {
+                            alignment: self
+                                .optional_alignment()?
+                                .unwrap_or(ColumnAlignment::Center),
+                        },
+                        Some(G::LeftRight(Some('‖'), Some('‖'))),
+                        u16::MAX,
+                    ),
+                    "Bmatrix" => (
+                        G::Matrix {
                             alignment: ColumnAlignment::Center,
-                        }, Some(G::LeftRight(Some('{'), Some('}'))), u16::MAX)
-                    },
-                    "Bmatrix*" => {
-                        (G::Matrix {
-                            alignment: self.optional_alignment()?.unwrap_or(ColumnAlignment::Center),
-                        }, Some(G::LeftRight(Some('{'), Some('}'))), u16::MAX)
-                    },
-                    "cases" => (G::Cases {
-                        left: true,
-                    }, None, 1),
+                        },
+                        Some(G::LeftRight(Some('{'), Some('}'))),
+                        u16::MAX,
+                    ),
+                    "Bmatrix*" => (
+                        G::Matrix {
+                            alignment: self
+                                .optional_alignment()?
+                                .unwrap_or(ColumnAlignment::Center),
+                        },
+                        Some(G::LeftRight(Some('{'), Some('}'))),
+                        u16::MAX,
+                    ),
+                    "cases" => (G::Cases { left: true }, None, 1),
                     "dcases" => {
                         style = Some(S::Display);
-                        (G::Cases {
-                            left: true,
-                        }, None, 1)
-                    },
-                    "rcases" => (G::Cases {
-                        left: false,
-                    }, None, 1),
+                        (G::Cases { left: true }, None, 1)
+                    }
+                    "rcases" => (G::Cases { left: false }, None, 1),
                     "drcases" => {
                         style = Some(S::Display);
-                        (G::Cases {
-                            left: false,
-                        }, None, 1)
-                    },
+                        (G::Cases { left: false }, None, 1)
+                    }
                     "equation" => todo!(),
                     "equation*" => todo!(),
-                    "align" => (G::Align {
-                        eq_numbers: true,
-                    }, None, u16::MAX),
-                    "align*" => (G::Align {
-                        eq_numbers: false,
-                    }, None, u16::MAX),
+                    "align" => (G::Align { eq_numbers: true }, None, u16::MAX),
+                    "align*" => (G::Align { eq_numbers: false }, None, u16::MAX),
                     "aligned" => (G::Aligned, None, u16::MAX),
-                    "gather" => (G::Gather {
-                        eq_numbers: true,
-                    }, None, 0),
-                    "gather*" => (G::Gather {
-                        eq_numbers: false,
-                    }, None, 0),
+                    "gather" => (G::Gather { eq_numbers: true }, None, 0),
+                    "gather*" => (G::Gather { eq_numbers: false }, None, 0),
                     "gathered" => (G::Gathered, None, 0),
                     "alignat" => {
                         let pairs = match lex::argument(&mut self.content)? {
                             Argument::Group(mut content) => lex::unsigned_integer(&mut content),
                             _ => Err(ErrorKind::Argument),
                         }? as u16;
-                        (G::Alignat { pairs, eq_numbers: true }, None, (pairs * 2).saturating_sub(1))
-                    },
+                        (
+                            G::Alignat {
+                                pairs,
+                                eq_numbers: true,
+                            },
+                            None,
+                            (pairs * 2).saturating_sub(1),
+                        )
+                    }
                     "alignat*" => {
                         let pairs = match lex::argument(&mut self.content)? {
                             Argument::Group(mut content) => lex::unsigned_integer(&mut content),
                             _ => Err(ErrorKind::Argument),
                         }? as u16;
-                        (G::Alignat { pairs, eq_numbers: false }, None, (pairs * 2).saturating_sub(1))
-                    },
+                        (
+                            G::Alignat {
+                                pairs,
+                                eq_numbers: false,
+                            },
+                            None,
+                            (pairs * 2).saturating_sub(1),
+                        )
+                    }
                     "alignedat" => {
                         let pairs = match lex::argument(&mut self.content)? {
                             Argument::Group(mut content) => lex::unsigned_integer(&mut content),
                             _ => Err(ErrorKind::Argument),
                         }? as u16;
                         (G::Alignedat { pairs }, None, (pairs * 2).saturating_sub(1))
-                    },
+                    }
                     "subarray" => {
                         let alignment = match lex::argument(&mut self.content)? {
                             Argument::Group("l") => ColumnAlignment::Left,
@@ -1495,7 +1574,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                             _ => return Err(ErrorKind::Argument),
                         };
                         (G::SubArray { alignment }, None, 0)
-                    },
+                    }
                     "multline" => (G::Multline, None, 0),
                     "split" => (G::Split, None, 1),
                     _ => return Err(ErrorKind::Environment),
@@ -1507,19 +1586,22 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 } else {
                     false
                 };
-                
+
                 let content = lex::group_content(
                     &mut self.content,
                     &format!(r"\begin{{{argument}}}"),
-                    &format!(r"\end{{{argument}}}")
+                    &format!(r"\end{{{argument}}}"),
                 )?;
                 self.buffer.push(I::Event(E::Begin(environment)));
                 if let Some(style) = style {
                     self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
                 }
                 self.buffer.extend([
-                    I::SubGroup { content, allowed_alignment_count: Some(AlignmentCount::new(align_count))},
-                    I::Event(E::End)
+                    I::SubGroup {
+                        content,
+                        allowed_alignment_count: Some(AlignmentCount::new(align_count)),
+                    },
+                    I::Event(E::End),
                 ]);
 
                 if wrap_used {
@@ -1532,12 +1614,16 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "\\" | "cr" if self.state.allowed_alignment_count.is_some() => {
                 self.state.allowed_alignment_count.as_mut().unwrap().reset();
                 E::NewLine
-            },
+            }
 
             // Delimiters
             cs if control_sequence_delimiter_map(cs).is_some() => {
                 let (content, ty) = control_sequence_delimiter_map(cs).unwrap();
-                E::Content(C::Delimiter { content, size: None, ty })
+                E::Content(C::Delimiter {
+                    content,
+                    size: None,
+                    ty,
+                })
             }
 
             // Spacing
@@ -1553,8 +1639,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     fn sized_delim(&mut self, size: DelimiterSize) -> InnerResult<()> {
         let current = &mut self.content;
         let (content, ty) = lex::delimiter(current)?;
-        self.buffer
-            .push(I::Event(E::Content(C::Delimiter { content, size: Some(size), ty })));
+        self.buffer.push(I::Event(E::Content(C::Delimiter {
+            content,
+            size: Some(size),
+            ty,
+        })));
         Ok(())
     }
 
@@ -1573,7 +1662,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 };
             }
             Argument::Group(group) => {
-                self.buffer.push(I::SubGroup { content: group, allowed_alignment_count: None });
+                self.buffer.push(I::SubGroup {
+                    content: group,
+                    allowed_alignment_count: None,
+                });
             }
         };
         self.buffer.push(I::Event(E::End));
@@ -1588,11 +1680,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             position: SP::AboveBelow,
         }));
         self.handle_argument(argument)?;
-        self.buffer
-            .push(I::Event(E::Content(C::Ordinary {
-                content: accent,
-                stretchy,
-            })));
+        self.buffer.push(I::Event(E::Content(C::Ordinary {
+            content: accent,
+            stretchy,
+        })));
         Ok(())
     }
 
@@ -1604,11 +1695,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             position: SP::AboveBelow,
         }));
         self.handle_argument(argument)?;
-        self.buffer
-            .push(I::Event(E::Content(C::Ordinary {
-                content,
-                stretchy: true,
-            })));
+        self.buffer.push(I::Event(E::Content(C::Ordinary {
+            content,
+            stretchy: true,
+        })));
 
         Ok(())
     }
@@ -1635,13 +1725,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     fn text_argument(&mut self) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
         self.buffer
-            .push(I::Event(E::Content(C::Text(
-                match argument {
-                    Argument::Token(Token::Character(c)) => c.as_str(),
-                    Argument::Group(inner) => inner,
-                    _ => return Err(ErrorKind::ControlSequenceAsArgument),
-                },
-            ))));
+            .push(I::Event(E::Content(C::Text(match argument {
+                Argument::Token(Token::Character(c)) => c.as_str(),
+                Argument::Group(inner) => inner,
+                _ => return Err(ErrorKind::ControlSequenceAsArgument),
+            }))));
         Ok(())
     }
 
@@ -1650,11 +1738,12 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         open: Option<char>,
         close: Option<char>,
         bar_size: Option<(f32, DimensionUnit)>,
-        style: Option<S>
+        style: Option<S>,
     ) -> InnerResult<()> {
         let open_close_group = open.is_some() || close.is_some();
         if open_close_group {
-            self.buffer.push(I::Event(E::Begin(G::LeftRight(open, close))));
+            self.buffer
+                .push(I::Event(E::Begin(G::LeftRight(open, close))));
         }
         if let Some(style) = style {
             if !open_close_group {
@@ -1662,7 +1751,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             }
             self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
         };
-        
+
         self.buffer.push(I::Event(E::Visual(V::Fraction(bar_size))));
         let numerator = lex::argument(&mut self.content)?;
         self.handle_argument(numerator)?;
@@ -1671,7 +1760,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         if open_close_group || style.is_some() {
             self.buffer.push(I::Event(E::End));
         }
-                  
+
         Ok(())
     }
 
@@ -1679,21 +1768,25 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         let Argument::Group(array_columns_str) = lex::argument(&mut self.content)? else {
             return Err(ErrorKind::Argument);
         };
-        
+
         let mut column_count = 0;
-        let array_columns = array_columns_str.chars().map(|c|  {
-        column_count += 1;
-        Ok(match c {
-            'c' => AC::Column(ColumnAlignment::Center),
-            'l' => AC::Column(ColumnAlignment::Left),
-            'r' => AC::Column(ColumnAlignment::Right),
-            '|' =>  {
-                column_count -= 1;
-                AC::VerticalLine
-            }
-            _ => return Err(ErrorKind::Argument), 
-        })}).collect::<Result<_, _>>()?;
-        
+        let array_columns = array_columns_str
+            .chars()
+            .map(|c| {
+                column_count += 1;
+                Ok(match c {
+                    'c' => AC::Column(ColumnAlignment::Center),
+                    'l' => AC::Column(ColumnAlignment::Left),
+                    'r' => AC::Column(ColumnAlignment::Right),
+                    '|' => {
+                        column_count -= 1;
+                        AC::VerticalLine
+                    }
+                    _ => return Err(ErrorKind::Argument),
+                })
+            })
+            .collect::<Result<_, _>>()?;
+
         Ok((G::Array(array_columns), column_count))
     }
 
@@ -1713,7 +1806,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
 fn ordinary(ident: char) -> E<'static> {
     E::Content(C::Ordinary {
         content: ident,
-        stretchy: false
+        stretchy: false,
     })
 }
 
@@ -1727,7 +1820,10 @@ fn relation(rel: char) -> E<'static> {
 
 #[inline]
 fn binary(op: char) -> E<'static> {
-    E::Content(C::BinaryOp{ content: op, small: false })
+    E::Content(C::BinaryOp {
+        content: op,
+        small: false,
+    })
 }
 
 // TODO implementations:

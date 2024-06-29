@@ -1,8 +1,9 @@
-use crate::{attribute::{Dimension, DimensionUnit, Glue}, event::DelimiterType};
-
-use super::{
-    tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token,
+use crate::{
+    attribute::{Dimension, DimensionUnit, Glue},
+    event::DelimiterType,
 };
+
+use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///

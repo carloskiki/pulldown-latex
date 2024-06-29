@@ -150,9 +150,10 @@ impl<'a> Iterator for Parser<'a> {
                         if desc.subscript_start > desc.superscript_start {
                             let content = self.buffer.drain(desc.superscript_start..).rev();
                             let added_len = content.len();
-                            
+
                             self.instruction_stack.reserve(added_len);
-                            let spare = &mut self.instruction_stack.spare_capacity_mut()[..added_len];
+                            let spare =
+                                &mut self.instruction_stack.spare_capacity_mut()[..added_len];
                             let mut idx = desc.subscript_start - desc.superscript_start;
 
                             for e in content {
@@ -166,7 +167,10 @@ impl<'a> Iterator for Parser<'a> {
                             // Safety: The new length is less than the vector's capacity because we
                             // reserved `added_len` previously. Every element in the vector up to
                             // that new length is also initialized by the loop.
-                            unsafe { self.instruction_stack.set_len(self.instruction_stack.len() + added_len) };
+                            unsafe {
+                                self.instruction_stack
+                                    .set_len(self.instruction_stack.len() + added_len)
+                            };
                         } else {
                             self.instruction_stack
                                 .extend(self.buffer.drain(desc.subscript_start..).rev());
@@ -399,10 +403,7 @@ struct AlignmentCount {
 
 impl AlignmentCount {
     fn new(max: u16) -> Self {
-        Self {
-            count: 0,
-            max,
-        }
+        Self { count: 0, max }
     }
 
     fn reset(&mut self) {

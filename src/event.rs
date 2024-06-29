@@ -80,10 +80,7 @@ pub enum Content<'a> {
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { content: char, small: bool },
     /// A relation, such as `=`, `≠`, `≈`, etc.
-    Relation {
-        content: char,
-        small: bool,
-    },
+    Relation { content: char, small: bool },
     /// An opening, closing, or fence delimiter, such as `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
     Delimiter {
         content: char,
@@ -227,36 +224,19 @@ pub enum Grouping {
     Normal,
     LeftRight(Option<char>, Option<char>),
     Array(Box<[ArrayColumn]>),
-    Matrix {
-        alignment: ColumnAlignment,
-    },
-    Cases {
-        left: bool,
-    },
-    Equation {
-        eq_numbers: bool,
-    },
-    Align {
-        eq_numbers: bool,
-    },
+    Matrix { alignment: ColumnAlignment },
+    Cases { left: bool },
+    Equation { eq_numbers: bool },
+    Align { eq_numbers: bool },
     Aligned,
     // According to what was specified
-    SubArray {
-        alignment: ColumnAlignment,
-    },
+    SubArray { alignment: ColumnAlignment },
     // Same as align, but without space between columns, and specified number of left right
     // pairs.
-    Alignat {
-        pairs: u16,
-        eq_numbers: bool,
-    },
-    Alignedat {
-        pairs: u16,
-    },
+    Alignat { pairs: u16, eq_numbers: bool },
+    Alignedat { pairs: u16 },
     // All center
-    Gather {
-        eq_numbers: bool,
-    },
+    Gather { eq_numbers: bool },
     Gathered,
     // First: left, last: right, in between: center
     Multline,

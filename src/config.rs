@@ -17,7 +17,7 @@ pub struct RenderConfig<'a> {
     pub error_color: (u8, u8, u8),
     /// If true, a `xml` namespace (`xmlns="http://www.w3.org/1998/Math/MathML"`) will be written
     /// into the `<math>` element.
-    /// 
+    ///
     /// This namespace is unnecessary for modern browsers but can be helpful for other user agents,
     /// such as Microsoft Word.
     pub xml: bool,

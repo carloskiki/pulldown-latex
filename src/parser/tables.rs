@@ -4,6 +4,7 @@ use crate::event::DelimiterType;
 
 use super::Token;
 
+#[rustfmt::skip]
 pub fn is_binary(c: char) -> bool {
     matches!(
         c,
@@ -34,6 +35,7 @@ pub fn is_binary(c: char) -> bool {
     )
 }
 
+#[rustfmt::skip]
 pub fn is_relation(c: char) -> bool {
     matches!(
         c,
@@ -104,23 +106,6 @@ pub fn is_relation(c: char) -> bool {
         '\u{2B00}'..='\u{2B11}' | '\u{2B30}'..='\u{2B44}' | '\u{2B45}' | '\u{2B46}' | '\u{2B47}'..='\u{2B4C}'
     )
 }
-
-// TODO: check if we have missing ones in this:
-// F - Fence - unpaired delimiter (often used as opening or closing)
-// 007C; 2016; 2980; 2982; 2999; 299A;
-
-// O - Opening - usually paired with closing delimiter
-// 0028; 005B; 007B; 301A; 2308; 230A; 231C; 231E; 2329;
-// 2772; 27E6; 27E8; 27EA; 27EC; 27EE; 2983; 2985; 2987;
-// 2989; 298D; 298F; 2991; 2993; 2995; 2997; 29D8; 29DA;
-// 29FC; 3008; 301A;
-
-// C - Closing - usually paired with opening delimiter
-// 0029; 005D; 007D; 2309; 230B; 231D; 231F; 232A; 2773;
-// 27E7; 27E9; 27EB; 27ED; 27EF; 2984; 2986; 2988; 298A;
-// 298C; 298E; 2990; 2992; 2994; 2996; 2998; 29D9; 29DB;
-// 29FD; 3009; 301B;
-
 
 #[rustfmt::skip]
 pub fn char_delimiter_map(c: char) -> Option<(char, DelimiterType)> {
@@ -208,8 +193,8 @@ pub fn control_sequence_delimiter_map(cs: &str) -> Option<(char, DelimiterType)>
 
         "vert" => ('|', DelimiterType::Fence),
         "lvert" => ('|', DelimiterType::Open),
-        "rvert"  => ('|', DelimiterType::Close),
-        "|" | "Vert"  => ('‖', DelimiterType::Fence),
+        "rvert" => ('|', DelimiterType::Close),
+        "|" | "Vert" => ('‖', DelimiterType::Fence),
         "lVert" => ('‖', DelimiterType::Open),
         "rVert" => ('‖', DelimiterType::Close),
         "uparrow" => ('↑', DelimiterType::Fence),

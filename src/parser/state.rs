@@ -11,7 +11,7 @@ pub struct ParserState<'a> {
     /// Whether the parser should skip suffix parsing for the current event.
     pub skip_suffixes: bool,
     /// Whether we are currently handling an arument to a control sequence.
-    /// 
+    ///
     /// This affects things like whether we can parse the `\relax` command and
     /// subscripts/superscripts.
     pub handling_argument: bool,

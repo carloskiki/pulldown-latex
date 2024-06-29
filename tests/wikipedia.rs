@@ -210,7 +210,7 @@ round_trip!(super_super, r"10^{10^{8}}");
 
 round_trip!(
     preceding_and_or_additional,
-//     r"\sideset{_1^2}{_3^4}\prod_a^b",
+    //     r"\sideset{_1^2}{_3^4}\prod_a^b",
     r"{}_1^2\!\Omega_3^4"
 );
 
@@ -375,18 +375,18 @@ round_trip!(
     f(x) & = (a+b)^2 \\
     & = a^2+2ab+b^2 \\
     \end{align}",
-//     r"\begin{alignat}{2}
-//     f(x) & = (a-b)^2 \\
-//     & = a^2-2ab+b^2 \\
-//     \end{alignat}",
+    //     r"\begin{alignat}{2}
+    //     f(x) & = (a-b)^2 \\
+    //     & = a^2-2ab+b^2 \\
+    //     \end{alignat}",
     r"\begin{align}
     f(a,b) & = (a+b)^2 && = (a+b)(a+b) \\
     & = a^2+ab+ba+b^2  && = a^2+2ab+b^2 \\
     \end{align}",
-//     r"\begin{alignat}{3}
-//     f(a,b) & = (a+b)^2 && = (a+b)(a+b) \\
-//     & = a^2+ab+ba+b^2  && = a^2+2ab+b^2 \\
-//     \end{alignat}",
+    //     r"\begin{alignat}{3}
+    //     f(a,b) & = (a+b)^2 && = (a+b)(a+b) \\
+    //     & = a^2+ab+ba+b^2  && = a^2+2ab+b^2 \\
+    //     \end{alignat}",
     r"\begin{array}{lcl}
     z & = & a \\
     f(x,y,z) & = & x + y + z
@@ -394,15 +394,14 @@ round_trip!(
     r"\begin{array}{lcr}
     z & = & a \\
     f(x,y,z) & = & x + y + z
-    \end{array}"
-//     r"\begin{alignat}{4}
-//     F:\; && C(X) && \;\to\;     & C(X) \\
-//          && g    && \;\mapsto\; & g^2
-//     \end{alignat}",
-//     r"\begin{alignat}{4}
-//     F:\; && C(X) && \;\to\;     && C(X) \\
-//          && g    && \;\mapsto\; && g^2
-//     \end{alignat}"
+    \end{array}" //     r"\begin{alignat}{4}
+                 //     F:\; && C(X) && \;\to\;     & C(X) \\
+                 //          && g    && \;\mapsto\; & g^2
+                 //     \end{alignat}",
+                 //     r"\begin{alignat}{4}
+                 //     F:\; && C(X) && \;\to\;     && C(X) \\
+                 //          && g    && \;\mapsto\; && g^2
+                 //     \end{alignat}"
 );
 
 // round_trip!(
