@@ -76,7 +76,6 @@ pub enum Content<'a> {
     Ordinary { content: char, stretchy: bool },
     /// A large operator, such as `\sum`, `\int`, `\prod`, etc.
     ///
-    // TODO: Deny movable limits in renderer
     LargeOp { content: char, small: bool },
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { content: char, small: bool },

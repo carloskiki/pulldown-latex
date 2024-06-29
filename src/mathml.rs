@@ -9,8 +9,8 @@ use crate::{
     attribute::{tex_to_css_em, Font},
     config::{DisplayMode, RenderConfig},
     event::{
-        ArrayColumn, ColorChange, ColorTarget, Content, DelimiterType, Event, Grouping,
-        ScriptPosition, ScriptType, StateChange, Style, Visual,
+        ArrayColumn, ColorChange, ColorTarget, ColumnAlignment, Content, DelimiterType, Event,
+        Grouping, ScriptPosition, ScriptType, StateChange, Style, Visual,
     },
 };
 
@@ -165,18 +165,40 @@ where
                         self.previous_atom = Some(Atom::Open);
                         EnvGrouping::LeftRight { closing }
                     }
-                    Grouping::Align => {
+                    Grouping::Align { eq_numbers } => {
                         self.writer
-                            .write_all(b"<mtable><mtr><mtd class=\"menv-right-align\">")?;
-                        EnvGrouping::Align { left_align: false }
+                            .write_all(b"<mtable class=\"menv-alignlike menv-align")?;
+                        if eq_numbers {
+                            self.writer.write_all(b"menv-with-eqn")?;
+                        }
+                        self.writer.write_all(b"\"><mtr><mtd>")?;
+                        EnvGrouping::Align
                     }
-                    Grouping::Matrix => {
-                        self.writer.write_all(b"<mtable><mtr><mtd>")?;
+                    Grouping::Matrix { alignment } => {
+                        self.writer.write_all(b"<mtable")?;
+                        match alignment {
+                            crate::event::ColumnAlignment::Left => {
+                                self.writer.write_all(b" class=\"menv-cells-left\"")?
+                            }
+                            crate::event::ColumnAlignment::Center => (),
+                            crate::event::ColumnAlignment::Right => {
+                                self.writer.write_all(b" class=\"menv-cells-right\"")?
+                            }
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
                         EnvGrouping::Matrix
                     }
-                    Grouping::Cases => {
-                        self.writer.write_all(b"<mrow><mo stretchy=\"true\">{</mo><mtable><mtr><mtd class=\"menv-left-align\">")?;
-                        EnvGrouping::Cases { used_align: false }
+                    Grouping::Cases { left } => {
+                        self.writer.write_all(b"<mrow>")?;
+                        if left {
+                            self.writer.write_all(b"<mo stretchy=\"true\">{</mo>")?;
+                        }
+                        self.writer
+                            .write_all(b"<mtable><mtr><mtd class=\"menv-left-align\">")?;
+                        EnvGrouping::Cases {
+                            left,
+                            used_align: false,
+                        }
                     }
                     Grouping::Array(cols) => {
                         let mut index = 0;
@@ -198,13 +220,13 @@ where
                         }
                         self.writer.write_all(b"><mtr><mtd")?;
                         match cols[index] {
-                            ArrayColumn::Left => {
+                            ArrayColumn::Column(ColumnAlignment::Left) => {
                                 self.writer.write_all(b" class=\"menv-left-align\"")?
                             }
-                            ArrayColumn::Right => {
+                            ArrayColumn::Column(ColumnAlignment::Right) => {
                                 self.writer.write_all(b" class=\"menv-right-align\"")?
                             }
-                            ArrayColumn::Center => {}
+                            ArrayColumn::Column(ColumnAlignment::Center) => {}
                             ArrayColumn::VerticalLine => {
                                 panic!("vertical line in place of column alignment")
                             }
@@ -215,6 +237,67 @@ where
                             cols_index: index + 1,
                         }
                     }
+                    Grouping::Aligned => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-alignlike menv-align\"><mtr><mtd>")?;
+                        EnvGrouping::Align
+                    }
+                    Grouping::SubArray { alignment } => {
+                        self.writer.write_all(b"<mtable")?;
+                        match alignment {
+                            crate::event::ColumnAlignment::Left => {
+                                self.writer.write_all(b" class=\"menv-cells-left\"")?
+                            }
+                            crate::event::ColumnAlignment::Center => (),
+                            crate::event::ColumnAlignment::Right => {
+                                self.writer.write_all(b" class=\"menv-cells-right\"")?
+                            }
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::SubArray
+                    }
+                    Grouping::Alignat { pairs, eq_numbers } => {
+                        self.writer.write_all(b"<mtable class=\"menv-alignlike")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" menv-with-eqn")?;
+                        }
+                        self.writer.write_all(b"\"><mtr><mtd>")?;
+                        EnvGrouping::Alignat {
+                            pairs,
+                            columns_used: 0,
+                        }
+                    }
+                    Grouping::Alignedat { pairs } => {
+                        self.writer.write_all(b"<mtable class=\"menv-alignlike\"")?;
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Alignat {
+                            pairs,
+                            columns_used: 0,
+                        }
+                    }
+                    Grouping::Gather { eq_numbers } => {
+                        self.writer.write_all(b"<mtable")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" class=\"menv-with-eqn\"")?;
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Gather
+                    }
+                    Grouping::Gathered => {
+                        self.writer.write_all(b"<mtable><mtr><mtd>")?;
+                        EnvGrouping::Gather
+                    }
+                    Grouping::Multline => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-multline\"><mtr><mtd>")?;
+                        EnvGrouping::Multline
+                    }
+                    Grouping::Split => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-alignlike\"><mtr><mtd>")?;
+                        EnvGrouping::Split { used_align: false }
+                    }
+                    Grouping::Equation { .. } => todo!(),
                 };
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
@@ -245,11 +328,22 @@ where
                         self.previous_atom = Some(Atom::Close);
                         self.writer.write_all(b"</mrow>")
                     }
-                    EnvGrouping::Matrix | EnvGrouping::Align { .. } | EnvGrouping::Array { .. } => {
+                    EnvGrouping::Matrix
+                    | EnvGrouping::Align { .. }
+                    | EnvGrouping::Array { .. }
+                    | EnvGrouping::SubArray
+                    | EnvGrouping::Gather
+                    | EnvGrouping::Multline
+                    | EnvGrouping::Split { .. }
+                    | EnvGrouping::Alignat { .. } => {
                         self.writer.write_all(b"</mtd></mtr></mtable>")
                     }
-                    EnvGrouping::Cases { .. } => {
-                        self.writer.write_all(b"</mtd></mtr></mtable></mrow>")
+                    EnvGrouping::Cases { left, .. } => {
+                        self.writer.write_all(b"</mtd></mtr></mtable>")?;
+                        if !left {
+                            self.writer.write_all(b"<mo stretchy=\"true\">}</mo>")?;
+                        }
+                        self.writer.write_all(b"</mrow>")
                     }
                 }
             }
@@ -335,46 +429,64 @@ where
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
                 match self.env_stack.last_mut() {
-                    Some(Environment::Group(EnvGrouping::Cases { .. })) => self
-                        .writer
-                        .write_all(b"</mtd></mtr><mtr><mtd class=\"menv-left-align\">"),
-                    Some(Environment::Group(EnvGrouping::Matrix)) => {
+                    Some(Environment::Group(
+                        EnvGrouping::Cases { used_align, .. } | EnvGrouping::Split { used_align },
+                    )) => {
+                        *used_align = false;
                         self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
                     }
-                    Some(Environment::Group(EnvGrouping::Align)) => self
-                        .writer
-                        .write_all(b"</mtd></mtr><mtr class=\"menv-align-row\"><mtd>"),
+                    Some(Environment::Group(
+                        EnvGrouping::Matrix
+                        | EnvGrouping::Align
+                        | EnvGrouping::Gather
+                        | EnvGrouping::SubArray
+                        | EnvGrouping::Multline,
+                    )) => self.writer.write_all(b"</mtd></mtr><mtr><mtd>"),
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
                         *cols_index =
                             (cols.first() == Some(&ArrayColumn::VerticalLine)) as usize + 1;
                         self.writer.write_all(b"</mtd></mtr><mtr><mtd")?;
                         match cols[*cols_index - 1] {
-                            ArrayColumn::Left => {
+                            ArrayColumn::Column(ColumnAlignment::Left) => {
                                 self.writer.write_all(b" class=\"menv-left-align\"")?
                             }
-                            ArrayColumn::Right => {
+                            ArrayColumn::Column(ColumnAlignment::Right) => {
                                 self.writer.write_all(b" class=\"menv-right-align\"")?
                             }
-                            ArrayColumn::Center => {}
+                            ArrayColumn::Column(ColumnAlignment::Center) => {}
                             ArrayColumn::VerticalLine => {
                                 panic!("vertical line in place of column alignment")
                             }
                         }
                         self.writer.write_all(b">")
                     }
-                    _ => panic!("math env does not support newlines"),
+                    Some(Environment::Group(EnvGrouping::Alignat { columns_used, .. })) => {
+                        *columns_used = 0;
+                        self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
+                    }
+
+                    _ => panic!("newline not allowed in current environment"),
                 }
             }
             Ok(Event::Alignment) => {
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
                 match self.env_stack.last_mut() {
-                    // Left align both
-                    Some(Environment::Group(EnvGrouping::Cases { used_align: false })) => self
-                        .writer
-                        .write_all(b"</mtd><mtd class=\"menv-left-align\">"),
+                    Some(Environment::Group(
+                        EnvGrouping::Cases {
+                            used_align: false, ..
+                        }
+                        | EnvGrouping::Split { used_align: false },
+                    )) => self.writer.write_all(b"</mtd><mtd>"),
                     // Center align all
-                    Some(Environment::Group(EnvGrouping::Matrix)) => {
+                    Some(Environment::Group(EnvGrouping::Align | EnvGrouping::Matrix)) => {
+                        self.writer.write_all(b"</mtd><mtd>")
+                    }
+                    Some(Environment::Group(EnvGrouping::Alignat {
+                        pairs,
+                        columns_used,
+                    })) if *columns_used / 2 <= *pairs => {
+                        *columns_used += 1;
                         self.writer.write_all(b"</mtd><mtd>")
                     }
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
@@ -384,18 +496,15 @@ where
                             *cols_index += 1;
                         }
                         self.writer.write_all(match cols[*cols_index] {
-                            ArrayColumn::Left => b"menv-left-align\">",
-                            ArrayColumn::Right => b"menv-right-align\">",
-                            ArrayColumn::Center => b"\">",
+                            ArrayColumn::Column(ColumnAlignment::Left) => b"menv-left-align\">",
+                            ArrayColumn::Column(ColumnAlignment::Right) => b"menv-right-align\">",
+                            ArrayColumn::Column(ColumnAlignment::Center) => b"\">",
                             ArrayColumn::VerticalLine => {
                                 panic!("vertical line in place of column alignment")
                             }
                         })?;
                         *cols_index += 1;
                         Ok(())
-                    }
-                    Some(Environment::Group(EnvGrouping::Align)) => {
-                        write!(self.writer, "</mtd><mtd>",)
                     }
                     _ => panic!("alignment not allowed in current environment"),
                 }
@@ -735,8 +844,19 @@ enum EnvGrouping {
     Matrix,
     Cases {
         used_align: bool,
+        left: bool,
     },
     Align,
+    Alignat {
+        pairs: u16,
+        columns_used: u16,
+    },
+    SubArray,
+    Gather,
+    Multline,
+    Split {
+        used_align: bool,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq)]

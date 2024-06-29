@@ -2,14 +2,38 @@
     font-size: 70%;
 }
 
-.menv-right-align .menv-align-row:nth-child(odd) {
+.menv-alignlike > mtr > mtd:nth-child(odd), .menv-cells-right > mtr > mtd, .menv-multline > mtr > mtd:last-child {
     text-align: right;
     text-align: -webkit-right;
     text-align: -moz-right
 }
 
-.menv-left-align .menv-align-row:nth-child(even) {
+.menv-alignlike > mtr > mtd:nth-child(even), .menv-cells-left > mtr > mtd, .menv-multline > mtr > mtd:first-child {
     text-align: left;
+}
+
+.menv-multline > mtr > mtd {
+    width: 100%;
+}
+
+.menv-align > mtr > mtd:nth-child(2n + 3) {
+  padding-left: 1em;
+}
+
+mtd {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.menv-with-eqn > mtr:not(:has(> mtd.menv-nonumber)) {
+  counter-increment: eq-number;
+}
+
+.menv-with-eqn > mtr:not(:has(> mtd.menv-nonumber))::after {
+  position: absolute;
+  right: 0;
+  padding: 0.5ex 0.4em;
+  content: "(" counter(eq-number) ")";
 }
 
 .menv-left-border {

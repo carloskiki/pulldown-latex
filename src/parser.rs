@@ -28,9 +28,6 @@ use self::state::ParserState;
 /// The algorithm of the [`Parser`] is driven by the [`Parser::next`] method on the [`Parser`].
 /// This method is provided through the [`Iterator`] trait implementation, thus an end user should
 /// only need to use the [`Parser`] as an iterator of `Result<Event, ParserError>`.
-// TODO: Change the parser structure so that we have a state where we know we are parsing a string
-// and thus we do not have to match on the last element of the stack since we know it to be a
-// subgroup.
 #[derive(Debug)]
 pub struct Parser<'a> {
     /// What the initial input is.

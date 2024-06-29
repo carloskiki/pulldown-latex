@@ -25,7 +25,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         let instruction = I::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
-            // TODO: This obviously does not work
             '_' => {
                 if self.state.handling_argument {
                     return Err(ErrorKind::ScriptAsArgument)
@@ -157,26 +156,14 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 }
             }
             "bmod" => E::Content(C::Function("mod")),
-            // TODO: use left right.
             "pmod" => {
                 let argument = lex::argument(&mut self.content)?;
                 self.buffer.extend([
-                    I::Event(E::Begin(G::Normal)),
-                    I::Event(E::Content(C::Delimiter {
-                        content: '(',
-                        size: None,
-                        ty: DelimiterType::Open
-                    })),
+                    I::Event(E::Begin(G::LeftRight(Some('('), Some(')')))),
+                    I::Event(E::Content(C::Function("mod"))),
                 ]);
                 self.handle_argument(argument)?;
-                self.buffer.extend([
-                    I::Event(E::Content(C::Delimiter {
-                     content: ')',
-                     size: None,
-                     ty: DelimiterType::Close
-                    })),   
-                    I::Event(E::End),
-                ]);
+                self.buffer.push(I::Event(E::End));
                 return Ok(());
             }
 
@@ -1364,8 +1351,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             }
             "endgroup" => return Err(ErrorKind::UnbalancedGroup(None)),
 
-            // TODO: ensure claims that the alignment and newlines event are generated __only__
-            // when it is allowed to.
             "begin" => {
                 let Argument::Group(argument) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
@@ -1523,7 +1508,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     false
                 };
                 
-                // TODO: correctly spot deeper environment of the same type.
                 let content = lex::group_content(
                     &mut self.content,
                     &format!(r"\begin{{{argument}}}"),
