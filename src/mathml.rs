@@ -363,7 +363,7 @@ where
                             self.input.next();
                         }
                         _ => {
-                            self.open_tag("mrow", Some("negated"))?;
+                            self.open_tag("mrow", Some("mop-negated"))?;
                             self.writer.write_all(b">")?;
                             self.env_stack.push(Environment::from(visual));
                         }
@@ -645,7 +645,7 @@ where
                     "mi"
                 };
 
-                self.open_tag(tag, small.then_some("small"))?;
+                self.open_tag(tag, small.then_some("mop-small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
@@ -655,7 +655,7 @@ where
                 write!(self.writer, "</{}>", tag)
             }
             Content::Relation { content, small } => {
-                self.open_tag("mo", small.then_some("small"))?;
+                self.open_tag("mo", small.then_some("mop-small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
