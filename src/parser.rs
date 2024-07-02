@@ -144,6 +144,8 @@ impl<'a> Iterator for Parser<'a> {
                 let (desc, rest) = inner.parse_next();
                 *content = rest;
 
+                
+
                 let suffix_event = match desc {
                     Err(e) => return Some(Err(self.error_with_context(e))),
                     Ok(Some((e, desc))) => {
@@ -237,6 +239,14 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         Ok(())
     }
 
+    /// ## Suffix parsing
+    /// 
+    /// The suffix parser first checks for directives about suffix placement, i.e. `\limits` and `\nolimits`,
+    /// if the `allow_suffix_modifiers` flag is set on the parser state. If the flag is set, and if more than one directive is found,
+    /// the last one takes effect, as per the [`amsmath docs`][amsdocs] (section 7.3). If the flag is not set, and a limit modifying
+    /// directive is found, the parser emits an error.
+    ///
+    /// [amsdocs]: https://mirror.its.dal.ca/ctan/macros/latex/required/amsmath/amsldoc.pdf
     fn parse(&mut self) -> InnerResult<Option<(Event<'a>, ScriptDescriptor)>> {
         // 1. Parse the next token and output everything to the staging stack.
         let token = lex::token(&mut self.content)?;

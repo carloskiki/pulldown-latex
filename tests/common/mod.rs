@@ -108,11 +108,12 @@ pub fn html_template(
 <html>
 <head>
 <title>{title}</title>
-<link rel="stylesheet" type="text/css" href="{OUTPUT_DIR}/LatinModern/mathfonts.css">
+<link rel="stylesheet" type="text/css" href="{}/font/font.css">
 <meta charset="UTF-8">
 {styles}</head>
 <body>
 "#,
+        env!("CARGO_MANIFEST_DIR")
     ))?;
 
     render(file)?;

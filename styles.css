@@ -1,39 +1,42 @@
+@import "font/font.css";
+@namespace m url('http://www.w3.org/1998/Math/MathML');
+
 .mop-small {
     font-size: 70%;
 }
 
-.menv-alignlike>mtr>mtd:nth-child(odd),
-.menv-cells-right>mtr>mtd,
-.menv-multline>mtr>mtd:last-child {
+.menv-alignlike>m|mtr>m|mtd:nth-child(odd),
+.menv-cells-right>m|mtr>m|mtd,
+.menv-multline>m|mtr>m|mtd:last-child {
     text-align: right;
     text-align: -webkit-right;
     text-align: -moz-right
 }
 
-.menv-alignlike>mtr>mtd:nth-child(even),
-.menv-cells-left>mtr>mtd,
-.menv-multline>mtr>mtd:first-child {
+.menv-alignlike>m|mtr>m|mtd:nth-child(even),
+.menv-cells-left>m|mtr>m|mtd,
+.menv-multline>m|mtr>m|mtd:first-child {
     text-align: left;
 }
 
-.menv-multline>mtr>mtd {
+.menv-multline>m|mtr>m|mtd {
     width: 100%;
 }
 
-.menv-align>mtr>mtd:nth-child(2n + 3) {
+.menv-align>m|mtr>m|mtd:nth-child(2n + 3) {
     padding-left: 1em;
 }
 
-mtd {
+m|mtd {
     padding-left: 0;
     padding-right: 0;
 }
 
-.menv-with-eqn>mtr:not(:has(> mtd.menv-nonumber)) {
+.menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber)) {
     counter-increment: eq-number;
 }
 
-.menv-with-eqn>mtr:not(:has(> mtd.menv-nonumber))::after {
+.menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber))::after {
     position: absolute;
     right: 0;
     padding: 0.5ex 0.4em;
