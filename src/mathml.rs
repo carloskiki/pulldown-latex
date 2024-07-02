@@ -106,7 +106,7 @@ where
             self.writer.write_all(b"\"")?;
         }
         if let Some(classes) = classes {
-            write!(self.writer, " style=\"{}\"", classes)?;
+            write!(self.writer, " class=\"{}\"", classes)?;
         }
         Ok(())
     }
@@ -118,13 +118,6 @@ where
     fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
         match event {
             Ok(Event::Content(content)) => self.write_content(content, false),
-            // TODO: environments.
-            // Gather: Does not accept alignments, only newlines. eveything is centered.
-            // Align: Columns do the following:
-            //     right, left, space, right, left, space ...
-            //     - no spaces between columns
-            // Array: requires a column specification.
-            // Cases: Only one alignment allowed, has considerable (probably \quad) space between columns.
             Ok(Event::Begin(grouping)) => {
                 // Mathematical environments do something different with state compared to things
                 // like left/right and {}.
@@ -139,8 +132,8 @@ where
                 if grouping.is_math_env() {
                     self.state_stack.push(State::default())
                 } else {
-                    let last_state = *self.state_stack.last().expect("state stack is empty");
-                    self.state_stack.extend([last_state, last_state]);
+                    let last_state = *self.state();
+                    self.state_stack.push(last_state);
                     while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
                         let state_change = *state_change;
                         self.handle_state_change(state_change);
@@ -148,7 +141,12 @@ where
                     }
                     self.open_tag("mrow", None)?;
                     self.writer.write_all(b">")?;
-                    self.state_stack.pop();
+                    // Every state appliable to the style of the mrow is reset, i.e., everything
+                    // except font.
+                    *self.state_stack.last_mut().expect("state stack is empty") = State {
+                        font: self.state().font,
+                        ..State::default()
+                    };
                 }
 
                 let env_group = match grouping {
@@ -169,7 +167,7 @@ where
                         self.writer
                             .write_all(b"<mtable class=\"menv-alignlike menv-align")?;
                         if eq_numbers {
-                            self.writer.write_all(b"menv-with-eqn")?;
+                            self.writer.write_all(b" menv-with-eqn")?;
                         }
                         self.writer.write_all(b"\"><mtr><mtd>")?;
                         EnvGrouping::Align
@@ -194,7 +192,7 @@ where
                             self.writer.write_all(b"<mo stretchy=\"true\">{</mo>")?;
                         }
                         self.writer
-                            .write_all(b"<mtable><mtr><mtd class=\"menv-left-align\">")?;
+                            .write_all(b"<mtable class=\"cells-left\"><mtr><mtd>")?;
                         EnvGrouping::Cases {
                             left,
                             used_align: false,
@@ -221,10 +219,10 @@ where
                         self.writer.write_all(b"><mtr><mtd")?;
                         match cols[index] {
                             ArrayColumn::Column(ColumnAlignment::Left) => {
-                                self.writer.write_all(b" class=\"menv-left-align\"")?
+                                self.writer.write_all(b" class=\"cell-left\"")?
                             }
                             ArrayColumn::Column(ColumnAlignment::Right) => {
-                                self.writer.write_all(b" class=\"menv-right-align\"")?
+                                self.writer.write_all(b" class=\"cell-right\"")?
                             }
                             ArrayColumn::Column(ColumnAlignment::Center) => {}
                             ArrayColumn::VerticalLine => {
@@ -448,10 +446,10 @@ where
                         self.writer.write_all(b"</mtd></mtr><mtr><mtd")?;
                         match cols[*cols_index - 1] {
                             ArrayColumn::Column(ColumnAlignment::Left) => {
-                                self.writer.write_all(b" class=\"menv-left-align\"")?
+                                self.writer.write_all(b" class=\"cell-left\"")?
                             }
                             ArrayColumn::Column(ColumnAlignment::Right) => {
-                                self.writer.write_all(b" class=\"menv-right-align\"")?
+                                self.writer.write_all(b" class=\"cell-right\"")?
                             }
                             ArrayColumn::Column(ColumnAlignment::Center) => {}
                             ArrayColumn::VerticalLine => {
@@ -496,8 +494,8 @@ where
                             *cols_index += 1;
                         }
                         self.writer.write_all(match cols[*cols_index] {
-                            ArrayColumn::Column(ColumnAlignment::Left) => b"menv-left-align\">",
-                            ArrayColumn::Column(ColumnAlignment::Right) => b"menv-right-align\">",
+                            ArrayColumn::Column(ColumnAlignment::Left) => b"cell-left\">",
+                            ArrayColumn::Column(ColumnAlignment::Right) => b"cell-right\">",
                             ArrayColumn::Column(ColumnAlignment::Center) => b"\">",
                             ArrayColumn::VerticalLine => {
                                 panic!("vertical line in place of column alignment")
@@ -528,7 +526,14 @@ where
             Content::Text(text) => {
                 self.open_tag("mtext", None)?;
                 self.writer.write_all(b">")?;
-                self.writer.write_all(text.as_bytes())?;
+                let trimmed = text.trim();
+                if text.starts_with(char::is_whitespace) {
+                    self.writer.write_all(b"&nbsp;")?;
+                }
+                self.writer.write_all(trimmed.as_bytes())?;
+                if text.ends_with(char::is_whitespace) {
+                    self.writer.write_all(b"&nbsp;")?;
+                }
                 self.set_previous_atom(Atom::Ord);
                 self.writer.write_all(b"</mtext>")
             }
@@ -567,6 +572,7 @@ where
                     self.writer.write_all(b"</mo>")
                 } else {
                     self.open_tag("mi", None)?;
+
                     let content = match (
                         self.state().font,
                         self.config.math_style.should_be_upright(content),
@@ -682,7 +688,7 @@ where
             }
             Content::Delimiter { content, size, ty } => {
                 self.open_tag("mo", None)?;
-                write!(self.writer, " stretchy=\"{}\"", ty == DelimiterType::Fence)?;
+                write!(self.writer, " symmetric=\"{0}\" stretchy=\"{0}\"", ty == DelimiterType::Fence || size.is_some())?;
                 if let Some(size) = size {
                     write!(
                         self.writer,
@@ -691,6 +697,7 @@ where
                         size.to_em()
                     )?;
                 }
+                
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;

@@ -1,5 +1,46 @@
-@import "font/font.css";
 @namespace m url('http://www.w3.org/1998/Math/MathML');
+
+
+/* Latin Modern Roman has various sizes. We use the generic name
+   "Latin Modern Roman" for the local versions and "LMRoman12" for the Web font.
+*/
+@font-face {
+    font-family: LMRoman12;
+    src: url('font/lmroman12-regular.woff2');
+}
+
+@font-face {
+    font-family: LMRoman12;
+    src: url('font/lmroman12-bold.woff2');
+    font-weight: bold;
+}
+
+@font-face {
+    font-family: LMRoman12;
+    src: url('font/lmroman12-italic.woff2');
+    font-style: italic;
+}
+
+@font-face {
+    font-family: Latin Modern Math;
+    src: local('Latin Modern Math'), local('LatinModernMath-Regular'),
+        url('font/latinmodern-math.woff2');
+}
+
+m|mtext {
+    font-family: Latin Modern Roman, LMRoman12;
+}
+
+m|math {
+    font-family: Latin Modern Math;
+}
+
+/* MathML css styling */
+m|mtd {
+    padding-left: 0;
+    padding-right: 0;
+}
+
 
 .mop-small {
     font-size: 70%;
@@ -7,7 +48,8 @@
 
 .menv-alignlike>m|mtr>m|mtd:nth-child(odd),
 .menv-cells-right>m|mtr>m|mtd,
-.menv-multline>m|mtr>m|mtd:last-child {
+.menv-multline>m|mtr>m|mtd:last-child,
+.cell-left {
     text-align: right;
     text-align: -webkit-right;
     text-align: -moz-right
@@ -15,7 +57,8 @@
 
 .menv-alignlike>m|mtr>m|mtd:nth-child(even),
 .menv-cells-left>m|mtr>m|mtd,
-.menv-multline>m|mtr>m|mtd:first-child {
+.menv-multline>m|mtr>m|mtd:first-child,
+.cell-right {
     text-align: left;
 }
 
@@ -27,16 +70,11 @@
     padding-left: 1em;
 }
 
-m|mtd {
-    padding-left: 0;
-    padding-right: 0;
-}
-
 .menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber)) {
     counter-increment: eq-number;
 }
 
-.menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber))::after {
+.menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber, > m|mtd:only-child:empty))::after {
     position: absolute;
     right: 0;
     padding: 0.5ex 0.4em;

@@ -620,11 +620,26 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "wideparen" | "overparen" => return self.accent('⏜', true),
 
             // Groups
-            "overgroup" => return self.accent('⏠', true),
-            "undergroup" => return self.underscript('⏡'),
-            "overbrace" => return self.accent('⏞', true),
-            "underbrace" => return self.underscript('⏟'),
-            "underparen" => return self.underscript('⏝'),
+            "overgroup" => { 
+                self.state.above_below_suffix_default = true;
+                return self.accent('⏠', true)
+            },
+            "undergroup" => {
+                self.state.above_below_suffix_default = true;
+                return self.underscript('⏡')
+            }
+            "overbrace" => {
+                self.state.above_below_suffix_default = true;
+                return self.accent('⏞', true)
+            }
+            "underbrace" => {
+                self.state.above_below_suffix_default = true;
+                return self.underscript('⏟')
+            }
+            "underparen" => {
+                self.state.above_below_suffix_default = true;
+                return self.underscript('⏝')
+            },
 
             // Primes
             "prime" => ordinary('′'),
@@ -1151,7 +1166,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                         ty: ST::Superscript,
                         position: SP::AboveBelow,
                     }),
-                    I::Event(relation('⟵')),
+                    I::Event(relation('←')),
                 ]);
                 self.handle_argument(above)?;
                 return Ok(());
@@ -1163,7 +1178,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                         ty: ST::Superscript,
                         position: SP::AboveBelow,
                     }),
-                    I::Event(relation('⟶')),
+                    I::Event(relation('→')),
                 ]);
                 self.handle_argument(above)?;
                 return Ok(());

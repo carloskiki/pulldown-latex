@@ -80,7 +80,7 @@ pub fn tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
 
             rows.iter().try_for_each(|(input, output)| {
                 file.write_fmt(format_args!(
-                    r#"<tr><td>{input}</td><td>{output}</td></tr>"#,
+                    r#"<tr><td>{input}</td><td style="position: relative">{output}</td></tr>"#,
                     input = input,
                     output = output
                 ))
@@ -108,7 +108,7 @@ pub fn html_template(
 <html>
 <head>
 <title>{title}</title>
-<link rel="stylesheet" type="text/css" href="{}/font/font.css">
+<link rel="stylesheet" type="text/css" href="{}/styles.css">
 <meta charset="UTF-8">
 {styles}</head>
 <body>
