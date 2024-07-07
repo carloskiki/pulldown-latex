@@ -70,6 +70,19 @@ m|mtd {
     padding-left: 1em;
 }
 
+.menv-matrix>m|mtr>m|mtd {
+    padding-left: 0.4em;
+    padding-right: 0.4em;
+}
+
+.menv-matrix>m|mtr>m|mtd:first-child {
+    padding-left: 0;
+}
+
+.menv-matrix>m|mtr>m|mtd:last-child {
+    padding-right: 0;
+}
+
 .menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber)) {
     counter-increment: eq-number;
 }

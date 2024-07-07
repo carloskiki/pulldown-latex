@@ -40,8 +40,8 @@ these links specifically.
 ### Bugs
 - [ ] `\bar` make a tiny bar, should be bigger.
 - [ ] italic numbers are not italic because they do not exist in unicode.
-- [ ] square braket matrices do not have equal spacing on the left and the right.
 - [ ] Newline should allow for newline spacing.
+- [ ] square braket matrices do not have equal spacing on the left and the right.
 - [ ] `\sideset`
 
 ## Unsupported Plain-TeX & LaTeX behavior
@@ -71,18 +71,7 @@ these links specifically.
 - All vertical list manipulation commands.
     Things like `\vskip`, `\vfil`, `\moveleft` etc.
 - `\hfil`, `\hfill`
-- `\eqno`, `\leqno`, and equation numbers in general.
 - `\over`, `\atop`, and all deprecated "fraction like" control sequences.
-
-
-### Things that should work but don't currently
-Splitting groupings within user defined macros. E.g.,
-```
-\def\abc{\left(}
-\abc 4 \right)
-```
-This currently does not work.
-
 
 ### Unsupported Katex/Temml Options
 

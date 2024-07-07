@@ -54,7 +54,7 @@ pub enum Event<'a> {
     /// This event specifies a line break in a mathematical environment.
     ///
     /// This event is only used when inside a `Grouping` that allows it.
-    NewLine,
+    NewLine(Option<Dimension>),
 }
 
 /// Base events that produce `mathml` nodes

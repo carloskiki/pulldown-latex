@@ -1675,7 +1675,13 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             // TODO: make newlines accept a dimension argument
             "\\" | "cr" if self.state.allowed_alignment_count.is_some() => {
                 self.state.allowed_alignment_count.as_mut().unwrap().reset();
-                E::NewLine
+                let additional_space = if let Some(mut arg) = lex::optional_argument(&mut self.content)? {
+                    Some(lex::dimension(&mut arg)?)
+                } else {
+                    None
+                };
+
+                E::NewLine(additional_space)
             }
 
             // Delimiters

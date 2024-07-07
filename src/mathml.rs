@@ -68,7 +68,7 @@ where
                     | Event::Visual(Visual::Negation)
                     | Event::Script { .. },
                 ) => continue,
-                Ok(Event::End | Event::NewLine | Event::Alignment) | Err(_) => None,
+                Ok(Event::End | Event::NewLine(_) | Event::Alignment) | Err(_) => None,
                 Ok(Event::Visual(_) | Event::Begin(_)) => Some(Atom::Inner),
                 Ok(Event::Content(content)) => match content {
                     Content::BinaryOp { .. } => Some(Atom::Bin),
@@ -227,16 +227,12 @@ where
                         EnvGrouping::Align
                     }
                     Grouping::Matrix { alignment } => {
-                        self.writer.write_all(b"<mtable")?;
-                        match alignment {
-                            crate::event::ColumnAlignment::Left => {
-                                self.writer.write_all(b" class=\"menv-cells-left\"")?
-                            }
-                            crate::event::ColumnAlignment::Center => (),
-                            crate::event::ColumnAlignment::Right => {
-                                self.writer.write_all(b" class=\"menv-cells-right\"")?
-                            }
-                        }
+                        self.writer.write_all(b"<mtable class=\"menv-matrix")?;
+                        self.writer.write_all(match alignment {
+                            ColumnAlignment::Left => b" menv-cells-left\"",
+                            ColumnAlignment::Center => b"\"",
+                            ColumnAlignment::Right => b" menv-cells-right\"",
+                        })?;
                         self.writer.write_all(b"><mtr><mtd>")?;
                         EnvGrouping::Matrix
                     }
@@ -477,7 +473,7 @@ where
                 self.handle_state_change(state_change);
                 Ok(())
             }
-            Ok(Event::NewLine) => {
+            Ok(Event::NewLine(spacing)) => {
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
                 match self.env_stack.last_mut() {
@@ -485,7 +481,15 @@ where
                         EnvGrouping::Cases { used_align, .. } | EnvGrouping::Split { used_align },
                     )) => {
                         *used_align = false;
-                        self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
+                        self.writer.write_all(b"</mtd></mtr><mtr")?;
+                        if let Some(spacing) = spacing {
+                            write!(
+                                self.writer,
+                                " style=\"margin-top: {}em\"",
+                                tex_to_css_em(spacing)
+                            )?;
+                        }
+                        self.writer.write_all(b"><mtd>")
                     }
                     Some(Environment::Group(
                         EnvGrouping::Matrix
@@ -493,11 +497,29 @@ where
                         | EnvGrouping::Gather
                         | EnvGrouping::SubArray
                         | EnvGrouping::Multline,
-                    )) => self.writer.write_all(b"</mtd></mtr><mtr><mtd>"),
+                    )) => {
+                        self.writer.write_all(b"</mtd></mtr><mtr")?;
+                        if let Some(spacing) = spacing {
+                            write!(
+                                self.writer,
+                                " style=\"margin-top: {}em\"",
+                                tex_to_css_em(spacing)
+                            )?;
+                        }
+                        self.writer.write_all(b"><mtd>")
+                    }
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
                         *cols_index =
                             (cols.first() == Some(&ArrayColumn::VerticalLine)) as usize + 1;
-                        self.writer.write_all(b"</mtd></mtr><mtr><mtd")?;
+                        self.writer.write_all(b"</mtd></mtr><mtr")?;
+                        if let Some(spacing) = spacing {
+                            write!(
+                                self.writer,
+                                " style=\"margin-top: {}em\"",
+                                tex_to_css_em(spacing)
+                            )?;
+                        }
+                        self.writer.write_all(b"><mtd")?;
                         match cols[*cols_index - 1] {
                             ArrayColumn::Column(ColumnAlignment::Left) => {
                                 self.writer.write_all(b" class=\"cell-left\"")?
@@ -514,7 +536,15 @@ where
                     }
                     Some(Environment::Group(EnvGrouping::Alignat { columns_used, .. })) => {
                         *columns_used = 0;
-                        self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
+                        self.writer.write_all(b"</mtd></mtr><mtr")?;
+                        if let Some(spacing) = spacing {
+                            write!(
+                                self.writer,
+                                " style=\"margin-top: {}em\"",
+                                tex_to_css_em(spacing)
+                            )?;
+                        }
+                        self.writer.write_all(b"><mtd>")
                     }
 
                     _ => panic!("newline not allowed in current environment"),
