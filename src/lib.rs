@@ -9,10 +9,10 @@ pub mod mathml;
 pub mod parser;
 
 #[doc(inline)]
-pub use parser::{Parser, ParserError};
-#[doc(inline)]
 pub use config::RenderConfig;
+#[doc(inline)]
+pub use event::Event;
 #[doc(inline)]
 pub use mathml::{push_mathml, write_mathml};
 #[doc(inline)]
-pub use event::Event;
+pub use parser::{Parser, ParserError};

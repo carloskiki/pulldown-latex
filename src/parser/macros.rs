@@ -86,15 +86,15 @@ impl<'a> MacroContext<'a> {
                         i as u8,
                     ));
                 };
-                let suffix = chars.as_str();
-                if suffix.is_empty() {
+                let script = chars.as_str();
+                if script.is_empty() {
                     Ok(None)
                 } else {
                     // The parameter text is already guaranteed to not contain '{'.
-                    if suffix.find(|c| c == '}').is_some() {
+                    if script.find(|c| c == '}').is_some() {
                         return Err(MacroContextError::BracesInParamText);
                     };
-                    Ok(Some(suffix))
+                    Ok(Some(script))
                 }
             })
             .collect::<Result<Vec<_>>>()?;
@@ -207,7 +207,7 @@ struct MacroDef<'a> {
     replacement: Vec<ReplacementToken<'a>>,
 }
 
-/// Some if the argument has a suffix, None otherwise.
+/// Some if the argument has a script, None otherwise.
 type Parameter<'a> = Option<&'a str>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

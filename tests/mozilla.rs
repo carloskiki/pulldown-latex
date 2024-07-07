@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::path::Path;
 
-use common::{tabled, OUTPUT_DIR, html_template};
+use common::{html_template, tabled, OUTPUT_DIR};
 use pulldown_latex::config::DisplayMode;
 
 mod common;
@@ -89,7 +89,7 @@ round_trip!(
         \\c_n & c_{n+1} & c_{n+2}
         &\dots&c_{2n}
         \end{vmatrix} > 0",
- display_mode = DisplayMode::Block
+    display_mode = DisplayMode::Block
 );
 
 round_trip!(

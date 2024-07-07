@@ -80,7 +80,7 @@ pub fn tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
 
             rows.iter().try_for_each(|(input, output)| {
                 file.write_fmt(format_args!(
-                    r#"<tr><td>{input}</td><td>{output}</td></tr>"#,
+                    r#"<tr><td>{input}</td><td style="position: relative">{output}</td></tr>"#,
                     input = input,
                     output = output
                 ))
@@ -108,11 +108,12 @@ pub fn html_template(
 <html>
 <head>
 <title>{title}</title>
-<link rel="stylesheet" type="text/css" href="{OUTPUT_DIR}/LatinModern/mathfonts.css">
+<link rel="stylesheet" type="text/css" href="{}/styles.css">
 <meta charset="UTF-8">
 {styles}</head>
 <body>
 "#,
+        env!("CARGO_MANIFEST_DIR")
     ))?;
 
     render(file)?;
@@ -250,7 +251,7 @@ pub fn cross_browser_tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
 
 #[macro_export]
 macro_rules! round_trip {
-    (should_panic, $name:ident, $($input:literal),*) => {
+    (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {
             let inputs = &[$($input),*];
             for input in inputs {
@@ -269,7 +270,7 @@ macro_rules! round_trip {
             }
         }
     };
-    ($name:ident, $($input:literal),* $(, $field:ident = $value:expr)*) => {
+    ($name:ident, $($input:literal),+ $(, $field:ident = $value:expr)* $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {
             let inputs = &[$($input),*];
             $crate::common::round_trip(stringify!($name), inputs, pulldown_latex::config::RenderConfig {

@@ -3,23 +3,24 @@
 //! This crate provides a "simple" `mathml` renderer which is available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 
-use std::{io, iter::Peekable};
+use std::{collections::VecDeque, io};
 
 use crate::{
     attribute::{tex_to_css_em, Font},
     config::{DisplayMode, RenderConfig},
     event::{
-        ColorChange, ColorTarget, Content, Event, Identifier, Operator, ScriptPosition, ScriptType,
-        StateChange, Style, Visual,
+        ArrayColumn, ColorChange, ColorTarget, ColumnAlignment, Content, DelimiterType, Event,
+        Grouping, ScriptPosition, ScriptType, StateChange, Style, Visual,
     },
 };
 
 struct MathmlWriter<'a, I: Iterator, W> {
-    input: Peekable<I>,
+    input: ManyPeek<I>,
     writer: W,
     config: RenderConfig<'a>,
     env_stack: Vec<Environment>,
     state_stack: Vec<State<'a>>,
+    previous_atom: Option<Atom>,
 }
 
 impl<'a, I, W, E> MathmlWriter<'a, I, W>
@@ -38,22 +39,57 @@ where
             background_color: None,
             style: None,
         });
-        let env_stack = Vec::with_capacity(32);
+        let env_stack = Vec::with_capacity(16);
         Self {
-            input: input.peekable(),
+            input: ManyPeek::new(input),
             writer,
             config,
             env_stack,
             state_stack,
+            previous_atom: None,
         }
     }
 
-    fn open_tag(
-        &mut self,
-        tag: &str,
-        additional_style: Option<&str>,
-        close: bool,
-    ) -> io::Result<()> {
+    fn next_atom(&mut self) -> Option<Atom> {
+        let mut index = 0;
+        loop {
+            let next = match self.input.peeked_nth(index) {
+                None => self.input.peek_next()?,
+                Some(next) => {
+                    index += 1;
+                    next
+                }
+            };
+
+            break match next {
+                Ok(
+                    Event::StateChange(_)
+                    | Event::Space { .. }
+                    | Event::Visual(Visual::Negation)
+                    | Event::Script { .. },
+                ) => continue,
+                Ok(Event::End | Event::NewLine | Event::Alignment) | Err(_) => None,
+                Ok(Event::Visual(_) | Event::Begin(_)) => Some(Atom::Inner),
+                Ok(Event::Content(content)) => match content {
+                    Content::BinaryOp { .. } => Some(Atom::Bin),
+                    Content::LargeOp { .. } => Some(Atom::Op),
+                    Content::Relation { .. } => Some(Atom::Rel),
+                    Content::Delimiter {
+                        ty: DelimiterType::Open,
+                        ..
+                    } => Some(Atom::Open),
+                    Content::Delimiter {
+                        ty: DelimiterType::Close,
+                        ..
+                    } => Some(Atom::Close),
+                    Content::Punctuation(_) => Some(Atom::Punct),
+                    _ => Some(Atom::Ord),
+                },
+            };
+        }
+    }
+
+    fn open_tag(&mut self, tag: &str, classes: Option<&str>) -> io::Result<()> {
         let State {
             text_color,
             border_color,
@@ -62,27 +98,49 @@ where
             font: _,
         } = *self.state();
         write!(self.writer, "<{}", tag)?;
-        if text_color.is_none()
-            && border_color.is_none()
-            && background_color.is_none()
-            && style.is_none()
-        {
-            if close {
-                return self.writer.write_all(b">");
-            } else {
-                return Ok(());
+        if let Some(style) = style {
+            if !matches!(
+                self.env_stack.last(),
+                Some(
+                    Environment::Script {
+                        ty: ScriptType::Subscript | ScriptType::Superscript,
+                        count: 0,
+                        ..
+                    } | Environment::Script {
+                        ty: ScriptType::SubSuperscript,
+                        count: 0 | 1,
+                        ..
+                    }
+                )
+            ) {
+                let args = match style {
+                    Style::Display => (true, 0),
+                    Style::Text => (false, 0),
+                    Style::Script => (false, 1),
+                    Style::ScriptScript => (false, 2),
+                };
+                write!(
+                    self.writer,
+                    " displaystyle=\"{}\" scriptlevel=\"{}\"",
+                    args.0, args.1
+                )?;
             }
         }
 
         let mut style_written = false;
         if let Some(text_color) = text_color {
-            write!(self.writer, "style=\"color: {}", text_color)?;
+            write!(self.writer, " style=\"color: {}", text_color)?;
+            style_written = true;
         }
         if let Some(border_color) = border_color {
             if style_written {
                 write!(self.writer, "; border: 0.06em solid {}", border_color)?;
             } else {
-                write!(self.writer, "style=\"border: 0.06em solid {}", border_color)?;
+                write!(
+                    self.writer,
+                    " style=\"border: 0.06em solid {}",
+                    border_color
+                )?;
                 style_written = true;
             }
         }
@@ -92,38 +150,17 @@ where
             } else {
                 write!(
                     self.writer,
-                    "style=\"background-color: {}",
+                    " style=\"background-color: {}",
                     background_color
                 )?;
-                style_written = true;
-            }
-        }
-        if let Some(additional_style) = additional_style {
-            if style_written {
-                write!(self.writer, "; {}", additional_style)?;
-            } else {
-                write!(self.writer, "style=\"{}\"", additional_style)?;
                 style_written = true;
             }
         }
         if style_written {
             self.writer.write_all(b"\"")?;
         }
-        if let Some(style) = style {
-            let args = match style {
-                Style::Display => (true, 0),
-                Style::Text => (false, 0),
-                Style::Script => (false, 1),
-                Style::ScriptScript => (false, 2),
-            };
-            write!(
-                self.writer,
-                " displaystyle=\"{}\" scriptlevel=\"{}\"",
-                args.0, args.1
-            )?;
-        }
-        if close {
-            self.writer.write_all(b">")?;
+        if let Some(classes) = classes {
+            write!(self.writer, " class=\"{}\"", classes)?;
         }
         Ok(())
     }
@@ -134,142 +171,187 @@ where
 
     fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
         match event {
-            Ok(Event::Content(content)) => match content {
-                Content::Text(text) => {
-                    self.open_tag("mtext", None, true)?;
-                    self.writer.write_all(text.as_bytes())?;
-                    self.writer.write_all(b"</mtext>")
+            Ok(Event::Content(content)) => self.write_content(content, false),
+            Ok(Event::Begin(grouping)) => {
+                // Mathematical environments do something different with state compared to things
+                // like left/right and {}.
+                //
+                // - They do not inherit state from their parent, their state is reset to default
+                // upon entering.
+                // - State changes occuring within them are also reset when crossing alignments or
+                // newlines (`&` or `\\`).
+                //
+                // For these reasons, they don't use the `open_tag` method.
+                self.previous_atom = None;
+                if grouping.is_math_env() {
+                    self.state_stack.push(State::default())
+                } else {
+                    let last_state = *self.state();
+                    self.state_stack.push(last_state);
+                    while let Some(Ok(Event::StateChange(state_change))) = self.input.peek_first() {
+                        let state_change = *state_change;
+                        self.handle_state_change(state_change);
+                        self.input.next();
+                    }
+                    self.open_tag("mrow", None)?;
+                    self.writer.write_all(b">")?;
+                    // Every state appliable to the style of the mrow is reset, i.e., everything
+                    // except font.
+                    *self.state_stack.last_mut().expect("state stack is empty") = State {
+                        font: self.state().font,
+                        ..State::default()
+                    };
                 }
-                Content::Number(number) => {
-                    self.open_tag("mn", None, true)?;
-                    let buf = &mut [0u8; 4];
-                    number.chars().try_for_each(|c| {
-                        let content = self.state().font.map_or(c, |v| v.map_char(c));
-                        let bytes = content.encode_utf8(buf);
-                        self.writer.write_all(bytes.as_bytes())
-                    })?;
-                    self.writer.write_all(b"</mn>")
-                }
-                Content::Identifier(ident) => match ident {
-                    Identifier::Str(str) => {
-                        self.open_tag("mi", None, false)?;
-                        self.writer.write_all(if str.chars().count() == 1 {
-                            b" mathvariant=\"normal\">"
-                        } else {
-                            b">"
-                        })?;
-                        self.writer.write_all(str.as_bytes())?;
-                        self.writer.write_all(b"</mi>")?;
 
-                        let to_append = "<mo>\u{2061}</mo><mspace width=\"0.1667em\" />";
-                        if let Some(Environment {
-                            env: EnvironmentType::Script { append, .. },
-                            ..
-                        }) = self.env_stack.last_mut()
-                        {
-                            *append = to_append;
-                            Ok(())
-                        } else {
-                            self.writer.write_all(to_append.as_bytes())
+                let env_group = match grouping {
+                    Grouping::Normal => EnvGrouping::Normal,
+                    Grouping::LeftRight(opening, closing) => {
+                        if let Some(delim) = opening {
+                            self.open_tag("mo", None)?;
+                            self.writer.write_all(b" stretchy=\"true\">")?;
+                            let mut buf = [0u8; 4];
+                            self.writer
+                                .write_all(delim.encode_utf8(&mut buf).as_bytes())?;
+                            self.writer.write_all(b"</mo>")?;
+                        }
+                        self.previous_atom = Some(Atom::Open);
+                        EnvGrouping::LeftRight { closing }
+                    }
+                    Grouping::Align { eq_numbers } => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-alignlike menv-align")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" menv-with-eqn")?;
+                        }
+                        self.writer.write_all(b"\"><mtr><mtd>")?;
+                        EnvGrouping::Align
+                    }
+                    Grouping::Matrix { alignment } => {
+                        self.writer.write_all(b"<mtable")?;
+                        match alignment {
+                            crate::event::ColumnAlignment::Left => {
+                                self.writer.write_all(b" class=\"menv-cells-left\"")?
+                            }
+                            crate::event::ColumnAlignment::Center => (),
+                            crate::event::ColumnAlignment::Right => {
+                                self.writer.write_all(b" class=\"menv-cells-right\"")?
+                            }
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Matrix
+                    }
+                    Grouping::Cases { left } => {
+                        self.writer.write_all(b"<mrow>")?;
+                        if left {
+                            self.writer.write_all(b"<mo stretchy=\"true\">{</mo>")?;
+                        }
+                        self.writer
+                            .write_all(b"<mtable class=\"cells-left\"><mtr><mtd>")?;
+                        EnvGrouping::Cases {
+                            left,
+                            used_align: false,
                         }
                     }
-                    Identifier::Char(content) => {
-                        self.open_tag("mi", None, false)?;
-                        let content = match (
-                            self.state().font,
-                            self.config.math_style.should_be_upright(content),
-                        ) {
-                            (Some(Font::UpRight), _) | (None, true) => {
-                                self.writer.write_all(b" mathvariant=\"normal\">")?;
-                                content
+                    Grouping::Array(cols) => {
+                        let mut index = 0;
+                        self.writer.write_all(b"<mtable")?;
+                        match (cols.first(), cols.last()) {
+                            (Some(ArrayColumn::VerticalLine), Some(ArrayColumn::VerticalLine)) => {
+                                index += 1;
+                                self.writer
+                                    .write_all(b" class=\"menv-left-border menv-right-border\"")?
                             }
-                            (Some(font), _) => {
-                                self.writer.write_all(b">")?;
-                                font.map_char(content)
+                            (Some(ArrayColumn::VerticalLine), _) => {
+                                index += 1;
+                                self.writer.write_all(b" class=\"menv-left-border\"")?
                             }
-                            _ => {
-                                self.writer.write_all(b">")?;
-                                content
+                            (_, Some(ArrayColumn::VerticalLine)) => {
+                                self.writer.write_all(b" class=\"menv-right-border\"")?
+                            }
+                            (_, _) => {}
+                        }
+                        self.writer.write_all(b"><mtr><mtd")?;
+                        match cols[index] {
+                            ArrayColumn::Column(ColumnAlignment::Left) => {
+                                self.writer.write_all(b" class=\"cell-left\"")?
+                            }
+                            ArrayColumn::Column(ColumnAlignment::Right) => {
+                                self.writer.write_all(b" class=\"cell-right\"")?
+                            }
+                            ArrayColumn::Column(ColumnAlignment::Center) => {}
+                            ArrayColumn::VerticalLine => {
+                                panic!("vertical line in place of column alignment")
                             }
                         };
-
-                        let buf = &mut [0u8; 4];
-                        let bytes = content.encode_utf8(buf);
-                        self.writer.write_all(bytes.as_bytes())?;
-                        if self.env_stack.last().map(|env| env.env) == Some(EnvironmentType::Negate)
-                        {
-                            self.writer.write_all("\u{0338}".as_bytes())?;
-                            self.env_stack.pop();
+                        self.writer.write_all(b">")?;
+                        EnvGrouping::Array {
+                            cols,
+                            cols_index: index + 1,
                         }
-                        self.writer.write_all(b"</mi>")
                     }
-                },
-                Content::Operator(Operator {
-                    content,
-                    stretchy,
-                    deny_movable_limits,
-                    unicode_variant,
-                    left_space,
-                    right_space,
-                    size,
-                }) => {
-                    self.open_tag("mo", None, false)?;
-                    if let Some(stretchy) = stretchy {
-                        write!(self.writer, " stretchy=\"{}\"", stretchy)?;
+                    Grouping::Aligned => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-alignlike menv-align\"><mtr><mtd>")?;
+                        EnvGrouping::Align
                     }
-                    if deny_movable_limits {
-                        self.writer.write_all(b" movablelimits=\"false\"")?;
+                    Grouping::SubArray { alignment } => {
+                        self.writer.write_all(b"<mtable")?;
+                        match alignment {
+                            crate::event::ColumnAlignment::Left => {
+                                self.writer.write_all(b" class=\"menv-cells-left\"")?
+                            }
+                            crate::event::ColumnAlignment::Center => (),
+                            crate::event::ColumnAlignment::Right => {
+                                self.writer.write_all(b" class=\"menv-cells-right\"")?
+                            }
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::SubArray
                     }
-                    if let Some(left_space) = left_space {
-                        write!(self.writer, " lspace=\"{}em\"", tex_to_css_em(left_space))?;
+                    Grouping::Alignat { pairs, eq_numbers } => {
+                        self.writer.write_all(b"<mtable class=\"menv-alignlike")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" menv-with-eqn")?;
+                        }
+                        self.writer.write_all(b"\"><mtr><mtd>")?;
+                        EnvGrouping::Alignat {
+                            pairs,
+                            columns_used: 0,
+                        }
                     }
-                    if let Some(right_space) = right_space {
-                        write!(self.writer, " rspace=\"{}em\"", tex_to_css_em(right_space))?;
+                    Grouping::Alignedat { pairs } => {
+                        self.writer.write_all(b"<mtable class=\"menv-alignlike\"")?;
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Alignat {
+                            pairs,
+                            columns_used: 0,
+                        }
                     }
-                    if let Some(size) = size {
-                        let size = tex_to_css_em(size);
-                        write!(self.writer, " minsize=\"{}em\"", size)?;
-                        write!(self.writer, " maxsize=\"{}em\"", size)?;
+                    Grouping::Gather { eq_numbers } => {
+                        self.writer.write_all(b"<mtable")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" class=\"menv-with-eqn\"")?;
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Gather
                     }
-                    self.writer.write_all(b">")?;
-                    let buf = &mut [0u8; 4];
-                    let bytes = content.encode_utf8(buf).as_bytes();
-                    self.writer.write_all(bytes)?;
-                    if unicode_variant {
-                        self.writer.write_all("\u{20D2}".as_bytes())?;
+                    Grouping::Gathered => {
+                        self.writer.write_all(b"<mtable><mtr><mtd>")?;
+                        EnvGrouping::Gather
                     }
-                    if self.env_stack.last().map(|env| env.env) == Some(EnvironmentType::Negate) {
-                        self.writer.write_all("\u{0338}".as_bytes())?;
-                        self.env_stack.pop();
+                    Grouping::Multline => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-multline\"><mtr><mtd>")?;
+                        EnvGrouping::Multline
                     }
-                    self.writer.write_all(b"</mo>")
-                }
-            },
-            Ok(Event::Begin(_)) => {
-                let mut font = self.state().font;
-                let old_state = self.state_stack.last_mut().expect("state stack is empty");
-                while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
-                    match state_change {
-                        StateChange::Font(new_font) => font = *new_font,
-                        StateChange::Color(ColorChange { color, target }) => match target {
-                            ColorTarget::Text => old_state.text_color = Some(color),
-                            ColorTarget::Background => old_state.background_color = Some(color),
-                            ColorTarget::Border => old_state.border_color = Some(color),
-                        },
-                        StateChange::Style(style) => old_state.style = Some(*style),
+                    Grouping::Split => {
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-alignlike\"><mtr><mtd>")?;
+                        EnvGrouping::Split { used_align: false }
                     }
-                    self.input.next();
-                }
-                self.open_tag("mrow", None, true)?;
-                self.state_stack.push(State {
-                    font,
-                    text_color: None,
-                    border_color: None,
-                    background_color: None,
-                    style: None,
-                });
-                self.env_stack
-                    .push(Environment::new(EnvironmentType::Group));
+                    Grouping::Equation { .. } => todo!(),
+                };
+                self.env_stack.push(Environment::from(env_group));
                 Ok(())
             }
             Ok(Event::End) => {
@@ -277,48 +359,79 @@ where
                     .env_stack
                     .pop()
                     .expect("cannot pop an environment in group end");
-                if env.env != EnvironmentType::Group {
+                let Environment::Group(grouping) = env else {
                     panic!("unexpected environment in group end");
-                }
+                };
                 self.state_stack
                     .pop()
                     .expect("cannot pop a state in group end");
-                self.writer.write_all(b"</mrow>")
+                self.previous_atom = Some(Atom::Inner);
+                match grouping {
+                    EnvGrouping::Normal => self.writer.write_all(b"</mrow>"),
+                    EnvGrouping::LeftRight { closing } => {
+                        if let Some(delim) = closing {
+                            self.open_tag("mo", None)?;
+                            self.writer.write_all(b" stretchy=\"true\">")?;
+                            let mut buf = [0u8; 4];
+                            self.writer
+                                .write_all(delim.encode_utf8(&mut buf).as_bytes())?;
+                            self.writer.write_all(b"</mo>")?;
+                        }
+                        self.previous_atom = Some(Atom::Close);
+                        self.writer.write_all(b"</mrow>")
+                    }
+                    EnvGrouping::Matrix
+                    | EnvGrouping::Align { .. }
+                    | EnvGrouping::Array { .. }
+                    | EnvGrouping::SubArray
+                    | EnvGrouping::Gather
+                    | EnvGrouping::Multline
+                    | EnvGrouping::Split { .. }
+                    | EnvGrouping::Alignat { .. } => {
+                        self.writer.write_all(b"</mtd></mtr></mtable>")
+                    }
+                    EnvGrouping::Cases { left, .. } => {
+                        self.writer.write_all(b"</mtd></mtr></mtable>")?;
+                        if !left {
+                            self.writer.write_all(b"<mo stretchy=\"true\">}</mo>")?;
+                        }
+                        self.writer.write_all(b"</mrow>")
+                    }
+                }
             }
-            Ok(Event::Visual(visual)) => match visual {
-                Visual::Fraction(dim) => {
-                    self.env_stack
-                        .push(Environment::new(EnvironmentType::Fraction));
-                    self.open_tag("mfrac", None, false)?;
-                    if let Some(dim) = dim {
-                        write!(self.writer, " linethickness=\"{}em\"", tex_to_css_em(dim))?;
+            Ok(Event::Visual(visual)) => {
+                if visual == Visual::Negation {
+                    match self.input.peek_first() {
+                        Some(Ok(Event::Content(
+                            content @ Content::Ordinary { .. }
+                            | content @ Content::Relation { .. }
+                            | content @ Content::BinaryOp { .. }
+                            | content @ Content::LargeOp { .. }
+                            | content @ Content::Delimiter { .. }
+                            | content @ Content::Punctuation(_),
+                        ))) => {
+                            let content = *content;
+                            self.write_content(content, true)?;
+                            self.input.next();
+                        }
+                        _ => {
+                            self.open_tag("mrow", Some("mop-negated"))?;
+                            self.writer.write_all(b">")?;
+                            self.env_stack.push(Environment::from(visual));
+                        }
                     }
-                    self.writer.write_all(b">")
+                    return Ok(());
                 }
-                Visual::SquareRoot => {
-                    self.env_stack.push(Environment::new(EnvironmentType::Sqrt));
-                    self.open_tag("msqrt", None, true)
+
+                let env = Environment::from(visual);
+                self.env_stack.push(env);
+                self.open_tag(visual_tag(visual), None)?;
+                if let Visual::Fraction(Some(dim)) = visual {
+                    write!(self.writer, " linethickness=\"{}em\"", tex_to_css_em(dim))?;
                 }
-                Visual::Root => {
-                    self.env_stack.push(Environment::new(EnvironmentType::Root));
-                    self.open_tag("mroot", None, true)
-                }
-                Visual::Negation => {
-                    self.env_stack
-                        .push(Environment::new(EnvironmentType::Negate));
-                    if !matches!(
-                        self.input
-                            .peek()
-                            .expect("need to be a next event after negation"),
-                        Ok(Event::Content(Content::Operator(_)))
-                            | Ok(Event::Content(Content::Identifier(Identifier::Char(_))))
-                    ) {
-                        self.open_tag("mrow", Some("background: linear-gradient(to top left, rgba(0,0,0,0) 0%, rgba(0,0,0,0) calc(50% - 0.8px), rgba(0,0,0,1) 50%, rgba(0,0,0,0) calc(50% + 0.8px), rgba(0,0,0,0) 100%)"), true)
-                    } else {
-                        Ok(())
-                    }
-                }
-            },
+
+                self.writer.write_all(b">")
+            }
 
             Ok(Event::Script { ty, position }) => {
                 let state = self.state();
@@ -331,13 +444,10 @@ where
                                 && self.config.display_mode == DisplayMode::Block)
                     }
                 };
-                let env = EnvironmentType::Script {
-                    ty,
-                    above_below,
-                    append: "",
-                };
-                self.env_stack.push(Environment::new(env));
-                self.open_tag(env.tag(), None, true)
+                let env = Environment::from((ty, above_below));
+                self.env_stack.push(env);
+                self.open_tag(script_tag(ty, above_below), None)?;
+                self.writer.write_all(b">")
             }
 
             Ok(Event::Space {
@@ -364,20 +474,93 @@ where
                 self.writer.write_all(b" />")
             }
             Ok(Event::StateChange(state_change)) => {
-                let state = self.state_stack.last_mut().expect("state stack is empty");
-                match state_change {
-                    StateChange::Font(font) => state.font = font,
-                    StateChange::Color(ColorChange { color, target }) => match target {
-                        ColorTarget::Text => state.text_color = Some(color),
-                        ColorTarget::Border => state.border_color = Some(color),
-                        ColorTarget::Background => state.background_color = Some(color),
-                    },
-                    StateChange::Style(style) => state.style = Some(style),
-                }
+                self.handle_state_change(state_change);
                 Ok(())
             }
-            // TODO: handle math environments
-            Ok(_) => Ok(()),
+            Ok(Event::NewLine) => {
+                *self.state_stack.last_mut().expect("state stack is empty") = State::default();
+                self.previous_atom = None;
+                match self.env_stack.last_mut() {
+                    Some(Environment::Group(
+                        EnvGrouping::Cases { used_align, .. } | EnvGrouping::Split { used_align },
+                    )) => {
+                        *used_align = false;
+                        self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
+                    }
+                    Some(Environment::Group(
+                        EnvGrouping::Matrix
+                        | EnvGrouping::Align
+                        | EnvGrouping::Gather
+                        | EnvGrouping::SubArray
+                        | EnvGrouping::Multline,
+                    )) => self.writer.write_all(b"</mtd></mtr><mtr><mtd>"),
+                    Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
+                        *cols_index =
+                            (cols.first() == Some(&ArrayColumn::VerticalLine)) as usize + 1;
+                        self.writer.write_all(b"</mtd></mtr><mtr><mtd")?;
+                        match cols[*cols_index - 1] {
+                            ArrayColumn::Column(ColumnAlignment::Left) => {
+                                self.writer.write_all(b" class=\"cell-left\"")?
+                            }
+                            ArrayColumn::Column(ColumnAlignment::Right) => {
+                                self.writer.write_all(b" class=\"cell-right\"")?
+                            }
+                            ArrayColumn::Column(ColumnAlignment::Center) => {}
+                            ArrayColumn::VerticalLine => {
+                                panic!("vertical line in place of column alignment")
+                            }
+                        }
+                        self.writer.write_all(b">")
+                    }
+                    Some(Environment::Group(EnvGrouping::Alignat { columns_used, .. })) => {
+                        *columns_used = 0;
+                        self.writer.write_all(b"</mtd></mtr><mtr><mtd>")
+                    }
+
+                    _ => panic!("newline not allowed in current environment"),
+                }
+            }
+            Ok(Event::Alignment) => {
+                *self.state_stack.last_mut().expect("state stack is empty") = State::default();
+                self.previous_atom = None;
+                match self.env_stack.last_mut() {
+                    Some(Environment::Group(
+                        EnvGrouping::Cases {
+                            used_align: false, ..
+                        }
+                        | EnvGrouping::Split { used_align: false },
+                    )) => self.writer.write_all(b"</mtd><mtd>"),
+                    // Center align all
+                    Some(Environment::Group(EnvGrouping::Align | EnvGrouping::Matrix)) => {
+                        self.writer.write_all(b"</mtd><mtd>")
+                    }
+                    Some(Environment::Group(EnvGrouping::Alignat {
+                        pairs,
+                        columns_used,
+                    })) if *columns_used / 2 <= *pairs => {
+                        *columns_used += 1;
+                        self.writer.write_all(b"</mtd><mtd>")
+                    }
+                    Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
+                        self.writer.write_all(b"</mtd><mtd class=\"")?;
+                        if cols[*cols_index] == ArrayColumn::VerticalLine {
+                            self.writer.write_all(b"menv-left-border ")?;
+                            *cols_index += 1;
+                        }
+                        self.writer.write_all(match cols[*cols_index] {
+                            ArrayColumn::Column(ColumnAlignment::Left) => b"cell-left\">",
+                            ArrayColumn::Column(ColumnAlignment::Right) => b"cell-right\">",
+                            ArrayColumn::Column(ColumnAlignment::Center) => b"\">",
+                            ArrayColumn::VerticalLine => {
+                                panic!("vertical line in place of column alignment")
+                            }
+                        })?;
+                        *cols_index += 1;
+                        Ok(())
+                    }
+                    _ => panic!("alignment not allowed in current environment"),
+                }
+            }
             Err(e) => {
                 let error_color = self.config.error_color;
                 write!(
@@ -388,6 +571,267 @@ where
                 self.writer.write_all(e.to_string().as_bytes())?;
                 self.writer.write_all(b"</mtext></merror>")
             }
+        }
+    }
+
+    fn write_content(&mut self, content: Content<'a>, negate: bool) -> io::Result<()> {
+        let mut buf = [0u8; 4];
+        match content {
+            Content::Text(text) => {
+                self.open_tag("mtext", None)?;
+                self.writer.write_all(b">")?;
+                let trimmed = text.trim();
+                if text.starts_with(char::is_whitespace) {
+                    self.writer.write_all(b"&nbsp;")?;
+                }
+                self.writer.write_all(trimmed.as_bytes())?;
+                if text.ends_with(char::is_whitespace) {
+                    self.writer.write_all(b"&nbsp;")?;
+                }
+                self.set_previous_atom(Atom::Ord);
+                self.writer.write_all(b"</mtext>")
+            }
+            Content::Number(number) => {
+                self.open_tag("mn", None)?;
+                self.writer.write_all(b">")?;
+                let buf = &mut [0u8; 4];
+                number.chars().try_for_each(|c| {
+                    let content = self.state().font.map_or(c, |v| v.map_char(c));
+                    let bytes = content.encode_utf8(buf);
+                    self.writer.write_all(bytes.as_bytes())
+                })?;
+                self.set_previous_atom(Atom::Ord);
+                self.writer.write_all(b"</mn>")
+            }
+            // TODO: script shenanigans and parens vs. no parens.
+            Content::Function(str) => {
+                if matches!(
+                    self.previous_atom,
+                    Some(Atom::Inner | Atom::Close | Atom::Ord)
+                ) {
+                    self.writer
+                        .write_all("<mspace width=\"0.1667em\" />".as_bytes())?;
+                }
+
+                self.open_tag("mi", None)?;
+                self.writer.write_all(if str.chars().count() == 1 {
+                    b" mathvariant=\"normal\">"
+                } else {
+                    b">"
+                })?;
+                self.writer.write_all(str.as_bytes())?;
+                self.set_previous_atom(Atom::Op);
+                self.writer.write_all(b"</mi>")?;
+
+                if let Some(Environment::Script { fn_application, .. }) = self.env_stack.last_mut()
+                {
+                    *fn_application = true;
+                } else if let Some(atom) = self.next_atom() {
+                    self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
+                    if !matches!(atom, Atom::Open | Atom::Punct | Atom::Close) {
+                        self.writer
+                            .write_all("<mspace width=\"0.1667em\" />".as_bytes())?;
+                    }
+                };
+
+                Ok(())
+            }
+            Content::Ordinary { content, stretchy } => {
+                if stretchy {
+                    self.writer.write_all(b"<mo stretchy=\"true\">")?;
+                    self.writer
+                        .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                    self.writer.write_all(b"</mo>")
+                } else {
+                    self.open_tag("mi", None)?;
+
+                    let content = match (
+                        self.state().font,
+                        self.config.math_style.should_be_upright(content),
+                    ) {
+                        (Some(Font::UpRight), _) | (None, true) => {
+                            self.writer.write_all(b" mathvariant=\"normal\">")?;
+                            content
+                        }
+                        (Some(font), _) => {
+                            self.writer.write_all(b">")?;
+                            font.map_char(content)
+                        }
+                        _ => {
+                            self.writer.write_all(b">")?;
+                            content
+                        }
+                    };
+
+                    let buf = &mut [0u8; 4];
+                    let bytes = content.encode_utf8(buf);
+                    self.writer.write_all(bytes.as_bytes())?;
+                    if negate {
+                        self.writer.write_all("\u{0338}".as_bytes())?;
+                    }
+                    self.set_previous_atom(Atom::Ord);
+                    self.writer.write_all(b"</mi>")
+                }
+            }
+            // TODO: Follow plain tex's rules for spacing:
+            // Varing is a binary when:
+            // 1. preceded by closing
+            // 3. preceded by punctuation
+            // 4. preceded by number
+            // 5. preceded by normal
+            // and:
+            // 1. followed by closing
+            // 4. followed by number
+            // 5. followed by normal
+            //
+            // If the current item is a Bin atom, and if this was the first atom in the list,
+            // or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
+            // Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
+            //
+            // If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
+            // was Bin, change that previous Bin to Ord. Continue with Rule 17.
+            //
+            // TexBook p. 153 and 157 for math classes.
+            Content::BinaryOp { content, small } => {
+                let tag = if matches!(
+                    self.previous_atom,
+                    Some(Atom::Inner | Atom::Close | Atom::Ord)
+                ) && !matches!(
+                    self.env_stack.last(),
+                    Some(
+                        Environment::Script { .. }
+                            | Environment::Visual {
+                                ty: Visual::Root | Visual::Fraction(_) | Visual::SquareRoot,
+                                ..
+                            }
+                    )
+                ) && matches!(
+                    self.next_atom(),
+                    Some(Atom::Inner | Atom::Bin | Atom::Op | Atom::Ord | Atom::Open)
+                ) {
+                    self.set_previous_atom(Atom::Bin);
+                    "mo"
+                } else {
+                    self.set_previous_atom(Atom::Ord);
+                    "mi"
+                };
+
+                self.open_tag(tag, small.then_some("mop-small"))?;
+                self.writer.write_all(b">")?;
+                self.writer
+                    .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                if negate {
+                    self.writer.write_all("\u{0338}".as_bytes())?;
+                }
+                write!(self.writer, "</{}>", tag)
+            }
+            Content::Relation { content, small } => {
+                self.open_tag("mo", small.then_some("mop-small"))?;
+                self.writer.write_all(b">")?;
+                self.writer
+                    .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                if negate {
+                    self.writer.write_all("\u{0338}".as_bytes())?;
+                }
+                self.set_previous_atom(Atom::Rel);
+                self.writer.write_all(b"</mo>")
+            }
+
+            Content::LargeOp { content, small } => {
+                self.open_tag("mo", None)?;
+                if small {
+                    self.writer.write_all(b" largeop=\"false\"")?;
+                }
+                self.writer.write_all(b" movablelimits=\"false\">")?;
+                self.writer
+                    .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                if negate {
+                    self.writer.write_all("\u{0338}".as_bytes())?;
+                }
+                self.set_previous_atom(Atom::Op);
+                self.writer.write_all(b"</mo>")
+            }
+            Content::Delimiter { content, size, ty } => {
+                self.open_tag("mo", None)?;
+                write!(
+                    self.writer,
+                    " symmetric=\"{0}\" stretchy=\"{0}\"",
+                    ty == DelimiterType::Fence || size.is_some()
+                )?;
+                if let Some(size) = size {
+                    write!(
+                        self.writer,
+                        "minsize=\"{0}em\" maxsize=\"{0}em\"",
+                        size.to_em()
+                    )?;
+                }
+
+                self.writer.write_all(b">")?;
+                self.writer
+                    .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                if negate {
+                    self.writer.write_all("\u{0338}".as_bytes())?;
+                }
+                self.set_previous_atom(match ty {
+                    DelimiterType::Open => Atom::Open,
+                    DelimiterType::Fence => Atom::Punct,
+                    DelimiterType::Close => Atom::Close,
+                });
+                self.writer.write_all(b"</mo>")
+            }
+            Content::Punctuation(content) => {
+                self.open_tag("mo", None)?;
+                self.writer.write_all(b">")?;
+                self.writer
+                    .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                if negate {
+                    self.writer.write_all("\u{0338}".as_bytes())?;
+                }
+                self.set_previous_atom(Atom::Punct);
+                self.writer.write_all(b"</mo>")
+            }
+            Content::MultiRelation(content) => {
+                self.open_tag("mo", None)?;
+                self.writer.write_all(b">")?;
+                self.writer.write_all(content.as_bytes())?;
+                self.set_previous_atom(Atom::Rel);
+                self.writer.write_all(b"</mo>")
+            }
+        }
+    }
+
+    fn handle_state_change(&mut self, state_change: StateChange<'a>) {
+        let state = self.state_stack.last_mut().expect("state stack is empty");
+        match state_change {
+            StateChange::Font(font) => state.font = font,
+            StateChange::Color(ColorChange { color, target }) => match target {
+                ColorTarget::Text => state.text_color = Some(color),
+                ColorTarget::Border => state.border_color = Some(color),
+                ColorTarget::Background => state.background_color = Some(color),
+            },
+            StateChange::Style(style) => state.style = Some(style),
+        }
+    }
+
+    fn set_previous_atom(&mut self, atom: Atom) {
+        if !matches!(
+            self.env_stack.last(),
+            Some(
+                Environment::Visual {
+                    ty: Visual::Root | Visual::Fraction(_),
+                    count: 0
+                } | Environment::Script {
+                    ty: ScriptType::Subscript | ScriptType::Superscript,
+                    count: 0,
+                    ..
+                } | Environment::Script {
+                    ty: ScriptType::SubSuperscript,
+                    count: 0 | 1,
+                    ..
+                }
+            )
+        ) {
+            self.previous_atom = Some(atom);
         }
     }
 
@@ -414,21 +858,38 @@ where
         while let Some(event) = self.input.next() {
             self.write_event(event)?;
 
-            while let Some(Environment { env, count }) = self.env_stack.last_mut() {
-                if *count == Some(0) {
-                    self.writer.write_all(b"</")?;
-                    self.writer.write_all(env.tag().as_bytes())?;
-                    self.writer.write_all(b">")?;
-                    if let EnvironmentType::Script { append, .. } = env {
-                        self.writer.write_all(append.as_bytes())?;
-                    }
-                    self.env_stack.pop();
-                    continue;
-                }
-                if let Some(count) = count {
+            while let Some((tag, count, fn_application)) =
+                self.env_stack.last_mut().and_then(|env| match env {
+                    Environment::Group(_) => None,
+                    Environment::Visual { ty, count } => Some((visual_tag(*ty), count, None)),
+                    Environment::Script {
+                        ty,
+                        above_below,
+                        count,
+                        fn_application,
+                    } => Some((script_tag(*ty, *above_below), count, Some(*fn_application))),
+                })
+            {
+                if *count != 0 {
                     *count -= 1;
+                    break;
                 }
-                break;
+                self.writer.write_all(b"</")?;
+                self.writer.write_all(tag.as_bytes())?;
+                self.writer.write_all(b">")?;
+                self.set_previous_atom(Atom::Inner);
+                self.env_stack.pop();
+
+                if fn_application.unwrap_or(false) {
+                    if let Some(atom) = self.next_atom() {
+                        self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
+
+                        if !matches!(atom, Atom::Open | Atom::Punct | Atom::Close) {
+                            self.writer
+                                .write_all("<mspace width=\"0.1667em\" />".as_bytes())?;
+                        }
+                    }
+                }
             }
         }
 
@@ -448,104 +909,160 @@ where
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-struct Environment {
-    env: EnvironmentType,
-    count: Option<u8>,
+enum Atom {
+    Bin,
+    Op,
+    Rel,
+    Open,
+    Close,
+    Punct,
+    Ord,
+    Inner,
 }
 
-impl Environment {
-    fn new(env: EnvironmentType) -> Self {
-        Self {
-            env,
-            count: match env {
-                EnvironmentType::Group => None,
-                EnvironmentType::Fraction => Some(2),
-                EnvironmentType::Root => Some(2),
-                EnvironmentType::Sqrt => Some(1),
-                EnvironmentType::Negate => Some(1),
-                EnvironmentType::Script {
-                    ty: ScriptType::Subscript,
-                    ..
-                } => Some(2),
-                EnvironmentType::Script {
-                    ty: ScriptType::Superscript,
-                    ..
-                } => Some(2),
-                EnvironmentType::Script {
-                    ty: ScriptType::SubSuperscript,
-                    ..
-                } => Some(3),
-            },
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-enum EnvironmentType {
-    Group,
-    Fraction,
-    Root,
-    Sqrt,
-    Negate,
-    Script {
-        ty: ScriptType,
-        above_below: bool,
-        // TODO: This is a hotfix to append things after groupings for the commands stuff.
-        // Shoud probably be refactored into it's own type of things to do, a bit like `Instruction`.
-        append: &'static str,
+#[derive(Debug, Clone, PartialEq)]
+enum EnvGrouping {
+    Normal,
+    LeftRight {
+        closing: Option<char>,
+    },
+    Array {
+        cols: Box<[ArrayColumn]>,
+        cols_index: usize,
+    },
+    Matrix,
+    Cases {
+        used_align: bool,
+        left: bool,
+    },
+    Align,
+    Alignat {
+        pairs: u16,
+        columns_used: u16,
+    },
+    SubArray,
+    Gather,
+    Multline,
+    Split {
+        used_align: bool,
     },
 }
 
-impl EnvironmentType {
-    fn tag(&self) -> &'static str {
-        match self {
-            EnvironmentType::Group => "mrow",
-            EnvironmentType::Fraction => "mfrac",
-            EnvironmentType::Root => "mroot",
-            EnvironmentType::Sqrt => "msqrt",
-            EnvironmentType::Negate => "mrow",
-            EnvironmentType::Script {
-                ty: ScriptType::Subscript,
-                above_below: false,
-                ..
-            } => "msub",
-            EnvironmentType::Script {
-                ty: ScriptType::Superscript,
-                above_below: false,
-                ..
-            } => "msup",
-            EnvironmentType::Script {
-                ty: ScriptType::SubSuperscript,
-                above_below: false,
-                ..
-            } => "msubsup",
-            EnvironmentType::Script {
-                ty: ScriptType::Subscript,
-                above_below: true,
-                ..
-            } => "munder",
-            EnvironmentType::Script {
-                ty: ScriptType::Superscript,
-                above_below: true,
-                ..
-            } => "mover",
-            EnvironmentType::Script {
-                ty: ScriptType::SubSuperscript,
-                above_below: true,
-                ..
-            } => "munderover",
+#[derive(Debug, Clone, PartialEq)]
+enum Environment {
+    Group(EnvGrouping),
+    Visual {
+        ty: Visual,
+        count: u8,
+    },
+    Script {
+        ty: ScriptType,
+        above_below: bool,
+        count: u8,
+        fn_application: bool,
+    },
+}
+
+impl From<EnvGrouping> for Environment {
+    fn from(v: EnvGrouping) -> Self {
+        Self::Group(v)
+    }
+}
+
+impl From<(ScriptType, bool)> for Environment {
+    fn from((ty, above_below): (ScriptType, bool)) -> Self {
+        let count = match ty {
+            ScriptType::Subscript => 2,
+            ScriptType::Superscript => 2,
+            ScriptType::SubSuperscript => 3,
+        };
+        Self::Script {
+            ty,
+            above_below,
+            count,
+            fn_application: false,
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+impl From<Visual> for Environment {
+    fn from(v: Visual) -> Self {
+        let count = match v {
+            Visual::SquareRoot => 1,
+            Visual::Root => 2,
+            Visual::Fraction(_) => 2,
+            Visual::Negation => 1,
+        };
+        Self::Visual { ty: v, count }
+    }
+}
+
+fn script_tag(ty: ScriptType, above_below: bool) -> &'static str {
+    match (ty, above_below) {
+        (ScriptType::Subscript, false) => "msub",
+        (ScriptType::Superscript, false) => "msup",
+        (ScriptType::SubSuperscript, false) => "msubsup",
+        (ScriptType::Subscript, true) => "munder",
+        (ScriptType::Superscript, true) => "mover",
+        (ScriptType::SubSuperscript, true) => "munderover",
+    }
+}
+
+fn visual_tag(visual: Visual) -> &'static str {
+    match visual {
+        Visual::Root => "mroot",
+        Visual::Fraction(_) => "mfrac",
+        Visual::SquareRoot => "msqrt",
+        Visual::Negation => "mrow",
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
 struct State<'a> {
     font: Option<Font>,
     text_color: Option<&'a str>,
     border_color: Option<&'a str>,
     background_color: Option<&'a str>,
     style: Option<Style>,
+}
+
+struct ManyPeek<I: Iterator> {
+    iter: I,
+    peeked: VecDeque<I::Item>,
+}
+
+impl<I: Iterator> ManyPeek<I> {
+    fn new(iter: I) -> Self {
+        Self {
+            iter,
+            peeked: VecDeque::new(),
+        }
+    }
+
+    fn peek_next(&mut self) -> Option<&I::Item> {
+        self.peeked.push_back(self.iter.next()?);
+        self.peeked.back()
+    }
+
+    fn peeked_nth(&self, n: usize) -> Option<&I::Item> {
+        self.peeked.get(n)
+    }
+
+    fn peek_first(&mut self) -> Option<&I::Item> {
+        if self.peeked.is_empty() {
+            self.peek_next()
+        } else {
+            self.peeked.front()
+        }
+    }
+}
+
+impl<I: Iterator> Iterator for ManyPeek<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.peeked.pop_front().or_else(|| self.iter.next())
+    }
 }
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>` as input, and renders a

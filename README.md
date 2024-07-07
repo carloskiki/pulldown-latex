@@ -30,11 +30,19 @@ these links specifically.
 - [Unicode-math package page](https://ctan.org/pkg/unicode-math)
 - [Font tester](https://fred-wang.github.io/MathFonts/)
 - [Math Variant Selection](https://milde.users.sourceforge.net/LUCR/Math/math-font-selection.xhtml#math-styles)
+- [Official Latex Unicode Data](https://github.com/latex3/unicode-data)
 
 ### To Test
 - [ ] All the things temml and katex test
 - [ ] Cargo Mutants
 - [ ] Errors
+
+### Bugs
+- [ ] `\bar` make a tiny bar, should be bigger.
+- [ ] italic numbers are not italic because they do not exist in unicode.
+- [ ] square braket matrices do not have equal spacing on the left and the right.
+- [ ] Newline should allow for newline spacing.
+- [ ] `\sideset`
 
 ## Unsupported Plain-TeX & LaTeX behavior
 
