@@ -46,7 +46,7 @@ pub struct Parser<'a> {
 
     /// This buffer serves as a staging area when parsing a command.
     ///
-    /// When a token is parsed, it is first pushed to this stack, then suffixes are checked
+    /// When a token is parsed, it is first pushed to this stack, then scripts are checked
     /// (superscript, and subscript), and then the event is moved from the buffer to the instruction stack.
     buffer: Vec<Instruction<'a>>,
 }
@@ -146,7 +146,7 @@ impl<'a> Iterator for Parser<'a> {
 
                 
 
-                let suffix_event = match desc {
+                let script_event = match desc {
                     Err(e) => return Some(Err(self.error_with_context(e))),
                     Ok(Some((e, desc))) => {
                         if desc.subscript_start > desc.superscript_start {
@@ -183,7 +183,7 @@ impl<'a> Iterator for Parser<'a> {
                 };
 
                 self.instruction_stack.extend(self.buffer.drain(..).rev());
-                if let Some(e) = suffix_event {
+                if let Some(e) = script_event {
                     self.instruction_stack.push(Instruction::Event(e));
                 }
                 self.next()
@@ -239,10 +239,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         Ok(())
     }
 
-    /// ## Suffix parsing
+    /// ## Script parsing
     /// 
-    /// The suffix parser first checks for directives about suffix placement, i.e. `\limits` and `\nolimits`,
-    /// if the `allow_suffix_modifiers` flag is set on the parser state. If the flag is set, and if more than one directive is found,
+    /// The script parser first checks for directives about script placement, i.e. `\limits` and `\nolimits`,
+    /// if the `allow_script_modifiers` flag is set on the parser state. If the flag is set, and if more than one directive is found,
     /// the last one takes effect, as per the [`amsmath docs`][amsdocs] (section 7.3). If the flag is not set, and a limit modifying
     /// directive is found, the parser emits an error.
     ///
@@ -252,28 +252,22 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         let token = lex::token(&mut self.content)?;
         match token {
             // TODO: when expanding a user defined macro, we do not want to check for
-            // suffixes.
+            // scripts.
             Token::ControlSequence(cs) => self.handle_primitive(cs)?,
             Token::Character(c) => self.handle_char_token(c)?,
         };
 
-        // 2. Check for suffixes, to complete the atom.
-        if self.state.skip_suffixes {
+        // 2. Check for scripts, to complete the atom.
+        if self.state.skip_scripts {
             return Ok(None);
         }
 
-        let mut script_position = if self.state.above_below_suffix_default {
-            ScriptPosition::Movable
-        } else {
-            ScriptPosition::Right
-        };
-
-        if self.state.allow_suffix_modifiers {
+        if self.state.allow_script_modifiers {
             if let Some(limits) = lex::limit_modifiers(&mut self.content) {
                 if limits {
-                    script_position = ScriptPosition::AboveBelow;
+                    self.state.script_position = ScriptPosition::AboveBelow;
                 } else {
-                    script_position = ScriptPosition::Right;
+                    self.state.script_position = ScriptPosition::Right;
                 }
             }
         }
@@ -286,10 +280,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         };
         self.content = &self.content[1..];
 
-        let first_suffix_start = self.buffer.len();
+        let first_script_start = self.buffer.len();
         let arg = lex::argument(&mut self.content)?;
         self.handle_argument(arg)?;
-        let second_suffix_start = self.buffer.len();
+        let second_script_start = self.buffer.len();
         let next_char = self.content.chars().next();
         if (next_char == Some('_') && !subscript_first)
             || (next_char == Some('^') && subscript_first)
@@ -304,29 +298,29 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 ErrorKind::DoubleSuperscript
             });
         }
-        let second_suffix_end = self.buffer.len();
+        let second_script_end = self.buffer.len();
 
-        Ok(Some(if second_suffix_start == second_suffix_end {
+        Ok(Some(if second_script_start == second_script_end {
             if subscript_first {
                 (
                     Event::Script {
                         ty: ScriptType::Subscript,
-                        position: script_position,
+                        position: self.state.script_position,
                     },
                     ScriptDescriptor {
-                        subscript_start: first_suffix_start,
-                        superscript_start: second_suffix_start,
+                        subscript_start: first_script_start,
+                        superscript_start: second_script_start,
                     },
                 )
             } else {
                 (
                     Event::Script {
                         ty: ScriptType::Superscript,
-                        position: script_position,
+                        position: self.state.script_position,
                     },
                     ScriptDescriptor {
-                        subscript_start: second_suffix_start,
-                        superscript_start: first_suffix_start,
+                        subscript_start: second_script_start,
+                        superscript_start: first_script_start,
                     },
                 )
             }
@@ -334,17 +328,17 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             (
                 Event::Script {
                     ty: ScriptType::SubSuperscript,
-                    position: script_position,
+                    position: self.state.script_position,
                 },
                 if subscript_first {
                     ScriptDescriptor {
-                        subscript_start: first_suffix_start,
-                        superscript_start: second_suffix_start,
+                        subscript_start: first_script_start,
+                        superscript_start: second_script_start,
                     }
                 } else {
                     ScriptDescriptor {
-                        subscript_start: second_suffix_start,
-                        superscript_start: first_suffix_start,
+                        subscript_start: second_script_start,
+                        superscript_start: first_script_start,
                     }
                 },
             )

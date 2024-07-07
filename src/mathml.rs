@@ -3,7 +3,7 @@
 //! This crate provides a "simple" `mathml` renderer which is available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 
-use std::{io, iter::Peekable};
+use std::{collections::VecDeque, io};
 
 use crate::{
     attribute::{tex_to_css_em, Font},
@@ -15,7 +15,7 @@ use crate::{
 };
 
 struct MathmlWriter<'a, I: Iterator, W> {
-    input: Peekable<I>,
+    input: ManyPeek<I>,
     writer: W,
     config: RenderConfig<'a>,
     env_stack: Vec<Environment>,
@@ -41,12 +41,51 @@ where
         });
         let env_stack = Vec::with_capacity(16);
         Self {
-            input: input.peekable(),
+            input: ManyPeek::new(input),
             writer,
             config,
             env_stack,
             state_stack,
             previous_atom: None,
+        }
+    }
+
+    fn next_atom(&mut self) -> Option<Atom> {
+        let mut index = 0;
+        loop {
+            let next = match self.input.peeked_nth(index) {
+                None => self.input.peek_next()?,
+                Some(next) => {
+                    index += 1;
+                    next
+                }
+            };
+
+            break match next {
+                Ok(
+                    Event::StateChange(_)
+                    | Event::Space { .. }
+                    | Event::Visual(Visual::Negation)
+                    | Event::Script { .. },
+                ) => continue,
+                Ok(Event::End | Event::NewLine | Event::Alignment) | Err(_) => None,
+                Ok(Event::Visual(_) | Event::Begin(_)) => Some(Atom::Inner),
+                Ok(Event::Content(content)) => match content {
+                    Content::BinaryOp { .. } => Some(Atom::Bin),
+                    Content::LargeOp { .. } => Some(Atom::Op),
+                    Content::Relation { .. } => Some(Atom::Rel),
+                    Content::Delimiter {
+                        ty: DelimiterType::Open,
+                        ..
+                    } => Some(Atom::Open),
+                    Content::Delimiter {
+                        ty: DelimiterType::Close,
+                        ..
+                    } => Some(Atom::Close),
+                    Content::Punctuation(_) => Some(Atom::Punct),
+                    _ => Some(Atom::Ord),
+                },
+            };
         }
     }
 
@@ -134,7 +173,7 @@ where
                 } else {
                     let last_state = *self.state();
                     self.state_stack.push(last_state);
-                    while let Some(Ok(Event::StateChange(state_change))) = self.input.peek() {
+                    while let Some(Ok(Event::StateChange(state_change))) = self.input.peek_first() {
                         let state_change = *state_change;
                         self.handle_state_change(state_change);
                         self.input.next();
@@ -347,7 +386,7 @@ where
             }
             Ok(Event::Visual(visual)) => {
                 if visual == Visual::Negation {
-                    match self.input.peek() {
+                    match self.input.peek_first() {
                         Some(Ok(Event::Content(
                             content @ Content::Ordinary { .. }
                             | content @ Content::Relation { .. }
@@ -551,6 +590,14 @@ where
             }
             // TODO: script shenanigans and parens vs. no parens.
             Content::Function(str) => {
+                if matches!(
+                    self.previous_atom,
+                    Some(Atom::Inner | Atom::Close | Atom::Ord)
+                ) {
+                    self.writer
+                        .write_all("<mspace width=\"0.1667em\" />".as_bytes())?;
+                }
+
                 self.open_tag("mi", None)?;
                 self.writer.write_all(if str.chars().count() == 1 {
                     b" mathvariant=\"normal\">"
@@ -559,10 +606,21 @@ where
                 })?;
                 self.writer.write_all(str.as_bytes())?;
                 self.set_previous_atom(Atom::Op);
-                self.writer.write_all(b"</mi>")
+                self.writer.write_all(b"</mi>")?;
 
-                // TODO: Add function application symbol when no paren is there.
-                // let to_append = "<mo>\u{2061}</mo><mspace width=\"0.1667em\" />";
+                if let Some(Environment::Script { fn_application, .. }) =
+                    self.env_stack.last_mut()
+                {
+                    *fn_application = true;
+                } else if let Some(atom) = self.next_atom() {
+                    self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
+                    if !matches!(atom, Atom::Open | Atom::Punct | Atom::Close) {
+                        self.writer
+                            .write_all("<mspace width=\"0.1667em\" />".as_bytes())?;
+                    }
+                };
+
+                Ok(())
             }
             Content::Ordinary { content, stretchy } => {
                 if stretchy {
@@ -624,25 +682,18 @@ where
                 let tag = if matches!(
                     self.previous_atom,
                     Some(Atom::Inner | Atom::Close | Atom::Ord)
+                ) && !matches!(
+                    self.env_stack.last(),
+                    Some(
+                        Environment::Script { .. }
+                            | Environment::Visual {
+                                ty: Visual::Root | Visual::Fraction(_) | Visual::SquareRoot,
+                                ..
+                            }
+                    )
                 ) && matches!(
-                    self.input.peek(),
-                    Some(Ok(Event::Begin(_)
-                        | Event::Visual(_)
-                        | Event::Script { .. }
-                        | Event::Content(
-                            // TODO: check for next atom farther using multi-peek for scripts, visuals,
-                            // spacing, and state changes.
-                            Content::BinaryOp { .. }
-                                | Content::Text(_)
-                                | Content::Function(_)
-                                | Content::Number(_)
-                                | Content::LargeOp { .. }
-                                | Content::Ordinary { .. }
-                                | Content::Delimiter {
-                                    ty: DelimiterType::Open,
-                                    ..
-                                }
-                        )))
+                    self.next_atom(),
+                    Some(Atom::Inner | Atom::Bin | Atom::Op | Atom::Ord | Atom::Open)
                 ) {
                     self.set_previous_atom(Atom::Bin);
                     "mo"
@@ -688,16 +739,19 @@ where
             }
             Content::Delimiter { content, size, ty } => {
                 self.open_tag("mo", None)?;
-                write!(self.writer, " symmetric=\"{0}\" stretchy=\"{0}\"", ty == DelimiterType::Fence || size.is_some())?;
+                write!(
+                    self.writer,
+                    " symmetric=\"{0}\" stretchy=\"{0}\"",
+                    ty == DelimiterType::Fence || size.is_some()
+                )?;
                 if let Some(size) = size {
                     write!(
                         self.writer,
-                        "minsize=\"{}em\" maxsize=\"{}em\"",
-                        size.to_em(),
+                        "minsize=\"{0}em\" maxsize=\"{0}em\"",
                         size.to_em()
                     )?;
                 }
-                
+
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
@@ -790,24 +844,38 @@ where
         while let Some(event) = self.input.next() {
             self.write_event(event)?;
 
-            while let Some((tag, count)) = self.env_stack.last_mut().and_then(|env| match env {
-                Environment::Group(_) => None,
-                Environment::Visual { ty, count } => Some((visual_tag(*ty), count)),
-                Environment::Script {
-                    ty,
-                    above_below,
-                    count,
-                } => Some((script_tag(*ty, *above_below), count)),
-            }) {
-                if *count == 0 {
-                    self.writer.write_all(b"</")?;
-                    self.writer.write_all(tag.as_bytes())?;
-                    self.writer.write_all(b">")?;
-                    self.env_stack.pop();
-                    continue;
+            while let Some((tag, count, fn_application)) =
+                self.env_stack.last_mut().and_then(|env| match env {
+                    Environment::Group(_) => None,
+                    Environment::Visual { ty, count } => Some((visual_tag(*ty), count, None)),
+                    Environment::Script {
+                        ty,
+                        above_below,
+                        count,
+                        fn_application,
+                    } => Some((script_tag(*ty, *above_below), count, Some(*fn_application))),
+                })
+            {
+                if *count != 0 {
+                    *count -= 1;
+                    break;
                 }
-                *count -= 1;
-                break;
+                self.writer.write_all(b"</")?;
+                self.writer.write_all(tag.as_bytes())?;
+                self.writer.write_all(b">")?;
+                self.set_previous_atom(Atom::Inner);
+                self.env_stack.pop();
+
+                if fn_application.unwrap_or(false) {
+                    if let Some(atom) = self.next_atom() {
+                        self.writer.write_all("<mo>\u{2061}</mo>".as_bytes())?;
+
+                        if !matches!(atom, Atom::Open | Atom::Punct | Atom::Close) {
+                            self.writer
+                                .write_all("<mspace width=\"0.1667em\" />".as_bytes())?;
+                        }
+                    }
+                }
             }
         }
 
@@ -877,6 +945,7 @@ enum Environment {
         ty: ScriptType,
         above_below: bool,
         count: u8,
+        fn_application: bool,
     },
 }
 
@@ -897,6 +966,7 @@ impl From<(ScriptType, bool)> for Environment {
             ty,
             above_below,
             count,
+            fn_application: false,
         }
     }
 }
@@ -940,6 +1010,45 @@ struct State<'a> {
     border_color: Option<&'a str>,
     background_color: Option<&'a str>,
     style: Option<Style>,
+}
+
+struct ManyPeek<I: Iterator> {
+    iter: I,
+    peeked: VecDeque<I::Item>,
+}
+
+impl<I: Iterator> ManyPeek<I> {
+    fn new(iter: I) -> Self {
+        Self {
+            iter,
+            peeked: VecDeque::new(),
+        }
+    }
+
+    fn peek_next(&mut self) -> Option<&I::Item> {
+        self.peeked.push_back(self.iter.next()?);
+        self.peeked.back()
+    }
+
+    fn peeked_nth(&self, n: usize) -> Option<&I::Item> {
+        self.peeked.get(n)
+    }
+
+    fn peek_first(&mut self) -> Option<&I::Item> {
+        if self.peeked.is_empty() {
+            self.peek_next()
+        } else {
+            self.peeked.front()
+        }
+    }
+}
+
+impl<I: Iterator> Iterator for ManyPeek<I> {
+    type Item = I::Item;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.peeked.pop_front().or_else(|| self.iter.next())
+    }
 }
 
 /// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>` as input, and renders a

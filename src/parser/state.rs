@@ -4,13 +4,13 @@ use crate::event::ScriptPosition;
 /// State belonging to the parser that is reset every call to the `next` method of the parser.
 #[derive(Debug)]
 pub struct ParserState<'a> {
-    /// Whether the parser is currently parsing an operator that allows for its suffixes to be
+    /// Whether the parser is currently parsing an operator that allows for its scripts to be
     /// modifies by the commands `\nolimits`, `\limits`, and `\displaylimits`.
-    pub allow_suffix_modifiers: bool,
-    /// What type of suffix should be rendered by default for the current operator.
-    pub suffix_position: ScriptPosition,
-    /// Whether the parser should skip suffix parsing for the current event.
-    pub skip_suffixes: bool,
+    pub allow_script_modifiers: bool,
+    /// What type of script should be rendered by default for the current operator.
+    pub script_position: ScriptPosition,
+    /// Whether the parser should skip script parsing for the current event.
+    pub skip_scripts: bool,
     /// Whether we are currently handling an arument to a control sequence.
     ///
     /// This affects things like whether we can parse the `\relax` command and
@@ -26,9 +26,9 @@ pub struct ParserState<'a> {
 impl<'a> Default for ParserState<'a> {
     fn default() -> Self {
         Self {
-            allow_suffix_modifiers: false,
-            suffix_position: ScriptPosition::Right,
-            skip_suffixes: false,
+            allow_script_modifiers: false,
+            script_position: ScriptPosition::Right,
+            skip_scripts: false,
             handling_argument: false,
             allowed_alignment_count: None,
         }

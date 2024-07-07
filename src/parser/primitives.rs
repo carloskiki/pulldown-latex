@@ -136,13 +136,24 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
             | "coth" | "dim" | "sin" | "tanh" | "sgn" => E::Content(C::Function(control_sequence)),
-            "lim" | "Pr" | "sup" | "liminf" | "max" | "inf" | "gcd" | "limsup" | "min" => {
-                self.state.allow_suffix_modifiers = true;
-                self.state.above_below_suffix_default = true;
+            "lim" | "Pr" | "sup" | "max" | "inf" | "gcd" | "min" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
                 E::Content(C::Function(control_sequence))
             }
+            "liminf" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("lim inf"))
+            }
+           "limsup" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("lim sup"))
+           }
+            
             "operatorname" => {
-                self.state.allow_suffix_modifiers = true;
+                self.state.allow_script_modifiers = true;
                 let argument = lex::argument(&mut self.content)?;
                 match argument {
                     Argument::Token(Token::ControlSequence(_)) => {
@@ -410,7 +421,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 let Argument::Group(color) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
-                self.state.skip_suffixes = true;
+                self.state.skip_scripts = true;
 
                 if !is_primitive_color(color) {
                     return Err(ErrorKind::UnknownColor);
@@ -562,7 +573,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "iint" => self.large_op('∬', false),
             "iiint" => self.large_op('∭', false),
             "smallint" => {
-                self.state.allow_suffix_modifiers = true;
+                self.state.allow_script_modifiers = true;
                 E::Content(C::LargeOp {
                     content: '∫',
                     small: true,
@@ -621,23 +632,23 @@ impl<'a, 'b> InnerParser<'a, 'b> {
 
             // Groups
             "overgroup" => { 
-                self.state.above_below_suffix_default = true;
+                self.state.script_position = SP::AboveBelow;
                 return self.accent('⏠', true)
             },
             "undergroup" => {
-                self.state.above_below_suffix_default = true;
+                self.state.script_position = SP::AboveBelow;
                 return self.underscript('⏡')
             }
             "overbrace" => {
-                self.state.above_below_suffix_default = true;
+                self.state.script_position = SP::AboveBelow;
                 return self.accent('⏞', true)
             }
             "underbrace" => {
-                self.state.above_below_suffix_default = true;
+                self.state.script_position = SP::AboveBelow;
                 return self.underscript('⏟')
             }
             "underparen" => {
-                self.state.above_below_suffix_default = true;
+                self.state.script_position = SP::AboveBelow;
                 return self.underscript('⏝')
             },
 
@@ -1160,26 +1171,42 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "leftrightarrow" => relation('↔'),
             "nwarrow" => relation('↖'),
             "xleftarrow" => {
+                let below = lex::optional_argument(&mut self.content)?;
                 let above = lex::argument(&mut self.content)?;
                 self.buffer.extend([
                     I::Event(E::Script {
-                        ty: ST::Superscript,
+                        ty: if below.is_some() {
+                            ST::SubSuperscript
+                        } else {
+                            ST::Superscript
+                        },
                         position: SP::AboveBelow,
                     }),
                     I::Event(relation('←')),
                 ]);
+                if let Some(below) = below {
+                    self.handle_argument(Argument::Group(below))?;
+                }
                 self.handle_argument(above)?;
                 return Ok(());
             }
             "xrightarrow" => {
+                let below = lex::optional_argument(&mut self.content)?;
                 let above = lex::argument(&mut self.content)?;
                 self.buffer.extend([
                     I::Event(E::Script {
-                        ty: ST::Superscript,
+                        ty: if below.is_some() {
+                            ST::SubSuperscript
+                        } else {
+                            ST::Superscript
+                        },
                         position: SP::AboveBelow,
                     }),
                     I::Event(relation('→')),
                 ]);
+                if let Some(below) = below {
+                    self.handle_argument(Argument::Group(below))?;
+                }
                 self.handle_argument(above)?;
                 return Ok(());
             }
@@ -1718,9 +1745,13 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         Ok(())
     }
 
-    fn large_op(&mut self, op: char, above_below: bool) -> E<'a> {
-        self.state.allow_suffix_modifiers = true;
-        self.state.above_below_suffix_default = above_below;
+    fn large_op(&mut self, op: char, movable: bool) -> E<'a> {
+        self.state.allow_script_modifiers = true;
+        self.state.script_position = if movable {
+            SP::Movable
+        } else {
+            SP::Right
+        };
         E::Content(C::LargeOp {
             content: op,
             small: false,
@@ -1728,12 +1759,12 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     }
 
     fn font_change(&mut self, font: Font) -> E<'a> {
-        self.state.skip_suffixes = true;
+        self.state.skip_scripts = true;
         E::StateChange(SC::Font(Some(font)))
     }
 
     fn style_change(&mut self, style: S) -> E<'a> {
-        self.state.skip_suffixes = true;
+        self.state.skip_scripts = true;
         E::StateChange(SC::Style(style))
     }
 
