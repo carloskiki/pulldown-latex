@@ -146,12 +146,12 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 self.state.script_position = SP::Movable;
                 E::Content(C::Function("lim inf"))
             }
-           "limsup" => {
+            "limsup" => {
                 self.state.allow_script_modifiers = true;
                 self.state.script_position = SP::Movable;
                 E::Content(C::Function("lim sup"))
-           }
-            
+            }
+
             "operatorname" => {
                 self.state.allow_script_modifiers = true;
                 let argument = lex::argument(&mut self.content)?;
@@ -169,11 +169,28 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "pmod" => {
                 let argument = lex::argument(&mut self.content)?;
                 self.buffer.extend([
-                    I::Event(E::Begin(G::LeftRight(Some('('), Some(')')))),
+                    I::Event(E::Space {
+                        width: Some((1., DimensionUnit::Em)),
+                        height: None,
+                        depth: None,
+                    }),
+                    I::Event(E::Begin(G::Normal)),
+                    I::Event(E::Content(C::Delimiter {
+                        content: '(',
+                        size: None,
+                        ty: DelimiterType::Open,
+                    })),
                     I::Event(E::Content(C::Function("mod"))),
                 ]);
                 self.handle_argument(argument)?;
-                self.buffer.push(I::Event(E::End));
+                self.buffer.extend([
+                    I::Event(E::End),
+                    I::Event(E::Content(C::Delimiter {
+                        content: ')',
+                        size: None,
+                        ty: DelimiterType::Close,
+                    })),
+                ]);
                 return Ok(());
             }
 
@@ -631,26 +648,26 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "wideparen" | "overparen" => return self.accent('⏜', true),
 
             // Groups
-            "overgroup" => { 
+            "overgroup" => {
                 self.state.script_position = SP::AboveBelow;
-                return self.accent('⏠', true)
-            },
+                return self.accent('⏠', true);
+            }
             "undergroup" => {
                 self.state.script_position = SP::AboveBelow;
-                return self.underscript('⏡')
+                return self.underscript('⏡');
             }
             "overbrace" => {
                 self.state.script_position = SP::AboveBelow;
-                return self.accent('⏞', true)
+                return self.accent('⏞', true);
             }
             "underbrace" => {
                 self.state.script_position = SP::AboveBelow;
-                return self.underscript('⏟')
+                return self.underscript('⏟');
             }
             "underparen" => {
                 self.state.script_position = SP::AboveBelow;
-                return self.underscript('⏝')
-            },
+                return self.underscript('⏝');
+            }
 
             // Primes
             "prime" => ordinary('′'),
@@ -1071,7 +1088,10 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "npreceq" => relation('⋠'),
             "ntrianglerighteq" => relation('⋭'),
             "neq" => relation('≠'),
-            "nshortmid" => relation('∤'),
+            "nshortmid" => E::Content(C::Relation {
+                content: '∤',
+                small: true,
+            }),
             "nvdash" => relation('⊬'),
             "ngeq" => relation('≱'),
             "nshortparallel" => E::Content(C::Relation {
@@ -1747,11 +1767,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
 
     fn large_op(&mut self, op: char, movable: bool) -> E<'a> {
         self.state.allow_script_modifiers = true;
-        self.state.script_position = if movable {
-            SP::Movable
-        } else {
-            SP::Right
-        };
+        self.state.script_position = if movable { SP::Movable } else { SP::Right };
         E::Content(C::LargeOp {
             content: op,
             small: false,

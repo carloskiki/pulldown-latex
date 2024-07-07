@@ -251,7 +251,7 @@ pub fn cross_browser_tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
 
 #[macro_export]
 macro_rules! round_trip {
-    (should_panic, $name:ident, $($input:literal),*) => {
+    (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {
             let inputs = &[$($input),*];
             for input in inputs {
@@ -270,7 +270,7 @@ macro_rules! round_trip {
             }
         }
     };
-    ($name:ident, $($input:literal),* $(, $field:ident = $value:expr)*) => {
+    ($name:ident, $($input:literal),+ $(, $field:ident = $value:expr)* $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {
             let inputs = &[$($input),*];
             $crate::common::round_trip(stringify!($name), inputs, pulldown_latex::config::RenderConfig {

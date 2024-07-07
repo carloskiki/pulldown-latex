@@ -179,6 +179,8 @@ pub enum StateChange<'a> {
     /// Changes the color of the content.
     Color(ColorChange<'a>),
     /// Changes the style of the content (mostly affects the sizing of the content).
+    ///
+    /// This state change does not affect scripts, and root indexes.
     Style(Style),
 }
 

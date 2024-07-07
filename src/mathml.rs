@@ -99,17 +99,32 @@ where
         } = *self.state();
         write!(self.writer, "<{}", tag)?;
         if let Some(style) = style {
-            let args = match style {
-                Style::Display => (true, 0),
-                Style::Text => (false, 0),
-                Style::Script => (false, 1),
-                Style::ScriptScript => (false, 2),
-            };
-            write!(
-                self.writer,
-                " displaystyle=\"{}\" scriptlevel=\"{}\"",
-                args.0, args.1
-            )?;
+            if !matches!(
+                self.env_stack.last(),
+                Some(
+                    Environment::Script {
+                        ty: ScriptType::Subscript | ScriptType::Superscript,
+                        count: 0,
+                        ..
+                    } | Environment::Script {
+                        ty: ScriptType::SubSuperscript,
+                        count: 0 | 1,
+                        ..
+                    }
+                )
+            ) {
+                let args = match style {
+                    Style::Display => (true, 0),
+                    Style::Text => (false, 0),
+                    Style::Script => (false, 1),
+                    Style::ScriptScript => (false, 2),
+                };
+                write!(
+                    self.writer,
+                    " displaystyle=\"{}\" scriptlevel=\"{}\"",
+                    args.0, args.1
+                )?;
+            }
         }
 
         let mut style_written = false;
@@ -608,8 +623,7 @@ where
                 self.set_previous_atom(Atom::Op);
                 self.writer.write_all(b"</mi>")?;
 
-                if let Some(Environment::Script { fn_application, .. }) =
-                    self.env_stack.last_mut()
+                if let Some(Environment::Script { fn_application, .. }) = self.env_stack.last_mut()
                 {
                     *fn_application = true;
                 } else if let Some(atom) = self.next_atom() {

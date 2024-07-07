@@ -37,6 +37,13 @@ these links specifically.
 - [ ] Cargo Mutants
 - [ ] Errors
 
+### Bugs
+- [ ] `\bar` make a tiny bar, should be bigger.
+- [ ] italic numbers are not italic because they do not exist in unicode.
+- [ ] square braket matrices do not have equal spacing on the left and the right.
+- [ ] Newline should allow for newline spacing.
+- [ ] `\sideset`
+
 ## Unsupported Plain-TeX & LaTeX behavior
 
 - Changing `catcode`s of characters
