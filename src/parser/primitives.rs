@@ -6,9 +6,7 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
-        DelimiterSize, DelimiterType, Event as E, Grouping as G, Line, ScriptPosition as SP,
-        ScriptType as ST, StateChange as SC, Style as S, Visual as V,
+        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, Line, RelationContent, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
     },
 };
 
@@ -1008,11 +1006,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "curlyeqsucc" => relation('⋟'),
             "le" => relation('≤'),
             "shortmid" => E::Content(C::Relation {
-                content: '∣',
+                content: RelationContent::single_char('∣'),
                 small: true,
             }),
             "shortparallel" => E::Content(C::Relation {
-                content: '∥',
+                content: RelationContent::single_char('∥'),
                 small: true,
             }),
             "vdash" => relation('⊢'),
@@ -1037,7 +1035,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "eqeq" => relation('⩵'),
             "lesseqqgtr" => relation('⪋'),
             "smallsmile" => E::Content(C::Relation {
-                content: '⌣',
+                content: RelationContent::single_char('⌣'),
                 small: true,
             }),
             "wedgeq" => relation('≙'),
@@ -1089,35 +1087,35 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             "ntrianglerighteq" => relation('⋭'),
             "neq" => relation('≠'),
             "nshortmid" => E::Content(C::Relation {
-                content: '∤',
+                content: RelationContent::single_char('∤'),
                 small: true,
             }),
             "nvdash" => relation('⊬'),
             "ngeq" => relation('≱'),
             "nshortparallel" => E::Content(C::Relation {
-                content: '∦',
+                content: RelationContent::single_char('∦'),
                 small: true,
             }),
             "nvDash" => relation('⊭'),
             "ngeqq" => relation('≱'),
             "nsim" => relation('≁'),
             "nVDash" => relation('⊯'),
-            "varsupsetneqq" => E::Content(C::MultiRelation("⫌︀")),
-            "varsubsetneqq" => E::Content(C::MultiRelation("⫋︀")),
-            "varsubsetneq" => E::Content(C::MultiRelation("⊊︀")),
-            "varsupsetneq" => E::Content(C::MultiRelation("⊋︀")),
-            "gvertneqq" => E::Content(C::MultiRelation("≩︀")),
-            "lvertneqq" => E::Content(C::MultiRelation("≨︀")),
-            "Eqcolon" | "minuscoloncolon" => E::Content(C::MultiRelation("−∷")),
-            "Eqqcolon" => E::Content(C::MultiRelation("=∷")),
-            "approxcolon" => E::Content(C::MultiRelation("≈:")),
-            "colonapprox" => E::Content(C::MultiRelation(":≈")),
-            "approxcoloncolon" => E::Content(C::MultiRelation("≈∷")),
-            "Colonapprox" | "coloncolonapprox" => E::Content(C::MultiRelation("∷≈")),
-            "coloneq" | "colonminus" => E::Content(C::MultiRelation(":−")),
-            "Coloneq" | "coloncolonminus" => E::Content(C::MultiRelation("∷−")),
-            "colonsim" => E::Content(C::MultiRelation(":∼")),
-            "Colonsim" | "coloncolonsim" => E::Content(C::MultiRelation("∷∼")),
+            "varsupsetneqq" => multirelation('⫌', '\u{fe00}'),
+            "varsubsetneqq" => multirelation('⫋', '\u{fe00}'),
+            "varsubsetneq" => multirelation('⊊', '\u{fe00}'),
+            "varsupsetneq" => multirelation('⊋', '\u{fe00}'),
+            "gvertneqq" => multirelation('≩', '\u{fe00}'),
+            "lvertneqq" => multirelation('≨', '\u{fe00}'),
+            "Eqcolon" | "minuscoloncolon" => multirelation('−', '∷'),
+            "Eqqcolon" => multirelation('=', '∷'),
+            "approxcolon" => multirelation('≈', ':'),
+            "colonapprox" => multirelation(':', '≈'),
+            "approxcoloncolon" => multirelation('≈', '∷'),
+            "Colonapprox" | "coloncolonapprox" => multirelation('∷', '≈'),
+            "coloneq" | "colonminus" => multirelation(':', '−'),
+            "Coloneq" | "coloncolonminus" => multirelation('∷', '−'),
+            "colonsim" => multirelation(':', '∼'),
+            "Colonsim" | "coloncolonsim" => multirelation('∷', '∼'),
 
             ////////////
             // Arrows //
@@ -1905,7 +1903,14 @@ fn ordinary(ident: char) -> E<'static> {
 #[inline]
 fn relation(rel: char) -> E<'static> {
     E::Content(C::Relation {
-        content: rel,
+        content: RelationContent::single_char(rel),
+        small: false,
+    })
+}
+
+fn multirelation(first: char, second: char) -> E<'static> {
+    E::Content(C::Relation {
+        content: RelationContent::double_char(first, second),
         small: false,
     })
 }

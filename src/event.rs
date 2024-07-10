@@ -13,28 +13,54 @@ use crate::attribute::{Dimension, Font};
 
 /// All events that can be produced by the parser.
 ///
+/// ## For Renderer Implementors
+///
 /// When an [`Event`] is referreing to an "_element_", it is referring to the next logical unit of
-/// content in the stream. This can be a single content element, a group, a visual element, etc.
+/// content in the stream. This can be a single [`Event::Content`] element, a group marked
+/// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element, etc.
+///
+/// [`Event::Space`]s, [`Event::StateChange`]s, [`Event::Alignment`]s, and [`Event::NewLine`]s
+/// are not considered elements.
+///
+/// ### Examples
+///
+/// The following examples all constitute a single element:
+///
+/// __Input__: `\text{Hello, world!}`
+/// ```
+/// [Event::Content(Content::Text("Hello, world!"))]
+/// ```
+///
+/// __Input__: `x^2_{\text{max}}`
+/// ```
+/// [
+///     Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
+///     Event::Begin(Grouping::Normal),
+///     Event::Content(Content::Text("max")),
+///     Event::End
+///     Event::Content(Content::Ordinary { content: 'x', stretchy: false }),
+/// ]
+/// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event<'a> {
     /// The event is a [`Content`] element.
     Content(Content<'a>),
     /// The events following this one constitute a "group" which counts as a single _element_
-    /// (i.e., a set of elements within `{}` in `LaTeX`), until the [`Event::EndGroup`] event
+    /// (i.e., a set of elements within `{}` in `LaTeX`), until the [`Event::End`] event
     /// is reached.
     Begin(Grouping),
     /// Marks the end of a "group".
     End,
-    /// The `n` events following this one constitute the content of the [`Visual`] element. `n` is
-    /// defined in the documentation of for the [`Visual`] variant.
+    /// The `n` events following this one constitute the content of the [`Visual`] element,
+    /// where `n` is specified in the documentation of for the [`Visual`] variant.
     Visual(Visual),
-    /// The `n` events following this one constitute a base and its script(s). `n` is defined in
-    /// the documentation for the associated [`ScriptType`] variant.
+    /// The `n` events following this one constitute a base and its script(s), where `n` is
+    /// specified in the documentation for the [`ScriptType`] variant.
     Script {
         ty: ScriptType,
         position: ScriptPosition,
     },
-    /// This events specifes a custom spacing element. This is produced by commands such as
+    /// This events specifes a custom spacing. This is produced by commands such as
     /// `\kern`, `\hspace`, etc.
     ///
     /// If any of the components are `None`, then the spacing is set to 0 for that component.
@@ -49,11 +75,11 @@ pub enum Event<'a> {
     StateChange(StateChange<'a>),
     /// This event specifies an alignment mark in a mathematical environment.
     ///
-    /// This event is only used when inside a `Grouping` that allows it.
+    /// This event is only emitted when inside a `Grouping` that allows it.
     Alignment,
     /// This event specifies a line break in a mathematical environment.
     ///
-    /// This event is only used when inside a `Grouping` that allows it.
+    /// This event is only emitted when inside a `Grouping` that allows it.
     NewLine {
         spacing: Option<Dimension>,
         horizontal_lines: Box<[Line]>,
@@ -70,9 +96,6 @@ pub enum Content<'a> {
     /// A function identifier, such as `sin`, `lim`, or a custom function with
     /// `\operatorname{arccotan}`.
     Function(&'a str),
-    /// A relation made up of multiple characters such as `:=` (\coloneqq), or made with combining
-    /// characters such as `⫋︀` (\varsubsetneqq).
-    MultiRelation(&'a str),
     /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and stuff that do not have
     /// any spacing around them. This includes stuff that normally go in under and overscripts
     /// which may be stretchy, such as `→`, `‾`, etc.
@@ -83,7 +106,7 @@ pub enum Content<'a> {
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { content: char, small: bool },
     /// A relation, such as `=`, `≠`, `≈`, etc.
-    Relation { content: char, small: bool },
+    Relation { content: RelationContent, small: bool },
     /// An opening, closing, or fence delimiter, such as `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
     Delimiter {
         content: char,
@@ -179,7 +202,7 @@ pub enum Style {
 pub struct ColorChange<'a> {
     /// The color to change to.
     ///
-    /// A string that represents the color to change to, either as a hex code in the form #RRGGBB,
+    /// A string that represents the color to change to, either as a hex RGB color in the form #RRGGBB,
     /// or as one of the color names existing as part of CSS3 (e.g., "red").
     pub color: &'a str,
     /// The target of the color change.
@@ -280,4 +303,33 @@ pub enum DelimiterType {
 pub enum Line {
     Solid,
     Dashed,
+}
+
+/// Sometimes mathematical relations can be made of more than one character, so we need a way to
+/// represent them when one character is not enough.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct RelationContent {
+    content: (char, Option<char>),
+}
+
+impl RelationContent {
+    pub(crate) fn single_char(content: char) -> Self {
+        Self { content: (content, None) }
+    }
+
+    pub(crate) fn double_char(first: char, second: char) -> Self {
+        Self { content: (first, Some(second)) }
+    }
+
+    /// Write the content of the relation to a buffer, and output the filled slice of that
+    /// buffer.
+    ///
+    /// To ensure a successful operation, the buffer must be at least 8 bytes long.
+    pub fn encode_utf8_to_buf<'a>(&self, buf: &'a mut [u8]) -> &'a [u8] {
+        let mut len = self.content.0.encode_utf8(buf).len();
+        if let Some(second) = self.content.1 {
+            len += second.encode_utf8(&mut buf[len..]).len();
+        }
+        &buf[..len]
+    }
 }

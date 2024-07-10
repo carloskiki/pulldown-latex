@@ -225,7 +225,7 @@ pub fn is_primitive_color(color: &str) -> bool {
         && color.len() == 7
         && color.as_bytes()[1..].iter().all(|&c| c.is_ascii_hexdigit())
         || matches!(
-            color,
+            color.to_lowercase().as_str(),
             "aliceblue"
                 | "antiquewhite"
                 | "aqua"

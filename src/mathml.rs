@@ -690,7 +690,7 @@ where
                 self.open_tag("mo", small.then_some("small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
-                    .write_all(content.encode_utf8(&mut buf).as_bytes())?;
+                    .write_all(content.encode_utf8_to_buf(&mut buf))?;
                 if negate {
                     self.writer.write_all("\u{0338}".as_bytes())?;
                 }
@@ -749,13 +749,6 @@ where
                     self.writer.write_all("\u{0338}".as_bytes())?;
                 }
                 self.set_previous_atom(Atom::Punct);
-                self.writer.write_all(b"</mo>")
-            }
-            Content::MultiRelation(content) => {
-                self.open_tag("mo", None)?;
-                self.writer.write_all(b">")?;
-                self.writer.write_all(content.as_bytes())?;
-                self.set_previous_atom(Atom::Rel);
                 self.writer.write_all(b"</mo>")
             }
         }

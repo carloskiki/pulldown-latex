@@ -616,17 +616,17 @@ round_trip_display!(
 
 // Color
 
-// round_trip_display!(
-//     color,
-//     r"{\color{Blue}x^2}+{\color{Orange}2x}-{\color{LimeGreen}1}",
-//     r"x=\frac{{\color{Blue}-b}\pm\sqrt{\color{Red}b^2-4ac}}{\color{Green}2a}",
-//     r"x\color{red}\neq y=z",
-//     r"x{\color{red}\neq} y=z",
-//     r"x\color{red}\neq\color{black} y=z",
-//     r"\frac{-b\color{Green}\pm\sqrt{b^2\color{Blue}-4{\color{Red}a}c}}{2a}=x",
-//     r"{\color{Blue}x^2}+{\color{Orange}2x}-{\color{LimeGreen}1}",
-//     r"\color{Blue}x^2\color{Black}+\color{Orange}2x\color{Black}-\color{LimeGreen}1"
-// );
+round_trip_display!(
+    color,
+    r"{\color{Blue}x^2}+{\color{Orange}2x}-{\color{LimeGreen}1}",
+    r"x=\frac{{\color{Blue}-b}\pm\sqrt{\color{Red}b^2-4ac}}{\color{Green}2a}",
+    r"x\color{red}\neq y=z",
+    r"x{\color{red}\neq} y=z",
+    r"x\color{red}\neq\color{black} y=z",
+    r"\frac{-b\color{Green}\pm\sqrt{b^2\color{Blue}-4{\color{Red}a}c}}{2a}=x",
+    r"{\color{Blue}x^2}+{\color{Orange}2x}-{\color{LimeGreen}1}",
+    r"\color{Blue}x^2\color{Black}+\color{Orange}2x\color{Black}-\color{LimeGreen}1"
+);
 
 // Examples
 

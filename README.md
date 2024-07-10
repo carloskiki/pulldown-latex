@@ -30,13 +30,13 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 __For 0.2__:
 - [x] Correctly handle array columns with multiple vertical bars.
 - [x] `\hline` and `\hdashline`.
-- [ ] Color api rework
 - [ ] Documentation.
 __For later__:
 - [ ] `Dimension` values are unecessarily big
 - [ ] square braket matrices do not have equal spacing on the left and the right.
 - [ ] italic numbers are not italic because they do not exist in unicode.
 - [ ] `\bar` make a tiny bar, should be bigger.
+- [ ] Color api rework
 - [ ] `\sideset`
 
 ## Unsupported Plain-TeX & LaTeX behavior
