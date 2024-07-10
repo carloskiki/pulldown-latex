@@ -7,7 +7,7 @@ use crate::{
     attribute::{DimensionUnit, Font},
     event::{
         ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
-        DelimiterSize, DelimiterType, Event as E, Grouping as G, ScriptPosition as SP,
+        DelimiterSize, DelimiterType, Event as E, Grouping as G, Line, ScriptPosition as SP,
         ScriptType as ST, StateChange as SC, Style as S, Visual as V,
     },
 };
@@ -1672,16 +1672,36 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                 return Ok(());
             }
             "end" => return Err(ErrorKind::UnbalancedGroup(None)),
-            // TODO: make newlines accept a dimension argument
             "\\" | "cr" if self.state.allowed_alignment_count.is_some() => {
                 self.state.allowed_alignment_count.as_mut().unwrap().reset();
-                let additional_space = if let Some(mut arg) = lex::optional_argument(&mut self.content)? {
-                    Some(lex::dimension(&mut arg)?)
-                } else {
-                    None
-                };
+                let additional_space =
+                    if let Some(mut arg) = lex::optional_argument(&mut self.content)? {
+                        Some(lex::dimension(&mut arg)?)
+                    } else {
+                        None
+                    };
 
-                E::NewLine(additional_space)
+                let mut horizontal_lines = Vec::new();
+                while let Some((rest, line)) = self
+                    .content
+                    .trim_start()
+                    .strip_prefix("\\hline")
+                    .map(|rest| (rest, Line::Solid))
+                    .or_else(|| {
+                        self.content
+                            .trim_start()
+                            .strip_prefix("\\hdashline")
+                            .map(|rest| (rest, Line::Dashed))
+                    })
+                {
+                    horizontal_lines.push(line);
+                    self.content = rest;
+                }
+
+                E::NewLine {
+                    spacing: additional_space,
+                    horizontal_lines: horizontal_lines.into_boxed_slice(),
+                }
             }
 
             // Delimiters
@@ -1837,7 +1857,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             return Err(ErrorKind::Argument);
         };
 
-        let mut column_count = 0;
+        let mut column_count: u16 = 0;
         let array_columns = array_columns_str
             .chars()
             .map(|c| {
@@ -1848,14 +1868,18 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     'r' => AC::Column(ColumnAlignment::Right),
                     '|' => {
                         column_count -= 1;
-                        AC::VerticalLine
+                        AC::Line(Line::Solid)
+                    }
+                    ':' => {
+                        column_count -= 1;
+                        AC::Line(Line::Dashed) 
                     }
                     _ => return Err(ErrorKind::Argument),
                 })
             })
             .collect::<Result<_, _>>()?;
 
-        Ok((G::Array(array_columns), column_count))
+        Ok((G::Array(array_columns), column_count.saturating_sub(1)))
     }
 
     fn optional_alignment(&mut self) -> InnerResult<Option<ColumnAlignment>> {

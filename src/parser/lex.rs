@@ -385,7 +385,7 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
         }
         Some(c) => {
             let context = *input;
-            *input = &input.split_at(c.len_utf8()).1;
+            *input = input.split_at(c.len_utf8()).1;
             Ok(Token::Character(CharToken::from_str(context)))
         }
         None => Err(ErrorKind::EndOfInput),

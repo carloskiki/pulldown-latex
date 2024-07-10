@@ -422,16 +422,18 @@ round_trip_display!(
     \end{alignat}"
 );
 
-// round_trip_display!(
-//     arrays,
-//     r"\begin{array}{|c|c|c|} a & b & S \\
-//     \hline
-//     0 & 0 & 1 \\
-//     0 & 1 & 1 \\
-//     1 & 0 & 1 \\
-//     1 & 1 & 0 \\
-//     \end{array}"
-// );
+round_trip_display!(
+    arrays,
+    r"\begin{array}{|c|c|:|c|} a & b & S \\
+    \hline
+    \hdashline
+    \hline
+    0 & 0 & 1 \\
+    0 & 1 & 1 \\
+    1 & 0 & 1 \\
+    1 & 1 & 0 \\
+    \end{array}"
+);
 
 // Delimiters
 

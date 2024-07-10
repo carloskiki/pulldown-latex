@@ -389,7 +389,7 @@ enum Argument<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Instruction<'a> {
+enum Instruction<'a> {
     /// Send the event
     Event(Event<'a>),
     /// Parse the substring

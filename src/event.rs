@@ -54,7 +54,10 @@ pub enum Event<'a> {
     /// This event specifies a line break in a mathematical environment.
     ///
     /// This event is only used when inside a `Grouping` that allows it.
-    NewLine(Option<Dimension>),
+    NewLine {
+        spacing: Option<Dimension>,
+        horizontal_lines: Box<[Line]>,
+    },
 }
 
 /// Base events that produce `mathml` nodes
@@ -90,31 +93,6 @@ pub enum Content<'a> {
     /// A punctuation character, such as `,`, `.`, `;`, etc.
     Punctuation(char),
 }
-
-// MathML operator types:
-// A: Arrows and other stretchy stuff
-// B: Binary operators
-// C: Things with less spacing such as `%`, `*`, `⊗`, `?`
-// D: Prefixes
-// E: Postfixes
-// F: Opening Delim
-// G: Closing Delim
-// H: Prefix large operators (integrals)
-// I: Stretchy under and overscripts
-// J: Prefix large operators p2 (sums, products, etc.) Those are specified to have movable limits
-//     per mathml spec.
-// K: Invisible accessibility stuff, (function application, invisible plus, etc.)
-// L: Derivative specific stuff such as `d`, `∂`, etc.
-// M: Punctuation
-//
-// Could conceivably be regrouped into the following:
-// Binary operators: (part of B) (part of C)
-// Relations: (part of B)
-// Unary operators: D E L (parto of C)
-// Large operators: H J
-// Stretchy stuff: A I
-// Delimiters (should be slplit): F G
-// Punctuation: M
 
 /// Modifies the visual representation of the following event(s)
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -262,7 +240,7 @@ pub enum ColumnAlignment {
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ArrayColumn {
     Column(ColumnAlignment),
-    VerticalLine,
+    Line(Line),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -278,7 +256,7 @@ pub enum DelimiterSize {
 }
 
 impl DelimiterSize {
-    pub fn to_em(&self) -> f32 {
+    pub(crate) fn to_em(self) -> f32 {
         match self {
             DelimiterSize::Big => 1.2,
             DelimiterSize::BIG => 1.8,
@@ -296,4 +274,10 @@ pub enum DelimiterType {
     Fence,
     /// Corresponds to the right delimiter.
     Close,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum Line {
+    Solid,
+    Dashed,
 }

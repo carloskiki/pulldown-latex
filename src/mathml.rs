@@ -3,14 +3,14 @@
 //! This crate provides a "simple" `mathml` renderer which is available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 
-use std::{collections::VecDeque, io};
+use std::{collections::VecDeque, io::{self, Write}};
 
 use crate::{
     attribute::{tex_to_css_em, Font},
     config::{DisplayMode, RenderConfig},
     event::{
         ArrayColumn, ColorChange, ColorTarget, ColumnAlignment, Content, DelimiterType, Event,
-        Grouping, ScriptPosition, ScriptType, StateChange, Style, Visual,
+        Grouping, Line, ScriptPosition, ScriptType, StateChange, Style, Visual,
     },
 };
 
@@ -47,45 +47,6 @@ where
             env_stack,
             state_stack,
             previous_atom: None,
-        }
-    }
-
-    fn next_atom(&mut self) -> Option<Atom> {
-        let mut index = 0;
-        loop {
-            let next = match self.input.peeked_nth(index) {
-                None => self.input.peek_next()?,
-                Some(next) => {
-                    index += 1;
-                    next
-                }
-            };
-
-            break match next {
-                Ok(
-                    Event::StateChange(_)
-                    | Event::Space { .. }
-                    | Event::Visual(Visual::Negation)
-                    | Event::Script { .. },
-                ) => continue,
-                Ok(Event::End | Event::NewLine(_) | Event::Alignment) | Err(_) => None,
-                Ok(Event::Visual(_) | Event::Begin(_)) => Some(Atom::Inner),
-                Ok(Event::Content(content)) => match content {
-                    Content::BinaryOp { .. } => Some(Atom::Bin),
-                    Content::LargeOp { .. } => Some(Atom::Op),
-                    Content::Relation { .. } => Some(Atom::Rel),
-                    Content::Delimiter {
-                        ty: DelimiterType::Open,
-                        ..
-                    } => Some(Atom::Open),
-                    Content::Delimiter {
-                        ty: DelimiterType::Close,
-                        ..
-                    } => Some(Atom::Close),
-                    Content::Punctuation(_) => Some(Atom::Punct),
-                    _ => Some(Atom::Ord),
-                },
-            };
         }
     }
 
@@ -165,10 +126,6 @@ where
         Ok(())
     }
 
-    fn state(&self) -> &State<'a> {
-        self.state_stack.last().expect("state stack is empty")
-    }
-
     fn write_event(&mut self, event: Result<Event<'a>, E>) -> io::Result<()> {
         match event {
             Ok(Event::Content(content)) => self.write_content(content, false),
@@ -227,7 +184,7 @@ where
                         EnvGrouping::Align
                     }
                     Grouping::Matrix { alignment } => {
-                        self.writer.write_all(b"<mtable class=\"menv-matrix")?;
+                        self.writer.write_all(b"<mtable class=\"menv-arraylike")?;
                         self.writer.write_all(match alignment {
                             ColumnAlignment::Left => b" menv-cells-left\"",
                             ColumnAlignment::Center => b"\"",
@@ -249,40 +206,12 @@ where
                         }
                     }
                     Grouping::Array(cols) => {
-                        let mut index = 0;
-                        self.writer.write_all(b"<mtable")?;
-                        match (cols.first(), cols.last()) {
-                            (Some(ArrayColumn::VerticalLine), Some(ArrayColumn::VerticalLine)) => {
-                                index += 1;
-                                self.writer
-                                    .write_all(b" class=\"menv-left-border menv-right-border\"")?
-                            }
-                            (Some(ArrayColumn::VerticalLine), _) => {
-                                index += 1;
-                                self.writer.write_all(b" class=\"menv-left-border\"")?
-                            }
-                            (_, Some(ArrayColumn::VerticalLine)) => {
-                                self.writer.write_all(b" class=\"menv-right-border\"")?
-                            }
-                            (_, _) => {}
-                        }
-                        self.writer.write_all(b"><mtr><mtd")?;
-                        match cols[index] {
-                            ArrayColumn::Column(ColumnAlignment::Left) => {
-                                self.writer.write_all(b" class=\"cell-left\"")?
-                            }
-                            ArrayColumn::Column(ColumnAlignment::Right) => {
-                                self.writer.write_all(b" class=\"cell-right\"")?
-                            }
-                            ArrayColumn::Column(ColumnAlignment::Center) => {}
-                            ArrayColumn::VerticalLine => {
-                                panic!("vertical line in place of column alignment")
-                            }
-                        };
-                        self.writer.write_all(b">")?;
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-arraylike\"><mtr>")?;
+                        let index = array_newline(&mut self.writer, &cols)?;
                         EnvGrouping::Array {
                             cols,
-                            cols_index: index + 1,
+                            cols_index: index,
                         }
                     }
                     Grouping::Aligned => {
@@ -473,22 +402,40 @@ where
                 self.handle_state_change(state_change);
                 Ok(())
             }
-            Ok(Event::NewLine(spacing)) => {
+            Ok(Event::NewLine {
+                spacing,
+                horizontal_lines,
+            }) => {
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
+
+                self.writer.write_all(b"</mtd></mtr><mtr")?;
+                if let Some(spacing) = spacing {
+                    write!(
+                        self.writer,
+                        " style=\"margin-top: {}em\"",
+                        tex_to_css_em(spacing)
+                    )?;
+                }
+                let mut iter = horizontal_lines.iter();
+                if let Some(last_line) = iter.next_back() {
+                    iter.try_for_each(|line| {
+                        self.writer.write_all(match line {
+                            Line::Solid => b" class=\"menv-hline\"></mtr><mtr",
+                            Line::Dashed => b" class=\"menv-hdashline\"></mtr><mtr",
+                        })
+                    })?;
+                    self.writer.write_all(match last_line {
+                        Line::Solid => b" class=\"menv-hline\"",
+                        Line::Dashed => b" class=\"menv-hdashline\"",
+                    })?;
+                };
+
                 match self.env_stack.last_mut() {
                     Some(Environment::Group(
                         EnvGrouping::Cases { used_align, .. } | EnvGrouping::Split { used_align },
                     )) => {
                         *used_align = false;
-                        self.writer.write_all(b"</mtd></mtr><mtr")?;
-                        if let Some(spacing) = spacing {
-                            write!(
-                                self.writer,
-                                " style=\"margin-top: {}em\"",
-                                tex_to_css_em(spacing)
-                            )?;
-                        }
                         self.writer.write_all(b"><mtd>")
                     }
                     Some(Environment::Group(
@@ -497,53 +444,15 @@ where
                         | EnvGrouping::Gather
                         | EnvGrouping::SubArray
                         | EnvGrouping::Multline,
-                    )) => {
-                        self.writer.write_all(b"</mtd></mtr><mtr")?;
-                        if let Some(spacing) = spacing {
-                            write!(
-                                self.writer,
-                                " style=\"margin-top: {}em\"",
-                                tex_to_css_em(spacing)
-                            )?;
-                        }
-                        self.writer.write_all(b"><mtd>")
-                    }
+                    )) => self.writer.write_all(b"><mtd>"),
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
-                        *cols_index =
-                            (cols.first() == Some(&ArrayColumn::VerticalLine)) as usize + 1;
-                        self.writer.write_all(b"</mtd></mtr><mtr")?;
-                        if let Some(spacing) = spacing {
-                            write!(
-                                self.writer,
-                                " style=\"margin-top: {}em\"",
-                                tex_to_css_em(spacing)
-                            )?;
-                        }
-                        self.writer.write_all(b"><mtd")?;
-                        match cols[*cols_index - 1] {
-                            ArrayColumn::Column(ColumnAlignment::Left) => {
-                                self.writer.write_all(b" class=\"cell-left\"")?
-                            }
-                            ArrayColumn::Column(ColumnAlignment::Right) => {
-                                self.writer.write_all(b" class=\"cell-right\"")?
-                            }
-                            ArrayColumn::Column(ColumnAlignment::Center) => {}
-                            ArrayColumn::VerticalLine => {
-                                panic!("vertical line in place of column alignment")
-                            }
-                        }
-                        self.writer.write_all(b">")
+                        self.writer.write_all(b">")?;
+                        let new_index = array_newline(&mut self.writer, cols)?;
+                        *cols_index = new_index;
+                        Ok(())
                     }
                     Some(Environment::Group(EnvGrouping::Alignat { columns_used, .. })) => {
                         *columns_used = 0;
-                        self.writer.write_all(b"</mtd></mtr><mtr")?;
-                        if let Some(spacing) = spacing {
-                            write!(
-                                self.writer,
-                                " style=\"margin-top: {}em\"",
-                                tex_to_css_em(spacing)
-                            )?;
-                        }
                         self.writer.write_all(b"><mtd>")
                     }
 
@@ -560,7 +469,6 @@ where
                         }
                         | EnvGrouping::Split { used_align: false },
                     )) => self.writer.write_all(b"</mtd><mtd>"),
-                    // Center align all
                     Some(Environment::Group(EnvGrouping::Align | EnvGrouping::Matrix)) => {
                         self.writer.write_all(b"</mtd><mtd>")
                     }
@@ -572,21 +480,44 @@ where
                         self.writer.write_all(b"</mtd><mtd>")
                     }
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
-                        self.writer.write_all(b"</mtd><mtd class=\"")?;
-                        if cols[*cols_index] == ArrayColumn::VerticalLine {
-                            self.writer.write_all(b"menv-left-border ")?;
-                            *cols_index += 1;
-                        }
-                        self.writer.write_all(match cols[*cols_index] {
-                            ArrayColumn::Column(ColumnAlignment::Left) => b"cell-left\">",
-                            ArrayColumn::Column(ColumnAlignment::Right) => b"cell-right\">",
-                            ArrayColumn::Column(ColumnAlignment::Center) => b"\">",
-                            ArrayColumn::VerticalLine => {
-                                panic!("vertical line in place of column alignment")
-                            }
-                        })?;
-                        *cols_index += 1;
-                        Ok(())
+                        self.writer.write_all(b"</mtd><mtd")?;
+                        cols[*cols_index..]
+                            .iter()
+                            .map_while(|col| match col {
+                               ArrayColumn::Line(line) => Some(line),
+                               _ => None,
+                            })
+                            .try_for_each(|line| {
+                                *cols_index += 1;
+                                self.writer.write_all(match line {
+                                    Line::Solid => b" class=\"menv-right-solid menv-border-only\"></mtd><mtd",
+                                    Line::Dashed => b" class=\"menv-right-dashed menv-border-only\"></mtd><mtd",
+                                })
+                            })?;
+
+                        let to_append: &[u8] = match (cols[*cols_index], cols.get(*cols_index + 1)) {
+                            (ArrayColumn::Column(col), Some(ArrayColumn::Line(line))) => {
+                                *cols_index += 2;
+                                match (col, line) {
+                                    (ColumnAlignment::Left, Line::Solid) => b" class=\"cell-left menv-right-solid\">",
+                                    (ColumnAlignment::Left, Line::Dashed) => b" class=\"cell-left menv-right-dashed\">",
+                                    (ColumnAlignment::Center, Line::Solid) => b" class=\"menv-right-solid\">",
+                                    (ColumnAlignment::Center, Line::Dashed) => b" class=\"menv-right-dashed\">",
+                                    (ColumnAlignment::Right, Line::Solid) => b" class=\"cell-right menv-right-solid\">",
+                                    (ColumnAlignment::Right, Line::Dashed) => b" class=\"cell-right menv-right-dashed\">",
+                                }
+                            },
+                            (ArrayColumn::Column(col), _) => {
+                                *cols_index += 1;
+                                match col {
+                                    ColumnAlignment::Left => b" class=\"cell-left\">",
+                                    ColumnAlignment::Center => b">",
+                                    ColumnAlignment::Right => b" class=\"cell-right\">",
+                                }
+                            },
+                            (ArrayColumn::Line(_), _) => unreachable!(),
+                        };
+                        self.writer.write_all(to_append)
                     }
                     _ => panic!("alignment not allowed in current environment"),
                 }
@@ -746,7 +677,7 @@ where
                     "mi"
                 };
 
-                self.open_tag(tag, small.then_some("mop-small"))?;
+                self.open_tag(tag, small.then_some("small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
@@ -756,7 +687,7 @@ where
                 write!(self.writer, "</{}>", tag)
             }
             Content::Relation { content, small } => {
-                self.open_tag("mo", small.then_some("mop-small"))?;
+                self.open_tag("mo", small.then_some("small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
                     .write_all(content.encode_utf8(&mut buf).as_bytes())?;
@@ -865,6 +796,49 @@ where
         }
     }
 
+    fn next_atom(&mut self) -> Option<Atom> {
+        let mut index = 0;
+        loop {
+            let next = match self.input.peeked_nth(index) {
+                None => self.input.peek_next()?,
+                Some(next) => {
+                    index += 1;
+                    next
+                }
+            };
+
+            break match next {
+                Ok(
+                    Event::StateChange(_)
+                    | Event::Space { .. }
+                    | Event::Visual(Visual::Negation)
+                    | Event::Script { .. },
+                ) => continue,
+                Ok(Event::End | Event::NewLine { .. } | Event::Alignment) | Err(_) => None,
+                Ok(Event::Visual(_) | Event::Begin(_)) => Some(Atom::Inner),
+                Ok(Event::Content(content)) => match content {
+                    Content::BinaryOp { .. } => Some(Atom::Bin),
+                    Content::LargeOp { .. } => Some(Atom::Op),
+                    Content::Relation { .. } => Some(Atom::Rel),
+                    Content::Delimiter {
+                        ty: DelimiterType::Open,
+                        ..
+                    } => Some(Atom::Open),
+                    Content::Delimiter {
+                        ty: DelimiterType::Close,
+                        ..
+                    } => Some(Atom::Close),
+                    Content::Punctuation(_) => Some(Atom::Punct),
+                    _ => Some(Atom::Ord),
+                },
+            };
+        }
+    }
+
+    fn state(&self) -> &State<'a> {
+        self.state_stack.last().expect("state stack is empty")
+    }
+
     fn write(mut self) -> io::Result<()> {
         // Safety: this function must only write valid utf-8 to the writer.
         // How is the writer used?:
@@ -938,6 +912,82 @@ where
         self.writer.write_all(b"</math>")
     }
 }
+
+fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<usize> {
+    let mut index = 0;
+    writer.write_all(b"<mtd")?;
+    cols.windows(2)
+        .map_while(|window| match window[..2] {
+            [ArrayColumn::Line(line), ArrayColumn::Line(_)] => Some(line),
+            _ => None,
+        })
+        .try_for_each(|line| {
+            index += 1;
+            writer.write_all(match line {
+                Line::Solid => b" class=\"menv-left-solid menv-border-only\"></mtd><mtd",
+                Line::Dashed => b" class=\"menv-left-dashed menv-border-only\"></mtd><mtd",
+            })
+        })?;
+
+    let to_append: &[u8] = match (cols.get(index), cols.get(index + 1)) {
+        (Some(ArrayColumn::Line(line)), Some(ArrayColumn::Column(col))) => {
+            writer.write_all(match (line, col) {
+                (Line::Solid, ColumnAlignment::Left) => b" class=\"menv-left-solid cell-left",
+                (Line::Solid, ColumnAlignment::Center) => b" class=\"menv-left-solid",
+                (Line::Solid, ColumnAlignment::Right) => b" class=\"menv-left-solid cell-right",
+                (Line::Dashed, ColumnAlignment::Left) => b" class=\"menv-left-dashed cell-left",
+                (Line::Dashed, ColumnAlignment::Center) => b" class=\"menv-left-dashed",
+                (Line::Dashed, ColumnAlignment::Right) => {
+                    b" class=\"menv-left-dashed cell-right"
+                }
+            })?;
+            index += 2;
+
+            if let Some(ArrayColumn::Line(line)) = cols.get(index) {
+                index += 1;
+                match line {
+                    Line::Solid => b" menv-right-solid\">",
+                    Line::Dashed => b" menv-right-dashed\">",
+                }
+            } else {
+                b"\">"
+            }
+        }
+        (Some(ArrayColumn::Column(col)), Some(ArrayColumn::Line(line))) => {
+            index += 2;
+            match (col, line) {
+                (ColumnAlignment::Left, Line::Solid) => {
+                    b" class=\"cell-left menv-right-solid\">"
+                }
+                (ColumnAlignment::Left, Line::Dashed) => {
+                    b" class=\"cell-left menv-right-dashed\">"
+                }
+                (ColumnAlignment::Center, Line::Solid) => b" class=\"menv-right-solid\">",
+                (ColumnAlignment::Center, Line::Dashed) => b" class=\"menv-right-dashed\">",
+                (ColumnAlignment::Right, Line::Solid) => {
+                    b" class=\"cell-right menv-right-solid\">"
+                }
+                (ColumnAlignment::Right, Line::Dashed) => {
+                    b" class=\"cell-right menv-right-dashed\">"
+                }
+            }
+        }
+        (Some(ArrayColumn::Column(col)), _) => {
+            index += 1;
+            match col {
+                ColumnAlignment::Left => b" class=\"cell-left\">",
+                ColumnAlignment::Center => b">",
+                ColumnAlignment::Right => b" class=\"cell-right\">",
+            }
+        }
+        (None, None) => b">",
+        _ => unreachable!(),
+    };
+    writer.write_all(to_append)?;
+
+    Ok(index)
+}
+
 
 enum Atom {
     Bin,
