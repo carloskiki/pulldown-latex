@@ -687,6 +687,7 @@ where
                 write!(self.writer, "</{}>", tag)
             }
             Content::Relation { content, small } => {
+                let mut buf = [0; 8];
                 self.open_tag("mo", small.then_some("small"))?;
                 self.writer.write_all(b">")?;
                 self.writer
