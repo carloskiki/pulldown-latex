@@ -1866,11 +1866,11 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     'r' => AC::Column(ColumnAlignment::Right),
                     '|' => {
                         column_count -= 1;
-                        AC::Line(Line::Solid)
+                        AC::Separator(Line::Solid)
                     }
                     ':' => {
                         column_count -= 1;
-                        AC::Line(Line::Dashed) 
+                        AC::Separator(Line::Dashed) 
                     }
                     _ => return Err(ErrorKind::Argument),
                 })

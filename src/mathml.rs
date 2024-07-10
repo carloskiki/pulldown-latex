@@ -484,7 +484,7 @@ where
                         cols[*cols_index..]
                             .iter()
                             .map_while(|col| match col {
-                               ArrayColumn::Line(line) => Some(line),
+                               ArrayColumn::Separator(line) => Some(line),
                                _ => None,
                             })
                             .try_for_each(|line| {
@@ -496,7 +496,7 @@ where
                             })?;
 
                         let to_append: &[u8] = match (cols[*cols_index], cols.get(*cols_index + 1)) {
-                            (ArrayColumn::Column(col), Some(ArrayColumn::Line(line))) => {
+                            (ArrayColumn::Column(col), Some(ArrayColumn::Separator(line))) => {
                                 *cols_index += 2;
                                 match (col, line) {
                                     (ColumnAlignment::Left, Line::Solid) => b" class=\"cell-left menv-right-solid\">",
@@ -515,7 +515,7 @@ where
                                     ColumnAlignment::Right => b" class=\"cell-right\">",
                                 }
                             },
-                            (ArrayColumn::Line(_), _) => unreachable!(),
+                            (ArrayColumn::Separator(_), _) => unreachable!(),
                         };
                         self.writer.write_all(to_append)
                     }
@@ -911,7 +911,7 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
     writer.write_all(b"<mtd")?;
     cols.windows(2)
         .map_while(|window| match window[..2] {
-            [ArrayColumn::Line(line), ArrayColumn::Line(_)] => Some(line),
+            [ArrayColumn::Separator(line), ArrayColumn::Separator(_)] => Some(line),
             _ => None,
         })
         .try_for_each(|line| {
@@ -923,7 +923,7 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
         })?;
 
     let to_append: &[u8] = match (cols.get(index), cols.get(index + 1)) {
-        (Some(ArrayColumn::Line(line)), Some(ArrayColumn::Column(col))) => {
+        (Some(ArrayColumn::Separator(line)), Some(ArrayColumn::Column(col))) => {
             writer.write_all(match (line, col) {
                 (Line::Solid, ColumnAlignment::Left) => b" class=\"menv-left-solid cell-left",
                 (Line::Solid, ColumnAlignment::Center) => b" class=\"menv-left-solid",
@@ -936,7 +936,7 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
             })?;
             index += 2;
 
-            if let Some(ArrayColumn::Line(line)) = cols.get(index) {
+            if let Some(ArrayColumn::Separator(line)) = cols.get(index) {
                 index += 1;
                 match line {
                     Line::Solid => b" menv-right-solid\">",
@@ -946,7 +946,7 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
                 b"\">"
             }
         }
-        (Some(ArrayColumn::Column(col)), Some(ArrayColumn::Line(line))) => {
+        (Some(ArrayColumn::Column(col)), Some(ArrayColumn::Separator(line))) => {
             index += 2;
             match (col, line) {
                 (ColumnAlignment::Left, Line::Solid) => {

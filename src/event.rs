@@ -191,9 +191,13 @@ pub enum StateChange<'a> {
 /// are set by commands like `\displaystyle`, `\textstyle`, etc.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Style {
+    /// Set by the `\displaystyle` command.
     Display,
+    /// Set by the `\textstyle` command.
     Text,
+    /// Set by the `\scriptstyle` command.
     Script,
+    /// Set by the `\scriptscriptstyle` command.
     ScriptScript,
 }
 
@@ -222,28 +226,71 @@ pub enum ColorTarget {
     Border,
 }
 
+/// Represents a grouping of elements, which is itself a single logical element.
+///
+/// This can be created by a lot of different `LaTeX` commands, such as `{}`, `\left`, `\right`,
+/// `\begin{...}`, `\end{...}`, etc.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Grouping {
+    /// A normal form of grouping, usually induced by `{}` or `\begingroup` and `\endgroup` in `LaTeX`.
     Normal,
+    /// A grouping that is induced by `\left` and `\right` in `LaTeX`.
     LeftRight(Option<char>, Option<char>),
+    /// The array environment of `LaTeX`.
+    /// 
+    /// It's content is an array of columns, which represents the column specification in `LaTeX`.
+    ///
+    /// ### Example
+    ///
+    /// __Input__: `\begin{array}{lcr} ... \end{array}`
+    /// __Generates__: ```
+    /// Grouping::Array(Box::new([
+    ///     ArrayColumn::Column(ColumnAlignment::Left),
+    ///     ArrayColumn::Column(ColumnAlignment::Center),
+    ///     ArrayColumn::Column(ColumnAlignment::Right)
+    ///]))
+    /// ```
     Array(Box<[ArrayColumn]>),
+    /// The `matrix` environment of `LaTeX`.
+    ///
+    /// The default alignment is `ColumnAlignment::Center`, but it can be specified by in `LaTeX`
+    /// when using the `\begin{matrix*}[l] ... \end{matrix*}` syntax.
     Matrix { alignment: ColumnAlignment },
+    /// The `cases` environment of `LaTeX`.
+    ///
+    /// `left` is true if the environment is `cases` and false if the environment is `rcases`.
     Cases { left: bool },
+    /// The `equation` environment of `LaTeX`.
+    ///
+    /// If `eq_numbers` is true, then equation numbers are displayed.
     Equation { eq_numbers: bool },
+    /// The `align` environment of `LaTeX`.
+    ///
+    /// If `eq_numbers` is true, then equation numbers are displayed.
     Align { eq_numbers: bool },
+    /// The `aligned` environment of `LaTeX`.
     Aligned,
-    // According to what was specified
+    /// The `subarray` environment of `LaTeX`.
     SubArray { alignment: ColumnAlignment },
-    // Same as align, but without space between columns, and specified number of left right
-    // pairs.
+    /// The `alignat` environment of `LaTeX`.
+    ///
+    /// If `eq_numbers` is true, then equation numbers are displayed.
+    /// `pairs` specifies the number of left-right column pairs specified in the environment
+    /// declaration.
     Alignat { pairs: u16, eq_numbers: bool },
+    /// The `alignedat` environment of `LaTeX`.
+    /// 
+    /// `pairs` specifies the number of left-right column pairs specified in the environment
     Alignedat { pairs: u16 },
-    // All center
+    /// The `gather` environment of `LaTeX`.
+    ///
+    /// If `eq_numbers` is true, then equation numbers are displayed.
     Gather { eq_numbers: bool },
+    /// The `gathered` environment of `LaTeX`.
     Gathered,
-    // First: left, last: right, in between: center
+    /// The `multline` environment of `LaTeX`.
     Multline,
-    // Only one alignment allowed, right, left just like `align`
+    /// The `split` environment of `LaTeX`.
     Split,
 }
 
@@ -253,19 +300,29 @@ impl Grouping {
     }
 }
 
+/// Represents a column in a matrix or array environment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ColumnAlignment {
+    /// Content in the column is left-aligned.
     Left,
+    /// Content in the column is center-aligned.
     Center,
+    /// Content in the column is right-aligned.
     Right,
 }
 
+/// Represents a column in an array environment specification.
+///
+/// It can either be a column specification or a vertical separator specification.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ArrayColumn {
+    /// A column specification.
     Column(ColumnAlignment),
-    Line(Line),
+    /// A vertical separator specification.
+    Separator(Line),
 }
 
+/// Represents a delimiter size.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DelimiterSize {
     /// Corresponds to `\bigl`, `\bigr`, etc.
@@ -289,6 +346,7 @@ impl DelimiterSize {
     }
 }
 
+/// Whether the delimiter is an opening, closing, or fence delimiter.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DelimiterType {
     /// Corresponds to the left delimiter.
@@ -299,9 +357,12 @@ pub enum DelimiterType {
     Close,
 }
 
+/// Represents a line in a `LaTeX` environment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Line {
+    /// A solid line.
     Solid,
+    /// A dashed line.
     Dashed,
 }
 
