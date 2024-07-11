@@ -22,21 +22,18 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 ## Development Notes
 
 ### To Test
-- [ ] All the things temml and katex test
+- [ ] All the things `temml` and `katex` test
 - [ ] Cargo Mutants
 - [ ] Errors
 
 ### TODO's/Known Bugs
-__For 0.2__:
-- [x] Correctly handle array columns with multiple vertical bars.
-- [x] `\hline` and `\hdashline`.
-- [ ] Documentation.
 __For later__:
-- [ ] `Dimension` values are unecessarily big
-- [ ] square braket matrices do not have equal spacing on the left and the right.
-- [ ] italic numbers are not italic because they do not exist in unicode.
+- [ ] Better documentation for state changes, and for invariants that the parser satisfies.
+- [ ] `Dimension` values are unnecessarily big
+- [ ] Square bracket matrices do not have equal spacing on the left and the right.
+- [ ] Italic numbers are not italic because they do not exist in unicode.
 - [ ] `\bar` make a tiny bar, should be bigger.
-- [ ] Color api rework
+- [ ] Color API rework
 - [ ] `\sideset`
 
 ## Unsupported Plain-TeX & LaTeX behavior

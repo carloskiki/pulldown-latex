@@ -1,22 +1,22 @@
 body {
     width: fit-content;
+    margin: 0 auto;
 }
 
-.chrome-img {
-    display: block;
-    margin: 0 2.5em;
+table {
+    text-align: center;
+}
+
+td {
+    width: 25%;
 }
 
 .safari-img {
     width: 50%;
     height: auto;
-    display: block;
-    margin: 0 auto;
 }
 
 .firefox-img {
     width: 50%;
     height: auto;
-    display: block;
-    margin: 0 auto;
 }

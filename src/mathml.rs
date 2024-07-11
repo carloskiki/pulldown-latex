@@ -3,7 +3,10 @@
 //! This crate provides a "simple" `mathml` renderer which is available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 
-use std::{collections::VecDeque, io::{self, Write}};
+use std::{
+    collections::VecDeque,
+    io::{self, Write},
+};
 
 use crate::{
     attribute::{tex_to_css_em, Font},
@@ -198,8 +201,9 @@ where
                         if left {
                             self.writer.write_all(b"<mo stretchy=\"true\">{</mo>")?;
                         }
-                        self.writer
-                            .write_all(b"<mtable class=\"cells-left\"><mtr><mtd>")?;
+                        self.writer.write_all(
+                            b"<mtable class=\"menv-cells-left menv-cases\"><mtr><mtd>",
+                        )?;
                         EnvGrouping::Cases {
                             left,
                             used_align: false,
@@ -306,14 +310,33 @@ where
                         self.writer.write_all(b"</mrow>")
                     }
                     EnvGrouping::Matrix
-                    | EnvGrouping::Align { .. }
-                    | EnvGrouping::Array { .. }
+                    | EnvGrouping::Align
                     | EnvGrouping::SubArray
                     | EnvGrouping::Gather
                     | EnvGrouping::Multline
                     | EnvGrouping::Split { .. }
                     | EnvGrouping::Alignat { .. } => {
                         self.writer.write_all(b"</mtd></mtr></mtable>")
+                    }
+                    EnvGrouping::Array { cols, cols_index } => {
+                        self.writer.write_all(b"</mtd>")?;
+                        cols[cols_index..]
+                            .iter()
+                            .map_while(|col| match col {
+                                ArrayColumn::Separator(line) => Some(line),
+                                _ => None,
+                            })
+                            .try_for_each(|line| {
+                                self.writer.write_all(match line {
+                                    Line::Solid => {
+                                        b"<mtd class=\"menv-right-solid menv-border-only\"></mtd>"
+                                    }
+                                    Line::Dashed => {
+                                        b"<mtd class=\"menv-right-dashed menv-border-only\"></mtd>"
+                                    }
+                                })
+                            })?;
+                        self.writer.write_all(b"</mtr></mtable>")
                     }
                     EnvGrouping::Cases { left, .. } => {
                         self.writer.write_all(b"</mtd></mtr></mtable>")?;
@@ -409,7 +432,31 @@ where
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
 
-                self.writer.write_all(b"</mtd></mtr><mtr")?;
+                if let Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) =
+                    self.env_stack.last()
+                {
+                    self.writer.write_all(b"</mtd>")?;
+                    cols[*cols_index..]
+                        .iter()
+                        .map_while(|col| match col {
+                            ArrayColumn::Separator(line) => Some(line),
+                            _ => None,
+                        })
+                        .try_for_each(|line| {
+                            self.writer.write_all(match line {
+                                Line::Solid => {
+                                    b"<mtd class=\"menv-right-solid menv-border-only\"></mtd>"
+                                }
+                                Line::Dashed => {
+                                    b"<mtd class=\"menv-right-dashed menv-border-only\"></mtd>"
+                                }
+                            })
+                        })?;
+                    self.writer.write_all(b"</mtr><mtr")?;
+                } else {
+                    self.writer.write_all(b"</mtd></mtr><mtr")?;
+                }
+
                 if let Some(spacing) = spacing {
                     write!(
                         self.writer,
@@ -484,29 +531,46 @@ where
                         cols[*cols_index..]
                             .iter()
                             .map_while(|col| match col {
-                               ArrayColumn::Separator(line) => Some(line),
-                               _ => None,
+                                ArrayColumn::Separator(line) => Some(line),
+                                _ => None,
                             })
                             .try_for_each(|line| {
                                 *cols_index += 1;
                                 self.writer.write_all(match line {
-                                    Line::Solid => b" class=\"menv-right-solid menv-border-only\"></mtd><mtd",
-                                    Line::Dashed => b" class=\"menv-right-dashed menv-border-only\"></mtd><mtd",
+                                    Line::Solid => {
+                                        b" class=\"menv-right-solid menv-border-only\"></mtd><mtd"
+                                    }
+                                    Line::Dashed => {
+                                        b" class=\"menv-right-dashed menv-border-only\"></mtd><mtd"
+                                    }
                                 })
                             })?;
 
-                        let to_append: &[u8] = match (cols[*cols_index], cols.get(*cols_index + 1)) {
+                        let to_append: &[u8] = match (cols[*cols_index], cols.get(*cols_index + 1))
+                        {
                             (ArrayColumn::Column(col), Some(ArrayColumn::Separator(line))) => {
                                 *cols_index += 2;
                                 match (col, line) {
-                                    (ColumnAlignment::Left, Line::Solid) => b" class=\"cell-left menv-right-solid\">",
-                                    (ColumnAlignment::Left, Line::Dashed) => b" class=\"cell-left menv-right-dashed\">",
-                                    (ColumnAlignment::Center, Line::Solid) => b" class=\"menv-right-solid\">",
-                                    (ColumnAlignment::Center, Line::Dashed) => b" class=\"menv-right-dashed\">",
-                                    (ColumnAlignment::Right, Line::Solid) => b" class=\"cell-right menv-right-solid\">",
-                                    (ColumnAlignment::Right, Line::Dashed) => b" class=\"cell-right menv-right-dashed\">",
+                                    (ColumnAlignment::Left, Line::Solid) => {
+                                        b" class=\"cell-left menv-right-solid\">"
+                                    }
+                                    (ColumnAlignment::Left, Line::Dashed) => {
+                                        b" class=\"cell-left menv-right-dashed\">"
+                                    }
+                                    (ColumnAlignment::Center, Line::Solid) => {
+                                        b" class=\"menv-right-solid\">"
+                                    }
+                                    (ColumnAlignment::Center, Line::Dashed) => {
+                                        b" class=\"menv-right-dashed\">"
+                                    }
+                                    (ColumnAlignment::Right, Line::Solid) => {
+                                        b" class=\"cell-right menv-right-solid\">"
+                                    }
+                                    (ColumnAlignment::Right, Line::Dashed) => {
+                                        b" class=\"cell-right menv-right-dashed\">"
+                                    }
                                 }
-                            },
+                            }
                             (ArrayColumn::Column(col), _) => {
                                 *cols_index += 1;
                                 match col {
@@ -514,7 +578,7 @@ where
                                     ColumnAlignment::Center => b">",
                                     ColumnAlignment::Right => b" class=\"cell-right\">",
                                 }
-                            },
+                            }
                             (ArrayColumn::Separator(_), _) => unreachable!(),
                         };
                         self.writer.write_all(to_append)
@@ -931,9 +995,7 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
                 (Line::Solid, ColumnAlignment::Right) => b" class=\"menv-left-solid cell-right",
                 (Line::Dashed, ColumnAlignment::Left) => b" class=\"menv-left-dashed cell-left",
                 (Line::Dashed, ColumnAlignment::Center) => b" class=\"menv-left-dashed",
-                (Line::Dashed, ColumnAlignment::Right) => {
-                    b" class=\"menv-left-dashed cell-right"
-                }
+                (Line::Dashed, ColumnAlignment::Right) => b" class=\"menv-left-dashed cell-right",
             })?;
             index += 2;
 
@@ -950,17 +1012,11 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
         (Some(ArrayColumn::Column(col)), Some(ArrayColumn::Separator(line))) => {
             index += 2;
             match (col, line) {
-                (ColumnAlignment::Left, Line::Solid) => {
-                    b" class=\"cell-left menv-right-solid\">"
-                }
-                (ColumnAlignment::Left, Line::Dashed) => {
-                    b" class=\"cell-left menv-right-dashed\">"
-                }
+                (ColumnAlignment::Left, Line::Solid) => b" class=\"cell-left menv-right-solid\">",
+                (ColumnAlignment::Left, Line::Dashed) => b" class=\"cell-left menv-right-dashed\">",
                 (ColumnAlignment::Center, Line::Solid) => b" class=\"menv-right-solid\">",
                 (ColumnAlignment::Center, Line::Dashed) => b" class=\"menv-right-dashed\">",
-                (ColumnAlignment::Right, Line::Solid) => {
-                    b" class=\"cell-right menv-right-solid\">"
-                }
+                (ColumnAlignment::Right, Line::Solid) => b" class=\"cell-right menv-right-solid\">",
                 (ColumnAlignment::Right, Line::Dashed) => {
                     b" class=\"cell-right menv-right-dashed\">"
                 }
@@ -981,7 +1037,6 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
 
     Ok(index)
 }
-
 
 enum Atom {
     Bin,

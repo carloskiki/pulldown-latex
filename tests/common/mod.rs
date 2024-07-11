@@ -127,6 +127,7 @@ pub fn html_template(
 
 pub async fn cross_browser() -> anyhow::Result<()> {
     let mut tmp = tempfile::Builder::new().suffix(".html").tempfile()?;
+    let path = format!("file://{}", tmp.path().to_str().unwrap());
     let driver_processes = [
         {
             let port = 4444;
@@ -160,7 +161,7 @@ pub async fn cross_browser() -> anyhow::Result<()> {
         },
     ];
     // Wait for processes to start, otherwise the clients will fail to connect
-    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
     // Safety: This is safe because all elements of the array do not need to be initialized.
     let mut clients: [MaybeUninit<Client>; 3] = unsafe { MaybeUninit::uninit().assume_init() };
     for (i, (_, _, port)) in driver_processes.iter().enumerate() {
@@ -170,39 +171,39 @@ pub async fn cross_browser() -> anyhow::Result<()> {
         clients[i].write(client);
     }
     // Safety: The clients are initialized
-    let clients = unsafe { std::mem::transmute::<_, [Client; 3]>(clients) };
+    let clients = unsafe { std::mem::transmute::<[MaybeUninit<Client>; 3], [Client; 3]>(clients) };
 
     let rendered = &*RENDERED.lock().unwrap();
     for (table_name, rows) in rendered {
-        html_template(
-            tmp.as_file_mut(),
-            "",
-            Some("cross-browser-render.css"),
-            |file: &mut std::fs::File| -> anyhow::Result<()> {
-                for (_input, output) in rows.iter() {
+        for (_input, output) in rows {
+            html_template(
+                tmp.as_file_mut(),
+                "",
+                Some("cross-browser-render.css"),
+                |file: &mut std::fs::File| -> anyhow::Result<()> {
                     file.write_all(output.as_bytes())?;
-                }
-                Ok(())
-            },
-        )?;
+                    Ok(())
+                },
+            )?;
 
-        for (name, client) in driver_processes.iter().map(|t| t.1).zip(&clients) {
-            let path = format!("file://{}", tmp.path().to_str().unwrap());
+            for (name, client) in driver_processes.iter().map(|t| t.1).zip(&clients) {
+                client.goto(&path).await?;
+                let elem = client
+                    .wait()
+                    .at_most(Duration::from_secs(10))
+                    .for_element(Locator::XPath("/html/body"))
+                    .await?;
 
-            client.goto(&path).await?;
-            let elem = client
-                .wait()
-                .at_most(Duration::from_secs(10))
-                .for_element(Locator::XPath("/html/body"))
+                let screenshot = elem.screenshot().await?;
+
+                tokio::fs::write(
+                    format!("{OUTPUT_DIR}/test-output/{name}/{table_name}.png"),
+                    screenshot,
+                )
                 .await?;
+            }
 
-            let screenshot = elem.screenshot().await?;
-
-            tokio::fs::write(
-                format!("{OUTPUT_DIR}/test-output/{name}/{table_name}.png"),
-                screenshot,
-            )
-            .await?;
+            tmp.as_file_mut().set_len(0)?;
         }
     }
 

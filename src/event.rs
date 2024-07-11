@@ -101,7 +101,6 @@ pub enum Content<'a> {
     /// which may be stretchy, such as `→`, `‾`, etc.
     Ordinary { content: char, stretchy: bool },
     /// A large operator, such as `\sum`, `\int`, `\prod`, etc.
-    ///
     LargeOp { content: char, small: bool },
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { content: char, small: bool },

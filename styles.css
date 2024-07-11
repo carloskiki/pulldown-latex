@@ -84,6 +84,10 @@ m|mtable.menv-align>m|mtr>m|mtd:nth-child(2n + 3) {
     padding-left: 1em;
 }
 
+m|mtable.menv-cases>m|mtr>m|mtd:first-child {
+    padding-right: 1em;
+}
+
 m|mtable.menv-arraylike>m|mtr>m|mtd {
     padding-left: 0.4em;
     padding-right: 0.4em;
