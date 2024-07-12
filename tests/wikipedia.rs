@@ -424,15 +424,12 @@ round_trip_display!(
 
 round_trip_display!(
     arrays,
-    r"\begin{array}{|c|c|:|c|} a & b & S \\
-    \hline
-    \hdashline
-    \hline
-    0 & 0 & 1 \\
-    0 & 1 & 1 \\
-    1 & 0 & 1 \\
-    1 & 1 & 0 \\
-    \end{array}"
+    r"\begin{array}{||c|c::c|c||}
+    A & B & C & D \\ \hdashline
+    1 & 2 & 3 & 4 \\ \hline
+    5 & 6 & 7 & 8 \\
+    9 & 10 & 11 & 12
+    \end{array}",
 );
 
 // Delimiters

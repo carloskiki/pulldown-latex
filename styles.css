@@ -52,7 +52,7 @@ m|mtable {
     border-collapse: collapse;
 }
 
-m|mtr:last-child > m|mtd:empty {
+m|mtr:last-child > m|mtd:empty:only-child {
     display: none;
 }
 
