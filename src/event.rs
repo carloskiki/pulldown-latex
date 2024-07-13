@@ -28,18 +28,20 @@ use crate::attribute::{Dimension, Font};
 ///
 /// __Input__: `\text{Hello, world!}`
 /// ```
-/// [Event::Content(Content::Text("Hello, world!"))]
+/// # use pulldown_latex::event::{Event, Content};
+/// [Event::Content(Content::Text("Hello, world!"))];
 /// ```
 ///
 /// __Input__: `x^2_{\text{max}}`
 /// ```
+/// # use pulldown_latex::event::{Event, Content, Grouping, ScriptType, ScriptPosition};
 /// [
 ///     Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
 ///     Event::Begin(Grouping::Normal),
 ///     Event::Content(Content::Text("max")),
-///     Event::End
+///     Event::End,
 ///     Event::Content(Content::Ordinary { content: 'x', stretchy: false }),
-/// ]
+/// ];
 /// ```
 #[derive(Debug, Clone, PartialEq)]
 pub enum Event<'a> {
@@ -105,7 +107,10 @@ pub enum Content<'a> {
     /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { content: char, small: bool },
     /// A relation, such as `=`, `≠`, `≈`, etc.
-    Relation { content: RelationContent, small: bool },
+    Relation {
+        content: RelationContent,
+        small: bool,
+    },
     /// An opening, closing, or fence delimiter, such as `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
     Delimiter {
         content: char,
@@ -236,7 +241,7 @@ pub enum Grouping {
     /// A grouping that is induced by `\left` and `\right` in `LaTeX`.
     LeftRight(Option<char>, Option<char>),
     /// The array environment of `LaTeX`.
-    /// 
+    ///
     /// It's content is an array of columns, which represents the column specification in `LaTeX`.
     ///
     /// ### Example
@@ -278,7 +283,7 @@ pub enum Grouping {
     /// declaration.
     Alignat { pairs: u16, eq_numbers: bool },
     /// The `alignedat` environment of `LaTeX`.
-    /// 
+    ///
     /// `pairs` specifies the number of left-right column pairs specified in the environment
     Alignedat { pairs: u16 },
     /// The `gather` environment of `LaTeX`.
@@ -374,11 +379,15 @@ pub struct RelationContent {
 
 impl RelationContent {
     pub(crate) fn single_char(content: char) -> Self {
-        Self { content: (content, None) }
+        Self {
+            content: (content, None),
+        }
     }
 
     pub(crate) fn double_char(first: char, second: char) -> Self {
-        Self { content: (first, Some(second)) }
+        Self {
+            content: (first, Some(second)),
+        }
     }
 
     /// Write the content of the relation to a buffer, and output the filled slice of that

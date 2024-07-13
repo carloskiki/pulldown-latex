@@ -11,7 +11,7 @@ use tokio::process::Command;
 
 #[allow(clippy::type_complexity)]
 pub static RENDERED: Mutex<Vec<(&str, Vec<(&str, String)>)>> = Mutex::new(Vec::new());
-pub const OUTPUT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/docs");
+pub const OUTPUT_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/out");
 
 pub struct TestCase {
     pub name: &'static str,
