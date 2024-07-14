@@ -144,8 +144,6 @@ impl<'a> Iterator for Parser<'a> {
                 let (desc, rest) = inner.parse_next();
                 *content = rest;
 
-                
-
                 let script_event = match desc {
                     Err(e) => return Some(Err(self.error_with_context(e))),
                     Ok(Some((e, desc))) => {
@@ -437,12 +435,12 @@ pub struct ParserError<'a> {
 
 impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("Error while parsing: ")?;
+        f.write_str("Parsing Error: ")?;
         self.error.fmt(f)?;
         if let Some((context, char_position)) = self.context {
             let context = context.replace(['\n', '\t'], " ");
-            f.write_str("\n --> Context: ")?;
-            const PREFIX_LEN: usize = 14;
+            f.write_str("\n Context: ")?;
+            const PREFIX_LEN: usize = 10;
             f.write_str(&context)?;
             f.write_str("\n")?;
             f.write_fmt(format_args!("{:>1$}", "^", char_position + PREFIX_LEN))?;
@@ -497,7 +495,7 @@ pub(crate) enum ErrorKind {
     ControlSequenceAsArgument,
     #[error("subscript and/or superscript found as argument to a command")]
     ScriptAsArgument,
-    #[error("enpty control sequence")]
+    #[error("empty control sequence")]
     EmptyControlSequence,
     #[error("unkown color. colors must either be predefined or in the form `#RRGGBB`")]
     UnknownColor,
@@ -714,7 +712,6 @@ mod tests {
         );
     }
 
-    // For mir
     #[test]
     fn multidigit_number() {
         let parser = Parser::new("123");
@@ -723,6 +720,15 @@ mod tests {
             .unwrap();
 
         assert_eq!(events, vec![Event::Content(Content::Number("123"))]);
+    }
+
+    #[test]
+    fn error() {
+        let parser = Parser::new(r"{");
+        let events = parser
+            .collect::<Vec<_>>();
+        
+        assert!(events[0].is_err() && events.len() == 1);
     }
 }
 

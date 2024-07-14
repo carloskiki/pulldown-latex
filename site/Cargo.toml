@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+pulldown-latex = { path = "../" }
 leptos = { version = "0.6.12", features = ["csr"] }
 console_log = "1"
 log = "0.4"
