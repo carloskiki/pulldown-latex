@@ -439,8 +439,8 @@ impl Display for ParserError<'_> {
         self.error.fmt(f)?;
         if let Some((context, char_position)) = self.context {
             let context = context.replace(['\n', '\t'], " ");
-            f.write_str("\n Context: ")?;
-            const PREFIX_LEN: usize = 10;
+            f.write_str("\n --> Context: ")?;
+            const PREFIX_LEN: usize = 14;
             f.write_str(&context)?;
             f.write_str("\n")?;
             f.write_fmt(format_args!("{:>1$}", "^", char_position + PREFIX_LEN))?;
