@@ -100,7 +100,6 @@ impl<'a> MacroContext<'a> {
             .collect::<Result<Vec<_>>>()?;
 
         // Parse the replacement text, making sure that it is properly balanced.
-        // TODO: expand replacement text when necessary
         let mut replacement_splits = replacement_text
             .split_inclusive(|c| matches!(c, '#' | '\\'))
             .peekable();
@@ -162,7 +161,6 @@ impl<'a> MacroContext<'a> {
                     }
                 }
                 '\\' => {
-                    // TODO: this should be changed when allowing for expansion.
                     let next_split = replacement_splits
                         .peek()
                         .expect("the last character of the replacement text cannot be a backslash");

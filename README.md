@@ -57,6 +57,7 @@ __For later__:
 - `fil` units
     TeX allows the use of `fil`(ll...) units, this library does not.
 - `\outer` specifier on definitions
+- `\edef`, we do not support pre-expansion of macros.
 - `\csname` & `\endcsname`
 - `\begingroup` and `{`, and `\endgroup` and `}` behave the same way; that is to say, 
     `\begingroup` and `\endgroup` do not have the property of "keeping the same mode" (TeXbook p. 275).

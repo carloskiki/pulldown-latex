@@ -51,10 +51,6 @@ pub struct Parser<'a> {
     buffer: Vec<Instruction<'a>>,
 }
 
-// TODO: When using macros, one should truly just prepend the extended macro to the start of the
-// current string.
-// We should thus never call `current_string` repeatedly, the string
-// outputed by current string is always fully formed.
 impl<'a> Parser<'a> {
     pub fn new(input: &'a str) -> Self {
         let mut instruction_stack = Vec::with_capacity(32);

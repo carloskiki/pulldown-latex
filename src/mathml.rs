@@ -628,7 +628,6 @@ where
                 self.set_previous_atom(Atom::Ord);
                 self.writer.write_all(b"</mn>")
             }
-            // TODO: script shenanigans and parens vs. no parens.
             Content::Function(str) => {
                 if matches!(
                     self.previous_atom,
@@ -698,25 +697,9 @@ where
                     self.writer.write_all(b"</mi>")
                 }
             }
-            // TODO: Follow plain tex's rules for spacing:
-            // Varing is a binary when:
-            // 1. preceded by closing
-            // 3. preceded by punctuation
-            // 4. preceded by number
-            // 5. preceded by normal
-            // and:
-            // 1. followed by closing
-            // 4. followed by number
-            // 5. followed by normal
-            //
-            // If the current item is a Bin atom, and if this was the first atom in the list,
-            // or if the most recent previous atom was Bin, Op, Rel, Open, or Punct, change the current
-            // Bin to Ord and continue with Rule 14. Otherwise continue with Rule 17.
-            //
-            // If the current item is a Rel or Close or Punct atom, and if the most recent previous atom
-            // was Bin, change that previous Bin to Ord. Continue with Rule 17.
-            //
             // TexBook p. 153 and 157 for math classes.
+            // TexBook p. 170 for spacing.
+            // TexBook p. 438-443 for type setting rules (especially important for Binary Ops)
             Content::BinaryOp { content, small } => {
                 let tag = if matches!(
                     self.previous_atom,
