@@ -86,6 +86,38 @@ pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerRe
     Ok(argument)
 }
 
+/// Finds the shortest prefix of `input` that contains balanced groups and ends with the given `suffix`.
+pub fn content_with_suffix<'a>(input: &mut &'a str, suffix: &str) -> InnerResult<&'a str> {
+    let mut escaped = false;
+    let mut index = 0;
+    let bytes = input.as_bytes();
+    while escaped || !bytes[index..].starts_with(suffix.as_bytes()) {
+        if index + suffix.len() > input.len() {
+            *input = &input[input.len()..];
+            return Err(ErrorKind::EndOfInput);
+        }
+        match bytes[index] {
+            b'\\' => escaped = !escaped,
+            b'%' if !escaped => {
+                let rest_pos = bytes[index..]
+                    .iter()
+                    .position(|&c| c == b'\n')
+                    .unwrap_or(bytes.len());
+                index += rest_pos;
+            }
+            b'{' if !escaped => {
+                let conetent = group_content(&mut &input[index + 1..], "{", "}")?;
+                index += conetent.len() + 1;
+            }
+            _ => escaped = false,
+        }
+        index += 1;
+    }
+    let (argument, rest) = input.split_at(index);
+    *input = &rest[suffix.len()..];
+    Ok(argument)
+}
+
 /// Converts a control sequence or character into its corresponding delimiter unicode
 /// character, and whether or not the delimiter is an opening.
 ///

@@ -1,14 +1,12 @@
 use std::collections::HashMap;
 
-use thiserror::Error;
+use crate::parser::{ErrorKind, InnerResult, Token};
 
-use crate::parser::Token;
+use super::{lex, Argument};
 
-const MAX_EXPANSION: usize = 32;
-
-struct MacroContext<'a> {
-    definitions: HashMap<&'a str, MacroDef<'a>>,
-    assignments: HashMap<&'a str, Token<'a>>,
+#[derive(Debug)]
+pub struct MacroContext<'input> {
+    definitions: HashMap<&'input str, Definition<'input>>,
 }
 
 // QUESTIONS:
@@ -23,11 +21,10 @@ struct MacroContext<'a> {
 // > https://tex.stackexchange.com/questions/86385/what-is-the-difference-between-relax-and
 //
 // TODO: Make sure that we do not own an assignment and a definition at the same time.
-impl<'a> MacroContext<'a> {
-    fn new() -> Self {
+impl<'input> MacroContext<'input> {
+    pub fn new() -> Self {
         Self {
             definitions: HashMap::new(),
-            assignments: HashMap::new(),
         }
     }
 
@@ -40,13 +37,12 @@ impl<'a> MacroContext<'a> {
     ///
     /// - The replacement text must be properly balanced.
     /// - The parameter text must not contain '{' or '}'.
-    fn define(
+    pub(crate) fn define(
         &mut self,
-        name: &'a str,
-        mut parameter_text: &'a str,
-        replacement_text: &'a str,
-        expand_replacement: bool,
-    ) -> Result<()> {
+        name: &'input str,
+        mut parameter_text: &'input str,
+        replacement_text: &'input str,
+    ) -> InnerResult<()> {
         // Check for the '#{' rule of the last parameter (TeXBook p. 204).
         let last_param_brace_delimited = parameter_text.ends_with('#');
         if last_param_brace_delimited {
@@ -66,7 +62,7 @@ impl<'a> MacroContext<'a> {
         } else {
             // The parameter text is already guaranteed to not contain '{'.
             if prefix.find(|c| c == '}').is_some() {
-                return Err(MacroContextError::BracesInParamText);
+                return Err(ErrorKind::BracesInParamText);
             };
             Some(prefix)
         };
@@ -74,130 +70,228 @@ impl<'a> MacroContext<'a> {
         // Parse the arguments, making sure that they are in order and that the number of arguments
         // is less than 10.
         let parameters: Vec<_> = parameters
-            .map(|(i, arg)| -> Result<Parameter> {
+            .map(|(i, arg)| -> InnerResult<Parameter> {
                 let mut chars = arg.chars();
                 let param_index = chars
                     .next()
                     .and_then(|c| c.is_ascii_digit().then_some(c as u8 - b'0'))
-                    .ok_or(MacroContextError::StandaloneHashSign)?;
+                    .ok_or(ErrorKind::StandaloneHashSign)?;
                 if param_index != i as u8 {
-                    return Err(MacroContextError::IncorrectMacroParams(
-                        param_index,
-                        i as u8,
-                    ));
+                    return Err(ErrorKind::IncorrectMacroParams(param_index, i as u8));
                 };
-                let script = chars.as_str();
-                if script.is_empty() {
+                let suffix = chars.as_str();
+                if suffix.is_empty() {
                     Ok(None)
                 } else {
                     // The parameter text is already guaranteed to not contain '{'.
-                    if script.find(|c| c == '}').is_some() {
-                        return Err(MacroContextError::BracesInParamText);
+                    if suffix.find(|c| c == '}').is_some() {
+                        return Err(ErrorKind::BracesInParamText);
                     };
-                    Ok(Some(script))
+                    Ok(Some(suffix))
                 }
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<InnerResult<Vec<_>>>()?;
 
         // Parse the replacement text, making sure that it is properly balanced.
-        let mut replacement_splits = replacement_text
-            .split_inclusive(|c| matches!(c, '#' | '\\'))
-            .peekable();
+        let mut replacement_splits = replacement_text.split_inclusive('#').peekable();
         let mut replacement_tokens: Vec<ReplacementToken> = Vec::new();
 
         while let Some(split) = replacement_splits.next() {
-            let split_char = split
-                .chars()
-                .last()
-                .expect("split inclusive always yields at least one char per element");
             replacement_tokens.push(ReplacementToken::String(split));
 
-            match split_char {
-                '#' => {
-                    let next_split = replacement_splits
-                        .peek_mut()
-                        .ok_or(MacroContextError::StandaloneHashSign)?;
-                    let first_char = next_split
-                        .chars()
-                        .next()
-                        .expect("split inclusive always yields at least one char per element");
-                    if first_char == '#' {
-                        // skip the next split since it will contain the second '#'
-                        replacement_splits.next();
-                    } else if first_char.is_ascii_digit() {
-                        let param_index = first_char as u8 - b'0';
-                        if param_index > parameters.len() as u8 || param_index == 0 {
-                            return Err(MacroContextError::IncorrectReplacementParams(
-                                param_index,
-                                parameters.len() as u8,
-                            ));
-                        };
+            let next_split = match replacement_splits.peek_mut() {
+                Some(next_split) => next_split,
+                None if split.is_empty() => {
+                    replacement_tokens.pop();
+                    break;
+                }
+                None if *split
+                    .as_bytes()
+                    .last()
+                    .expect("checked for not none in previous branch")
+                    != b'#' =>
+                {
+                    break;
+                }
+                None => {
+                    return Err(ErrorKind::StandaloneHashSign);
+                }
+            };
+            let first_char = next_split
+                .chars()
+                .next()
+                .expect("split inclusive always yields at least one char per element");
+            if first_char == '#' {
+                // skip the next split since it will contain the second '#'
+                replacement_splits.next();
+            } else if first_char.is_ascii_digit() {
+                let param_index = first_char as u8 - b'0';
+                if param_index > parameters.len() as u8 || param_index == 0 {
+                    return Err(ErrorKind::IncorrectReplacementParams(
+                        param_index,
+                        parameters.len() as u8,
+                    ));
+                };
 
-                        if let Some(t) = replacement_tokens.last_mut() {
-                            match t {
-                                ReplacementToken::String(s) => {
-                                    *s = &s[..s.len() - 1];
-                                }
-                                _ => unreachable!(),
-                            }
-                        }
-
-                        if replacement_tokens
-                            .last()
-                            .is_some_and(|t| matches!(t, ReplacementToken::String("")))
-                        {
+                match replacement_tokens
+                    .last_mut()
+                    .expect("was pushed previously in the loop")
+                {
+                    ReplacementToken::String(s) => {
+                        if s.len() == 1 {
                             replacement_tokens.pop();
+                        } else {
+                            *s = &s[..s.len() - 1];
                         }
-                        replacement_tokens.push(ReplacementToken::Parameter(param_index));
-                        // Make it so that the next split wont begin with a digit.
-                        *next_split = &next_split[1..];
-                        // We know we are done if the next split becomes empty when removing a
-                        // digit.
-                        if next_split.is_empty() {
-                            break;
-                        }
-                    } else {
-                        return Err(MacroContextError::StandaloneHashSign);
                     }
+                    _ => unreachable!(),
                 }
-                '\\' => {
-                    let next_split = replacement_splits
-                        .peek()
-                        .expect("the last character of the replacement text cannot be a backslash");
-                    // The next split can only be 1 byte long if it only contains a splitting character.
-                    if next_split.len() == 1 {
-                        replacement_tokens.push(ReplacementToken::String(next_split));
-                        replacement_splits.next();
-                    }
 
-                    if expand_replacement {
-                        todo!("potentially expand");
-                    }
-                }
-                _ => {}
+                replacement_tokens.push(ReplacementToken::Parameter(param_index));
+                // Make it so that the next split wont begin with a digit.
+                *next_split = &next_split[1..];
+            } else {
+                return Err(ErrorKind::StandaloneHashSign);
             }
         }
 
         self.definitions.insert(
             name,
-            MacroDef {
+            Definition::Macro(MacroDef {
                 prefix,
                 last_param_brace_delimited,
                 parameters,
                 replacement: replacement_tokens,
-            },
+            }),
         );
         Ok(())
     }
 
     /// Assign a new control sequence to a token.
-    fn assign(&mut self, name: &'a str, alias_for: Token<'a>) -> Result<()> {
-        self.assignments.insert(name, alias_for);
-        Ok(())
+    pub(crate) fn assign(&mut self, name: &'input str, alias_for: Token<'input>) {
+        self.definitions.insert(name, Definition::Alias(alias_for));
+    }
+
+    /// If a macro is successfully expanded, the rest of the input must be discarded, and the
+    /// returned string, which will contain the rest of the input appended, must be used instead.
+    pub(crate) fn try_expand_in(
+        &self,
+        name: &'input str,
+        input_rest: &'input str,
+        storage: &'input bumpalo::Bump,
+    ) -> Option<InnerResult<&'input str>> {
+        Some(self.expand_definition_in(self.definitions.get(name)?, input_rest, storage))
+    }
+
+    fn expand_definition_in(
+        &self,
+        definition: &Definition<'input>,
+        mut input_rest: &'input str,
+        storage: &'input bumpalo::Bump,
+    ) -> InnerResult<&'input str> {
+        Ok(match definition {
+            Definition::Macro(MacroDef {
+                prefix,
+                parameters,
+                last_param_brace_delimited,
+                replacement,
+            }) => {
+                if let Some(prefix) = prefix {
+                    input_rest = input_rest
+                        .strip_prefix(prefix)
+                        .ok_or(ErrorKind::IncorrectMacroPrefix)?;
+                };
+
+                let mut params: [Option<Result<Argument, &str>>; 9] = Default::default();
+                for (index, param) in parameters.iter().enumerate() {
+                    if index == parameters.len() - 1 && *last_param_brace_delimited {
+                        if let Some(suffix) = param {
+                            let full_suffix = format!("{}{{", suffix);
+                            let (before, _) = input_rest
+                                .split_once(&full_suffix)
+                                .ok_or(ErrorKind::EndOfInput)?;
+                            params[index] = Some(Err(before));
+                            input_rest = &input_rest[before.len()..];
+                        } else {
+                            let (before, _) =
+                                input_rest.split_once('{').ok_or(ErrorKind::EndOfInput)?;
+                            params[index] = Some(Err(before));
+                            input_rest = &input_rest[before.len()..];
+                        }
+                        break;
+                    }
+                    match param {
+                        None => params[index] = Some(Ok(lex::argument(&mut input_rest)?)),
+                        Some(suffix) => {
+                            params[index] =
+                                Some(Err(lex::content_with_suffix(&mut input_rest, suffix)?));
+                        }
+                    }
+                }
+
+                let mut replacement_string = bumpalo::collections::String::new_in(storage);
+
+                for token in replacement {
+                    match token {
+                        ReplacementToken::Parameter(idx) => match &params[*idx as usize].unwrap() {
+                            Ok(Argument::Token(Token::Character(ch))) => {
+                                replacement_string.push(char::from(*ch));
+                            }
+                            Ok(Argument::Token(Token::ControlSequence(cs))) => {
+                                replacement_string.push('\\');
+                                replacement_string.push_str(cs);
+                            }
+                            Ok(Argument::Group(group)) => {
+                                replacement_string.push('{');
+                                replacement_string.push_str(group);
+                                replacement_string.push('}');
+                            }
+                            Err(str) => {
+                                replacement_string.push_str(str);
+                            }
+                        },
+                        ReplacementToken::String(str) => {
+                            replacement_string.push_str(str);
+                        }
+                    }
+                }
+
+                replacement_string.push_str(input_rest);
+                replacement_string.shrink_to_fit();
+
+                replacement_string.into_bump_str()
+            }
+            Definition::Alias(Token::Character(c)) => {
+                let ch = char::from(*c);
+                let mut string = bumpalo::collections::String::with_capacity_in(
+                    ch.len_utf8() + input_rest.len(),
+                    storage,
+                );
+                string.push(ch);
+                string.push_str(input_rest);
+                string.into_bump_str()
+            }
+            Definition::Alias(Token::ControlSequence(cs)) => {
+                let mut string = bumpalo::collections::String::with_capacity_in(
+                    cs.len() + input_rest.len() + 1,
+                    storage,
+                );
+                string.push('\\');
+                string.push_str(cs);
+                string.push_str(input_rest);
+                string.into_bump_str()
+            }
+        })
     }
 }
 
-#[derive(Clone)]
+impl<'input> Default for MacroContext<'input> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug)]
 struct MacroDef<'a> {
     prefix: Option<&'a str>,
     parameters: Vec<Parameter<'a>>,
@@ -205,7 +299,7 @@ struct MacroDef<'a> {
     replacement: Vec<ReplacementToken<'a>>,
 }
 
-/// Some if the argument has a script, None otherwise.
+/// Some if the argument has a suffix, None otherwise.
 type Parameter<'a> = Option<&'a str>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -214,21 +308,11 @@ enum ReplacementToken<'a> {
     String(&'a str),
 }
 
-#[derive(Debug, Error)]
-enum MacroContextError {
-    #[error("macro definition of parameters contains '{{' or '}}'")]
-    BracesInParamText,
-    #[error("macro definition found parameter #{0} but expected #{1}")]
-    IncorrectMacroParams(u8, u8),
-    #[error(
-        "macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]"
-    )]
-    IncorrectReplacementParams(u8, u8),
-    #[error("macro definition contains a standalone '#'")]
-    StandaloneHashSign,
+#[derive(Debug)]
+enum Definition<'a> {
+    Macro(MacroDef<'a>),
+    Alias(Token<'a>),
 }
-
-type Result<T> = std::result::Result<T, MacroContextError>;
 
 #[cfg(test)]
 mod tests {
@@ -237,11 +321,16 @@ mod tests {
     #[test]
     fn no_params() {
         let mut ctx = MacroContext::new();
-        ctx.define("foo", "", "\\this {} is a ## test", false)
+        ctx.define("foo", "", "\\this {} is a ## test")
             .map_err(|e| eprintln!("{e}"))
             .unwrap();
 
-        let def = ctx.definitions.get("foo").unwrap();
+        dbg!(&ctx);
+
+        let def = match ctx.definitions.get("foo").unwrap() {
+            super::Definition::Macro(def) => def,
+            _ => unreachable!(),
+        };
         assert_eq!(def.prefix, None);
         assert!(def.parameters.is_empty());
         assert_eq!(
@@ -259,24 +348,21 @@ mod tests {
     #[test]
     fn with_params() {
         let mut ctx = MacroContext::new();
-        ctx.define(
-            "foo",
-            "this#1test#2. should #",
-            "\\this {} is a ## test#1",
-            false,
-        )
-        .map_err(|e| eprintln!("{e}"))
-        .unwrap();
+        ctx.define("foo", "this#1test#2. should #", "\\this {} is a ## test#1")
+            .map_err(|e| eprintln!("{e}"))
+            .unwrap();
 
-        let def = ctx.definitions.get("foo").unwrap();
+        let def = match ctx.definitions.get("foo").unwrap() {
+            super::Definition::Macro(def) => def,
+            _ => unreachable!(),
+        };
         assert_eq!(def.prefix, Some("this"));
-        assert_eq!(def.parameters, vec![Some("test".into()), Some(". should ")]);
+        assert_eq!(def.parameters, vec![Some("test"), Some(". should ")]);
         assert!(def.last_param_brace_delimited);
         assert_eq!(
             def.replacement,
             vec![
-                ReplacementToken::String("\\"),
-                ReplacementToken::String("this {} is a #"),
+                ReplacementToken::String("\\this {} is a #"),
                 ReplacementToken::String(" test"),
                 ReplacementToken::Parameter(1)
             ]
@@ -288,16 +374,16 @@ mod tests {
     #[test]
     fn texbook() {
         let mut ctx = MacroContext::new();
-        ctx.define("cs", r"AB#1#2C$#3\$ ", r"#3{ab#1}#1 c##\x #2", false)
+        ctx.define("cs", r"AB#1#2C$#3\$ ", r"#3{ab#1}#1 c##\x #2")
             .map_err(|e| eprintln!("{e}"))
             .unwrap();
 
-        let def = ctx.definitions.get("cs").unwrap();
-        assert_eq!(def.prefix, Some("AB".into()));
-        assert_eq!(
-            def.parameters,
-            vec![None, Some("C$".into()), Some(r"\$ ".into())]
-        );
+        let def = match ctx.definitions.get("cs").unwrap() {
+            super::Definition::Macro(def) => def,
+            _ => unreachable!(),
+        };
+        assert_eq!(def.prefix, Some("AB"));
+        assert_eq!(def.parameters, vec![None, Some("C$"), Some(r"\$ ")]);
         assert_eq!(
             def.replacement,
             vec![
@@ -307,8 +393,7 @@ mod tests {
                 ReplacementToken::String(r"}"),
                 ReplacementToken::Parameter(1),
                 ReplacementToken::String(r" c#"),
-                ReplacementToken::String(r"\"),
-                ReplacementToken::String("x "),
+                ReplacementToken::String(r"\x "),
                 ReplacementToken::Parameter(2),
             ]
         );
@@ -317,11 +402,14 @@ mod tests {
     #[test]
     fn brace_delim_no_text() {
         let mut ctx = MacroContext::new();
-        ctx.define("foo", "#", "2 + 2 = 4", false)
+        ctx.define("foo", "#", "2 + 2 = 4")
             .map_err(|e| eprintln!("{e}"))
             .unwrap();
 
-        let def = ctx.definitions.get("foo").unwrap();
+        let def = match ctx.definitions.get("foo").unwrap() {
+            super::Definition::Macro(def) => def,
+            _ => unreachable!(),
+        };
         assert_eq!(def.prefix, None);
         assert_eq!(def.parameters, vec![]);
         assert!(def.last_param_brace_delimited);

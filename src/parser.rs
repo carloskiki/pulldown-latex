@@ -6,7 +6,7 @@
 //! [`push_mathml`]: crate::mathml::push_mathml
 //! [`write_mathml`]: crate::mathml::write_mathml
 mod lex;
-mod macros;
+pub mod macros;
 mod primitives;
 mod state;
 mod tables;
@@ -234,7 +234,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     }
 
     /// ## Script parsing
-    /// 
+    ///
     /// The script parser first checks for directives about script placement, i.e. `\limits` and `\nolimits`,
     /// if the `allow_script_modifiers` flag is set on the parser state. If the flag is set, and if more than one directive is found,
     /// the last one takes effect, as per the [`amsmath docs`][amsdocs] (section 7.3). If the flag is not set, and a limit modifying
@@ -449,6 +449,7 @@ pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 
 #[derive(Debug, Error)]
 pub(crate) enum ErrorKind {
+    // TODO: this error is very misleading. Rework it.
     #[error("unbalanced group found, expected {:?}", .0)]
     UnbalancedGroup(Option<Grouping>),
     #[error("unkown mathematical environment found")]
@@ -499,6 +500,19 @@ pub(crate) enum ErrorKind {
     InvalidCharNumber,
     #[error("cannot use the `\\relax` command in this context")]
     Relax,
+    #[error("macro definition of parameters contains '{{' or '}}'")]
+    BracesInParamText,
+    #[error("macro definition found parameter #{0} but expected #{1}")]
+    IncorrectMacroParams(u8, u8),
+    #[error(
+        "macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]"
+    )]
+    IncorrectReplacementParams(u8, u8),
+    #[error("macro definition contains a standalone '#'")]
+    StandaloneHashSign,
+    // TODO: should specify what the macro expects the prefix string to be.
+    #[error("macro use does not match its definition, expected it to begin with a prefix string as specified in the definition")]
+    IncorrectMacroPrefix,
 }
 
 fn floor_char_boundary(str: &str, index: usize) -> usize {
@@ -721,9 +735,8 @@ mod tests {
     #[test]
     fn error() {
         let parser = Parser::new(r"{");
-        let events = parser
-            .collect::<Vec<_>>();
-        
+        let events = parser.collect::<Vec<_>>();
+
         assert!(events[0].is_err() && events.len() == 1);
     }
 }

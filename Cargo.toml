@@ -12,6 +12,7 @@ categories = ["Parsing tools", "Mathematics"]
 
 [dependencies]
 thiserror = "1.0.57"
+bumpalo = { version = "3.16.0", features = ["collections"] }
 
 [dev-dependencies]
 anyhow = "1"
