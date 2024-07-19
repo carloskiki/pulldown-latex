@@ -5,7 +5,7 @@ use crate::event::ScriptPosition;
 #[derive(Debug)]
 pub struct ParserState<'a> {
     /// Whether the parser is currently parsing an operator that allows for its scripts to be
-    /// modifies by the commands `\nolimits`, `\limits`, and `\displaylimits`.
+    /// modified by the commands `\nolimits`, `\limits`, and `\displaylimits`.
     pub allow_script_modifiers: bool,
     /// What type of script should be rendered by default for the current operator.
     pub script_position: ScriptPosition,

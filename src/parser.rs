@@ -13,11 +13,30 @@ mod tables;
 
 use std::fmt::Display;
 
+use macros::MacroContext;
 use thiserror::Error;
 
 use crate::event::{Event, Grouping, ScriptPosition, ScriptType};
 
 use self::state::ParserState;
+
+#[derive(Default)]
+pub struct Storage(bumpalo::Bump);
+
+impl Storage {
+    /// Create a new storage for the parser.
+    pub fn new() -> Self {
+        Default::default()
+    }
+
+    /// Reset the storage's memory.
+    ///
+    /// It is recommended to call this method after each parsing operation to free up memory. This
+    /// is more efficient than dropping the storage and creating a new one.
+    pub fn reset(&mut self) {
+        self.0.reset();
+    }
+}
 
 /// The parser completes the task of transforming the input `LaTeX` into a symbolic representation,
 /// namely a stream of [`Event`]s.
@@ -29,11 +48,7 @@ use self::state::ParserState;
 /// This method is provided through the [`Iterator`] trait implementation, thus an end user should
 /// only need to use the [`Parser`] as an iterator of `Result<Event, ParserError>`.
 #[derive(Debug)]
-pub struct Parser<'a> {
-    /// What the initial input is.
-    ///
-    /// This is required for error reporting to find and display the context of the error.
-    input: &'a str,
+pub struct Parser<'store> {
     /// The next thing that should be parsed or outputed.
     ///
     /// When this is a string/substring, we should parse it. Some commands output
@@ -42,17 +57,26 @@ pub struct Parser<'a> {
     ///
     /// Instructions are stored backward in this stack, in the sense that the next event to be popped
     /// is the next event to be outputed.
-    instruction_stack: Vec<Instruction<'a>>,
+    instruction_stack: Vec<Instruction<'store>>,
 
     /// This buffer serves as a staging area when parsing a command.
     ///
-    /// When a token is parsed, it is first pushed to this stack, then scripts are checked
-    /// (superscript, and subscript), and then the event is moved from the buffer to the instruction stack.
-    buffer: Vec<Instruction<'a>>,
+    /// When a token is parsed, it is first pushed to this buffer, then scripts are checked
+    /// (superscript, and subscript), and then the events are moved from the buffer to the instruction stack.
+    buffer: Vec<Instruction<'store>>,
+
+    /// Macro definitions.
+    macro_context: MacroContext<'store>,
+
+    /// Where Macros are expanded if ever needed.
+    storage: &'store bumpalo::Bump,
 }
 
-impl<'a> Parser<'a> {
-    pub fn new(input: &'a str) -> Self {
+impl<'store> Parser<'store> {
+    pub fn new<'input>(input: &'input str, storage: &'store Storage) -> Self
+    where
+        'input: 'store,
+    {
         let mut instruction_stack = Vec::with_capacity(32);
         instruction_stack.push(Instruction::SubGroup {
             content: input,
@@ -60,55 +84,31 @@ impl<'a> Parser<'a> {
         });
         let buffer = Vec::with_capacity(16);
         Self {
-            input,
             instruction_stack,
             buffer,
+            macro_context: MacroContext::new(),
+            storage: &storage.0,
         }
     }
 
     /// Return the context surrounding the error reported.
-    fn error_with_context(&mut self, kind: ErrorKind) -> ParserError<'a> {
-        let Some(curr_ptr) = self.instruction_stack.last().and_then(|i| match i {
+    fn error_with_context(&mut self, kind: ErrorKind) -> ParserError<'store> {
+        let context = self.instruction_stack.last().and_then(|i| match i {
             Instruction::Event(_) => None,
             // TODO: Here we should check whether the pointer is currently inside a macro definition or inside
             // of the inputed string, when macros are supported.
-            Instruction::SubGroup { content: s, .. } => Some(s.as_ptr()),
-        }) else {
-            return ParserError {
-                context: None,
-                error: kind,
-            };
-        };
-        let initial_byte_ptr = self.input.as_ptr();
-        // Safety:
-        // * Both `self` and `origin` must be either in bounds or one
-        //   byte past the end of the same [allocated object].
-        //   => this is true, as self never changes the allocation of the `input`.
-        //
-        // * Both pointers must be *derived from* a pointer to the same object.
-        //   (See below for an example.)
-        //   => this is true, as `initial_byte_ptr` is derived from `input.as_ptr()`, and
-        //   `curr_ptr` is derived from `s.as_ptr()`, which points to `input`.
-        // * The distance between the pointers, in bytes, must be an exact multiple
-        //   of the size of `T`.
-        //   => this is true, as both pointers are `u8` pointers.
-        // * The distance between the pointers, **in bytes**, cannot overflow an `isize`.
-        //   => this is obvious as the size of a string should not overflow an `isize`.
-        // * The distance being in bounds cannot rely on "wrapping around" the address space.
-        //   => this is true, a `str` does not rely on this behavior either.
-        let distance = unsafe { curr_ptr.offset_from(initial_byte_ptr) } as usize;
-        let start = floor_char_boundary(self.input, distance.saturating_sub(15));
-        let end = floor_char_boundary(self.input, distance + 15);
+            Instruction::SubGroup { content: s, .. } => Some(*s),
+        });
 
         ParserError {
-            context: Some((&self.input[start..end], distance - start)),
+            context,
             error: kind,
         }
     }
 }
 
-impl<'a> Iterator for Parser<'a> {
-    type Item = Result<Event<'a>, ParserError<'a>>;
+impl<'store> Iterator for Parser<'store> {
+    type Item = Result<Event<'store>, ParserError<'store>>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.instruction_stack.last_mut() {
@@ -135,7 +135,13 @@ impl<'a> Iterator for Parser<'a> {
                     ..Default::default()
                 };
 
-                let inner = InnerParser::new(content, &mut self.buffer, state);
+                let inner = InnerParser {
+                    content,
+                    buffer: &mut self.buffer,
+                    state,
+                    macro_context: &mut self.macro_context,
+                    storage: self.storage,
+                };
 
                 let (desc, rest) = inner.parse_next();
                 *content = rest;
@@ -192,25 +198,20 @@ struct ScriptDescriptor {
     superscript_start: usize,
 }
 
-pub struct InnerParser<'a, 'b> {
-    content: &'a str,
-    buffer: &'b mut Vec<Instruction<'a>>,
+pub struct InnerParser<'b, 'store> {
+    content: &'store str,
+    buffer: &'b mut Vec<Instruction<'store>>,
     state: ParserState<'b>,
+    macro_context: &'b mut MacroContext<'store>,
+    storage: &'store bumpalo::Bump,
 }
 
-impl<'a, 'b> InnerParser<'a, 'b> {
-    fn new(content: &'a str, buffer: &'b mut Vec<Instruction<'a>>, state: ParserState<'b>) -> Self {
-        Self {
-            content,
-            buffer,
-            state,
-        }
-    }
-
+impl<'b, 'store> InnerParser<'b, 'store>
+{
     /// Parse an arugment and pushes the argument to the stack surrounded by a
     /// group: [..., EndGroup, Argument, BeginGroup], when the argument is a subgroup.
     /// Otherwise, it pushes the argument to the stack ungrouped.
-    fn handle_argument(&mut self, argument: Argument<'a>) -> InnerResult<()> {
+    fn handle_argument(&mut self, argument: Argument<'store>) -> InnerResult<()> {
         match argument {
             Argument::Token(token) => {
                 self.state.handling_argument = true;
@@ -241,13 +242,22 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     /// directive is found, the parser emits an error.
     ///
     /// [amsdocs]: https://mirror.its.dal.ca/ctan/macros/latex/required/amsmath/amsldoc.pdf
-    fn parse(&mut self) -> InnerResult<Option<(Event<'a>, ScriptDescriptor)>> {
+    fn parse(&mut self) -> InnerResult<Option<(Event<'store>, ScriptDescriptor)>> {
         // 1. Parse the next token and output everything to the staging stack.
         let token = lex::token(&mut self.content)?;
         match token {
-            // TODO: when expanding a user defined macro, we do not want to check for
-            // scripts.
-            Token::ControlSequence(cs) => self.handle_primitive(cs)?,
+            Token::ControlSequence(cs) => {
+                if let Some(result) =
+                    self.macro_context
+                        .try_expand_in(cs, self.content, self.storage)
+                {
+                    let new_content = result?;
+                    self.content = new_content;
+                    return self.parse();
+                }
+
+                self.handle_primitive(cs)?
+            }
             Token::Character(c) => self.handle_char_token(c)?,
         };
 
@@ -339,19 +349,24 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         }))
     }
 
-    fn parse_next(mut self) -> (InnerResult<Option<(Event<'a>, ScriptDescriptor)>>, &'a str) {
+    fn parse_next(
+        mut self,
+    ) -> (
+        InnerResult<Option<(Event<'store>, ScriptDescriptor)>>,
+        &'store str,
+    ) {
         (self.parse(), self.content)
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-enum Token<'a> {
+pub(crate) enum Token<'a> {
     ControlSequence(&'a str),
     Character(CharToken<'a>),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-struct CharToken<'a> {
+pub(crate) struct CharToken<'a> {
     char: &'a str,
 }
 
@@ -424,7 +439,7 @@ impl AlignmentCount {
 /// The [`Parser`] implements the [`Iterator`] trait, which returns a stream of `Result<Event, ParserError>`.
 #[derive(Debug, Error)]
 pub struct ParserError<'a> {
-    context: Option<(&'a str, usize)>,
+    context: Option<&'a str>,
     #[source]
     error: ErrorKind,
 }
@@ -433,13 +448,10 @@ impl Display for ParserError<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str("Parsing Error: ")?;
         self.error.fmt(f)?;
-        if let Some((context, char_position)) = self.context {
+        if let Some(context) = self.context {
             let context = context.replace(['\n', '\t'], " ");
-            f.write_str("\n --> Context: ")?;
-            const PREFIX_LEN: usize = 14;
+            f.write_str("\n --> Before: ")?;
             f.write_str(&context)?;
-            f.write_str("\n")?;
-            f.write_fmt(format_args!("{:>1$}", "^", char_position + PREFIX_LEN))?;
         }
         Ok(())
     }
@@ -455,15 +467,13 @@ pub(crate) enum ErrorKind {
     #[error("unkown mathematical environment found")]
     Environment,
     #[error(
-        "unexpected math `$` (math shift) character - this character is currently unsupported"
+        "unexpected math `$` (math shift) character - this character cannot be used inside math mode"
     )]
     MathShift,
     #[error(
         "unexpected hash sign `#` character - this character can only be used in macro definitions"
     )]
     HashSign,
-    #[error("unexpected alignment character `&` - this character can only be used in tabular environments (not yet supported)")]
-    AlignmentChar,
     #[error("unexpected end of input")]
     EndOfInput,
     #[error("expected a dimension or glue argument")]
@@ -515,21 +525,6 @@ pub(crate) enum ErrorKind {
     IncorrectMacroPrefix,
 }
 
-fn floor_char_boundary(str: &str, index: usize) -> usize {
-    if index >= str.len() {
-        str.len()
-    } else {
-        let lower_bound = index.saturating_sub(3);
-        let new_index = str.as_bytes()[lower_bound..=index].iter().rposition(|b| {
-            // This is bit magic equivalent to: b < 128 || b >= 192
-            (*b as i8) >= -0x40
-        });
-
-        // SAFETY: we know that the character boundary will be within four bytes
-        unsafe { lower_bound + new_index.unwrap_unchecked() }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use crate::event::{Content, Visual};
@@ -538,9 +533,11 @@ mod tests {
 
     #[test]
     fn substr_instructions() {
-        let parser = Parser::new("\\bar{y}");
+        let store = Storage::new();
+        let parser = Parser::new("\\bar{y}", &store);
+        
         let events = parser
-            .collect::<Result<Vec<_>, ParserError<'static>>>()
+            .collect::<Result<Vec<_>, ParserError<'_>>>()
             .unwrap();
 
         assert_eq!(
@@ -566,10 +563,11 @@ mod tests {
 
     #[test]
     fn subsuperscript() {
-        let parser = Parser::new(r"a^{1+3}_2");
+        let store = Storage::new();
+        let parser = Parser::new(r"a^{1+3}_2", &store);
         let events = parser
             .inspect(|e| println!("{:?}", e))
-            .collect::<Result<Vec<_>, ParserError<'static>>>()
+            .collect::<Result<Vec<_>, ParserError<'_>>>()
             .unwrap();
 
         assert_eq!(
@@ -597,9 +595,10 @@ mod tests {
     }
     #[test]
     fn subscript_torture() {
-        let parser = Parser::new(r"a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}");
+        let store = Storage::new();
+        let parser = Parser::new(r"a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}", &store);
         let events = parser
-            .collect::<Result<Vec<_>, ParserError<'static>>>()
+            .collect::<Result<Vec<_>, ParserError<'_>>>()
             .unwrap();
 
         assert_eq!(
@@ -697,9 +696,10 @@ mod tests {
 
     #[test]
     fn fraction() {
-        let parser = Parser::new(r"\frac{1}{2}_2^4");
+        let store = Storage::new();
+        let parser = Parser::new(r"\frac{1}{2}_2^4", &store);
         let events = parser
-            .collect::<Result<Vec<_>, ParserError<'static>>>()
+            .collect::<Result<Vec<_>, ParserError<'_>>>()
             .unwrap();
 
         assert_eq!(
@@ -724,9 +724,10 @@ mod tests {
 
     #[test]
     fn multidigit_number() {
-        let parser = Parser::new("123");
+        let store = Storage::new();
+        let parser = Parser::new("123", &store);
         let events = parser
-            .collect::<Result<Vec<_>, ParserError<'static>>>()
+            .collect::<Result<Vec<_>, ParserError<'_>>>()
             .unwrap();
 
         assert_eq!(events, vec![Event::Content(Content::Number("123"))]);
@@ -734,7 +735,8 @@ mod tests {
 
     #[test]
     fn error() {
-        let parser = Parser::new(r"{");
+        let store = Storage::new();
+        let parser = Parser::new(r"{", &store);
         let events = parser.collect::<Vec<_>>();
 
         assert!(events[0].is_err() && events.len() == 1);

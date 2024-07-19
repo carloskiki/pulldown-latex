@@ -129,15 +129,18 @@ pub fn delimiter(input: &mut &str) -> InnerResult<(char, DelimiterType)> {
 
 /// Parse the right-hand side of a `futurelet` assignment (TeXBook p. 273).
 ///
-/// Returns the control sequence and both following tokens.
+/// Returns the control sequence, the token it should be assigned to, and the rest of the input
+/// with both tokens not consumed.
 pub fn futurelet_assignment<'a>(
     input: &mut &'a str,
-) -> InnerResult<(&'a str, Token<'a>, Token<'a>)> {
+) -> InnerResult<(&'a str, Token<'a>, &'a str)> {
     let control_sequence = control_sequence(input)?;
 
-    let token1 = token(input)?;
-    let token2 = token(input)?;
-    Ok((control_sequence, token1, token2))
+    let input_with_tokens = *input;
+
+    let _ = token(input)?;
+    let token = token(input)?;
+    Ok((control_sequence, token, input_with_tokens))
 }
 
 /// Parse the right-hand side of a `let` assignment (TeXBook p. 273).
@@ -258,6 +261,8 @@ pub fn dimension_unit(input: &mut &str) -> InnerResult<DimensionUnit> {
 
 /// Parse an integer that may be positive or negative and may be represented as octal, decimal,
 /// hexadecimal, or a character code (TeXBook p. 265).
+// For future use maybe.
+#[allow(dead_code)]
 pub fn integer(input: &mut &str) -> InnerResult<isize> {
     let signum = signs(input)?;
 
@@ -483,12 +488,11 @@ mod tests {
     #[test]
     fn futurelet_assignment() {
         let mut input = r"\foo\bar\baz blah";
-        let (cs, token1, token2) = lex::futurelet_assignment(&mut input).unwrap();
+        let (cs, token, rest) = lex::futurelet_assignment(&mut input).unwrap();
 
         assert_eq!(cs, "foo");
-        assert_eq!(token1, Token::ControlSequence("bar"));
-        assert_eq!(token2, Token::ControlSequence("baz"));
-        assert_eq!(input, "blah");
+        assert_eq!(token, Token::ControlSequence("baz"));
+        assert_eq!(rest, r"\bar\baz blah");
     }
 
     #[test]

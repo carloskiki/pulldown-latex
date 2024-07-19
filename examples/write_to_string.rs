@@ -1,4 +1,4 @@
-use pulldown_latex::{mathml::push_mathml, parser::Parser};
+use pulldown_latex::{mathml::push_mathml, parser::{Parser, Storage}};
 
 static INPUT_LATEX: &str = r#"
 \forall \epsilon > 0, \exists \delta > 0, \text{s.t.}
@@ -6,7 +6,8 @@ static INPUT_LATEX: &str = r#"
 "#;
 
 fn main() {
-    let parser = Parser::new(INPUT_LATEX);
+    let storage = Storage::new();
+    let parser = Parser::new(INPUT_LATEX, &storage);
     let mut mathml = String::new();
     let config = Default::default();
 

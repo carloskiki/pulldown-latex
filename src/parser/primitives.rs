@@ -6,7 +6,9 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, Line, RelationContent, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
+        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
+        DelimiterSize, DelimiterType, Event as E, Grouping as G, Line, RelationContent,
+        ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V,
     },
 };
 
@@ -20,14 +22,14 @@ use super::{
     Token,
 };
 
-impl<'a, 'b> InnerParser<'a, 'b> {
+impl<'b, 'store> InnerParser<'b, 'store> {
     /// Handle a character token, returning a corresponding event.
     ///
     /// This function specially treats numbers as `mi`.
     ///
     /// ## Panics
     /// - This function will panic if the `\` or `%` character is given
-    pub(super) fn handle_char_token(&mut self, token: CharToken<'a>) -> InnerResult<()> {
+    pub(super) fn handle_char_token(&mut self, token: CharToken<'store>) -> InnerResult<()> {
         let instruction = I::Event(match token.into() {
             '\\' => panic!("(internal error: please report) the `\\` character should never be observed as a token"),
             '%' => panic!("(internal error: please report) the `%` character should never be observed as a token"),
@@ -129,7 +131,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
     }
 
     /// Handle a supported control sequence, pushing instructions to the provided stack.
-    pub(super) fn handle_primitive(&mut self, control_sequence: &'a str) -> InnerResult<()> {
+    pub(super) fn handle_primitive(&mut self, control_sequence: &'store str) -> InnerResult<()> {
         let event = match control_sequence {
             "arccos" | "cos" | "csc" | "exp" | "ker" | "sinh" | "arcsin" | "cosh" | "deg"
             | "lg" | "ln" | "arctan" | "cot" | "det" | "hom" | "log" | "sec" | "tan" | "arg"
@@ -1410,7 +1412,6 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             ),
             "|" => ordinary('∥'),
             "text" => return self.text_argument(),
-            // TODO: should cancel be its own event?
             "not" | "cancel" => {
                 self.buffer.push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
@@ -1715,6 +1716,29 @@ impl<'a, 'b> InnerParser<'a, 'b> {
             // Spacing
             c if c.trim_start().is_empty() => E::Content(C::Text("&nbsp;")),
 
+            // Macros
+            "def" => {
+                let (cs, parameter_text, replacement_text) = lex::definition(&mut self.content)?;
+                self.state.skip_scripts = true;
+                return self
+                    .macro_context
+                    .define(cs, parameter_text, replacement_text);
+            }
+            "let" => {
+                let (cs, token) = lex::let_assignment(&mut self.content)?;
+                self.state.skip_scripts = true;
+                self.macro_context.assign(cs, token);
+                return Ok(());
+            }
+            "futurelet" => {
+                let (cs, token, rest) = lex::futurelet_assignment(&mut self.content)?;
+                self.state.skip_scripts = true;
+                self.macro_context.assign(cs, token);
+                self.content = rest;
+
+                return Ok(());
+            }
+            // TODO: \newcommand, \renewcommand, \providecommand.
             _ => return Err(ErrorKind::UnknownPrimitive),
         };
         self.buffer.push(I::Event(event));
@@ -1789,7 +1813,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         Ok(())
     }
 
-    fn large_op(&mut self, op: char, movable: bool) -> E<'a> {
+    fn large_op(&mut self, op: char, movable: bool) -> E<'store> {
         self.state.allow_script_modifiers = true;
         self.state.script_position = if movable { SP::Movable } else { SP::Right };
         E::Content(C::LargeOp {
@@ -1798,12 +1822,12 @@ impl<'a, 'b> InnerParser<'a, 'b> {
         })
     }
 
-    fn font_change(&mut self, font: Font) -> E<'a> {
+    fn font_change(&mut self, font: Font) -> E<'store> {
         self.state.skip_scripts = true;
         E::StateChange(SC::Font(Some(font)))
     }
 
-    fn style_change(&mut self, style: S) -> E<'a> {
+    fn style_change(&mut self, style: S) -> E<'store> {
         self.state.skip_scripts = true;
         E::StateChange(SC::Style(style))
     }
@@ -1870,7 +1894,7 @@ impl<'a, 'b> InnerParser<'a, 'b> {
                     }
                     ':' => {
                         column_count -= 1;
-                        AC::Separator(Line::Dashed) 
+                        AC::Separator(Line::Dashed)
                     }
                     _ => return Err(ErrorKind::Argument),
                 })

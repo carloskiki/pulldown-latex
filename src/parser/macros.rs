@@ -9,18 +9,6 @@ pub struct MacroContext<'input> {
     definitions: HashMap<&'input str, Definition<'input>>,
 }
 
-// QUESTIONS:
-// If parameter text is unicode but user inputs tokens that represent the unicode?
-// > In that case we say that the text has to match exactly.
-// What does "fully expandable" mean?
-// > https://tex.stackexchange.com/a/66168
-// Difference between \def and \let?
-// > \def creates a new table entry for the macro, while let points to an existing entry
-//  (for us however, it needs to copy the entry).
-// What does \relax do?
-// > https://tex.stackexchange.com/questions/86385/what-is-the-difference-between-relax-and
-//
-// TODO: Make sure that we do not own an assignment and a definition at the same time.
 impl<'input> MacroContext<'input> {
     pub fn new() -> Self {
         Self {

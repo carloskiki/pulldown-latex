@@ -6,7 +6,7 @@ use fantoccini::{Client, ClientBuilder, Locator};
 use heck::ToTitleCase;
 use inventory::collect;
 use libtest_mimic::{Arguments, Conclusion, Failed, Trial};
-use pulldown_latex::{config::RenderConfig, mathml::push_mathml, parser::Parser};
+use pulldown_latex::{config::RenderConfig, mathml::push_mathml, parser::{Parser, Storage}};
 use tokio::process::Command;
 
 #[allow(clippy::type_complexity)]
@@ -33,13 +33,15 @@ pub fn round_trip(
     inputs: &[&'static str],
     config: RenderConfig,
 ) -> Result<(), Failed> {
+    let mut storage = Storage::new();
     let rendered: Vec<_> = inputs
         .iter()
         .map(|input| -> Result<_, Failed> {
-            show_errors(Parser::new(input))?;
-            let parser = Parser::new(input);
+            show_errors(Parser::new(input, &storage))?;
+            let parser = Parser::new(input, &storage);
             let mut output = String::new();
             push_mathml(&mut output, parser, config)?;
+            storage.reset();
             Ok((*input, output))
         })
         .collect::<Result<_, Failed>>()?;
@@ -255,11 +257,13 @@ macro_rules! round_trip {
     (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {
             let inputs = &[$($input),*];
+            let mut storage = pulldown_latex::parser::Storage::new();
             for input in inputs {
-                let mut parser = pulldown_latex::parser::Parser::new(input);
+                let mut parser = pulldown_latex::parser::Parser::new(input, &storage);
                 if !parser.all(|event| event.is_err()) {
                     return Err(libtest_mimic::Failed::without_message());
                 };
+                storage.reset();
             }
             Ok(())
         }
