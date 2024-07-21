@@ -48,10 +48,6 @@ impl<'input> MacroContext<'input> {
         let prefix = if prefix.is_empty() {
             None
         } else {
-            // The parameter text is already guaranteed to not contain '{'.
-            if prefix.find(|c| c == '}').is_some() {
-                return Err(ErrorKind::BracesInParamText);
-            };
             Some(prefix)
         };
 
@@ -68,15 +64,11 @@ impl<'input> MacroContext<'input> {
                     return Err(ErrorKind::IncorrectMacroParams(param_index, i as u8));
                 };
                 let suffix = chars.as_str();
-                if suffix.is_empty() {
-                    Ok(None)
+                Ok(if suffix.is_empty() {
+                    None
                 } else {
-                    // The parameter text is already guaranteed to not contain '{'.
-                    if suffix.find(|c| c == '}').is_some() {
-                        return Err(ErrorKind::BracesInParamText);
-                    };
-                    Ok(Some(suffix))
-                }
+                    Some(suffix)
+                })
             })
             .collect::<InnerResult<Vec<_>>>()?;
 
@@ -109,7 +101,7 @@ impl<'input> MacroContext<'input> {
         &mut self,
         name: &'input str,
         argument_count: u8,
-        optional_argument: Option<&'input str>,
+        first_arg_default: Option<&'input str>,
         replacement: &'input str,
     ) -> InnerResult<()> {
         let replacement = parse_replacement_text(replacement, argument_count)?;
@@ -118,7 +110,7 @@ impl<'input> MacroContext<'input> {
             name,
             Definition::Command(CommandDef {
                 argument_count,
-                optional_argument,
+                first_arg_default,
                 replacement,
             }),
         );
@@ -207,18 +199,19 @@ impl<'input> MacroContext<'input> {
             }
             Definition::Command(CommandDef {
                 argument_count,
-                optional_argument,
+                first_arg_default,
                 replacement,
             }) => {
+                let unit = first_arg_default.is_some() as u8;
                 let mut arguments = Vec::with_capacity(
-                    *argument_count as usize + optional_argument.is_some() as usize,
+                    *argument_count as usize + unit as usize
                 );
 
-                if let Some(default_argument) = optional_argument {
+                if let Some(default_argument) = first_arg_default {
                     arguments.push(Err(lex::optional_argument(&mut input_rest)?.unwrap_or(default_argument)));
                 }
 
-                (0..*argument_count)
+                (0..(*argument_count - unit))
                     .try_for_each(|_| {
                         arguments.push(Ok(lex::argument(&mut input_rest)?));
                         Ok(())
@@ -359,7 +352,7 @@ struct MacroDef<'a> {
 #[derive(Debug)]
 struct CommandDef<'a> {
     argument_count: u8,
-    optional_argument: Option<&'a str>,
+    first_arg_default: Option<&'a str>,
     replacement: Vec<ReplacementToken<'a>>,
 }
 

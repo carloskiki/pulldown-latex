@@ -492,7 +492,7 @@ pub(crate) enum ErrorKind {
     CharacterNumber,
     #[error("expected an argument")]
     Argument,
-    #[error("expected an argument delimited by `{}`")]
+    #[error("expected an argument delimited by `{{}}`")]
     GroupArgument,
     #[error("trying to add a subscript twice to the same element")]
     DoubleSubscript,
@@ -514,14 +514,16 @@ pub(crate) enum ErrorKind {
     Relax,
     #[error("macro definition of parameters contains '{{' or '}}'")]
     BracesInParamText,
+    #[error("macro definition of parameters contains a (`%`) comment")]
+    CommentInParamText,
     #[error("macro definition found parameter #{0} but expected #{1}")]
     IncorrectMacroParams(u8, u8),
     #[error(
         "macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]"
     )]
     IncorrectReplacementParams(u8, u8),
-    #[error("macro definition contains too many parameters ({0}) - the maximum is {1}")]
-    TooManyParams(u8, u8),
+    #[error("macro definition contains too many parameters, the maximum is 9")]
+    TooManyParams,
     #[error("macro definition contains a standalone '#'")]
     StandaloneHashSign,
     // TODO: should specify what the macro expects the prefix string to be.

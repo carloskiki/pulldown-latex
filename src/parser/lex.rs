@@ -10,10 +10,18 @@ use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult,
 /// In this case, a definition is any of `def`, `edef`, `gdef`, or `xdef`.
 ///
 /// Returns the control sequence, the parameter text, and the replacement text.
-// TODO: make sure that the parameter text includes none of: `}`, or `%`
 pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a str)> {
     let control_sequence = control_sequence(input)?;
     let (parameter_text, rest) = input.split_once('{').ok_or(ErrorKind::EndOfInput)?;
+
+    if let Some(idx) = parameter_text.find(|c: char| c == '%' || c == '}') {
+        return Err(if parameter_text.as_bytes()[idx] == b'%' {
+            ErrorKind::CommentInParamText
+        } else {
+            ErrorKind::BracesInParamText
+        })
+    }
+    
     *input = rest;
     let replacement_text = group_content(input, "{", "}")?;
 
@@ -46,7 +54,7 @@ pub fn brace_argument<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
         *input = rest;
         group_content(input, "{", "}")
     } else {
-        return Err(ErrorKind::GroupArgument);
+        Err(ErrorKind::GroupArgument)
     }
 }
 

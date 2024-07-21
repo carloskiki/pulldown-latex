@@ -1918,9 +1918,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
     }
 
     fn new_command(&mut self, should_already_exist: Option<bool>) -> InnerResult<()> {
-        let Argument::Group(mut group) = lex::argument(&mut self.content)? else {
-            return Err(ErrorKind::ControlSequence);
-        };
+        let mut group = lex::brace_argument(&mut self.content)?;
         let cs = lex::control_sequence(&mut group)?;
 
         if should_already_exist.is_some_and(|sae| sae != self.macro_context.contains(cs)) {
@@ -1931,15 +1929,12 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             });
         }
 
-        let arg_count = u8::from_str_radix(
-            lex::optional_argument(&mut self.content)?.ok_or(ErrorKind::Argument)?,
-            10,
-        )
-        .map_err(|_| ErrorKind::Number)?;
-        let optional_arg_default = lex::optional_argument(&mut self.content)?;
-        let max_args = if optional_arg_default.is_some() { 8 } else { 9 };
-        if arg_count > max_args {
-            return Err(ErrorKind::TooManyParams(arg_count, max_args));
+        let arg_count = (lex::optional_argument(&mut self.content)?.ok_or(ErrorKind::Argument)?)
+            .parse::<u8>()
+            .map_err(|_| ErrorKind::Number)?;
+        let first_arg_default = lex::optional_argument(&mut self.content)?;
+        if arg_count > 9 && arg_count >= first_arg_default.is_some() as u8 {
+            return Err(ErrorKind::TooManyParams);
         }
 
         let replacement_text = lex::brace_argument(&mut self.content)?;
@@ -1948,7 +1943,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             return Ok(());
         }
         self.macro_context
-            .insert_command(cs, arg_count, optional_arg_default, replacement_text);
+            .insert_command(cs, arg_count, first_arg_default, replacement_text)?;
         Ok(())
     }
 }
