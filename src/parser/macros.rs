@@ -105,7 +105,6 @@ impl<'input> MacroContext<'input> {
         replacement: &'input str,
     ) -> InnerResult<()> {
         let replacement = parse_replacement_text(replacement, argument_count)?;
-
         self.definitions.insert(
             name,
             Definition::Command(CommandDef {
@@ -114,7 +113,6 @@ impl<'input> MacroContext<'input> {
                 replacement,
             }),
         );
-
         Ok(())
     }
 
@@ -202,16 +200,15 @@ impl<'input> MacroContext<'input> {
                 first_arg_default,
                 replacement,
             }) => {
-                let unit = first_arg_default.is_some() as u8;
                 let mut arguments = Vec::with_capacity(
-                    *argument_count as usize + unit as usize
+                    *argument_count as usize
                 );
 
                 if let Some(default_argument) = first_arg_default {
-                    arguments.push(Err(lex::optional_argument(&mut input_rest)?.unwrap_or(default_argument)));
+                    arguments.push(Ok(Argument::Group(lex::optional_argument(&mut input_rest)?.unwrap_or(default_argument))));
                 }
 
-                (0..(*argument_count - unit))
+                (0..(*argument_count - first_arg_default.is_some() as u8))
                     .try_for_each(|_| {
                         arguments.push(Ok(lex::argument(&mut input_rest)?));
                         Ok(())
@@ -305,7 +302,7 @@ fn expand_replacement<'store>(
     for token in replacement {
         match token {
             ReplacementToken::Parameter(idx) => {
-                match &arguments[*idx as usize] {
+                match &arguments[*idx as usize - 1] {
                     Ok(Argument::Token(Token::Character(ch))) => {
                         replacement_string.push(char::from(*ch));
                     }
@@ -382,8 +379,6 @@ mod tests {
         ctx.define("foo", "", "\\this {} is a ## test")
             .map_err(|e| eprintln!("{e}"))
             .unwrap();
-
-        dbg!(&ctx);
 
         let def = match ctx.definitions.get("foo").unwrap() {
             super::Definition::Macro(def) => def,

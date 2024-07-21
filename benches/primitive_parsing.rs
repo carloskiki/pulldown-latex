@@ -9,7 +9,8 @@ use pulldown_latex::parser::Parser;
 #[bench]
 fn match_on_greek(b: &mut Bencher) {
     b.iter(|| {
-    let mut parser = Parser::new(r"
+    let storage = pulldown_latex::parser::Storage::new();
+    let parser = Parser::new(r"
 \alpha \beta \gamma \delta \epsilon \zeta \eta \theta
 \iota \kappa \lambda \mu \nu \xi \omicron \pi
 \rho \sigma \tau \upsilon \phi \chi \psi \omega
@@ -31,7 +32,7 @@ fn match_on_greek(b: &mut Bencher) {
 \rho \sigma \tau \upsilon \phi \chi \psi \omega
 \Alpha \Beta \Gamma \Delta \Epsilon \Zeta \Eta \Theta
 \Iota \Kappa \Lambda \Mu \Nu \Xi \Omicron \Pi
-");
+", &storage);
         let mut str = String::new();
         test::black_box(pulldown_latex::mathml::push_mathml(&mut str, parser, Default::default()).unwrap());
     });
@@ -40,7 +41,8 @@ fn match_on_greek(b: &mut Bencher) {
 #[bench]
 fn subscript_torture(b: &mut Bencher) {
     b.iter(|| {
-        let parser = Parser::new("a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}");
+        let storage = pulldown_latex::parser::Storage::new();
+        let parser = Parser::new("a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}", &storage);
         let mut str = String::new();
         test::black_box(
             pulldown_latex::mathml::push_mathml(&mut str, parser, Default::default()).unwrap(),

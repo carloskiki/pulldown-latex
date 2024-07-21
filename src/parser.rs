@@ -742,7 +742,7 @@ mod tests {
 
         assert_eq!(events, vec![Event::Content(Content::Number("123"))]);
     }
-
+    
     #[test]
     fn error() {
         let store = Storage::new();
