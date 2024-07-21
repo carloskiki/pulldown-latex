@@ -20,7 +20,7 @@ libtest-mimic = "0.7"
 heck = "0.5"
 inventory = "0.3"
 tempfile = "3"
-fantoccini = "0.19"
+fantoccini = "0.21"
 tokio = { version = "1", features = ["test-util", "rt-multi-thread", "process", "fs"] }
 
 [[example]]
