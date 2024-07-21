@@ -1,5 +1,5 @@
 use leptos::*;
-use pulldown_latex::{config::DisplayMode, push_mathml, Parser, RenderConfig};
+use pulldown_latex::{config::DisplayMode, parser::Storage, push_mathml, Parser, RenderConfig};
 
 #[component]
 pub fn App() -> impl IntoView {
@@ -8,7 +8,8 @@ pub fn App() -> impl IntoView {
     
     let update_input = move |_| {
         let input_value = input_ref.get().unwrap().value();
-        let parser = Parser::new(&input_value);
+        let storage = Storage::new();
+        let parser = Parser::new(&input_value, &storage);
         let config = RenderConfig {
             display_mode: DisplayMode::Block,
             ..Default::default()

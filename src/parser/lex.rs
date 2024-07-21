@@ -41,10 +41,19 @@ pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>
     }
 }
 
-/// Parses the inside of a group, when the first `{` is already parsed.
+pub fn brace_argument<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
+    if let Some(rest) = input.trim_start().strip_prefix('{') {
+        *input = rest;
+        group_content(input, "{", "}")
+    } else {
+        return Err(ErrorKind::GroupArgument);
+    }
+}
+
+/// Parses the inside of a group, when the first opening tag is already parsed.
 ///
-/// The output is the content within the group without the surrounding `{}`. This content is
-/// guaranteed to be balanced.
+/// The output is the content within the group without the surrounding `start` and `end`.
+/// This content is guaranteed to be balanced.
 pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerResult<&'a str> {
     let mut escaped = false;
     let mut index = 0;

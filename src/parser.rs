@@ -492,6 +492,8 @@ pub(crate) enum ErrorKind {
     CharacterNumber,
     #[error("expected an argument")]
     Argument,
+    #[error("expected an argument delimited by `{}`")]
+    GroupArgument,
     #[error("trying to add a subscript twice to the same element")]
     DoubleSubscript,
     #[error("trying to add a superscript twice to the same element")]
@@ -518,11 +520,17 @@ pub(crate) enum ErrorKind {
         "macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]"
     )]
     IncorrectReplacementParams(u8, u8),
+    #[error("macro definition contains too many parameters ({0}) - the maximum is {1}")]
+    TooManyParams(u8, u8),
     #[error("macro definition contains a standalone '#'")]
     StandaloneHashSign,
     // TODO: should specify what the macro expects the prefix string to be.
     #[error("macro use does not match its definition, expected it to begin with a prefix string as specified in the definition")]
     IncorrectMacroPrefix,
+    #[error("macro already defined")]
+    MacroAlreadyDefined,
+    #[error("macro not defined")]
+    MacroNotDefined,
 }
 
 #[cfg(test)]

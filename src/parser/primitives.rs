@@ -1738,7 +1738,9 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
                 return Ok(());
             }
-            // TODO: \newcommand, \renewcommand, \providecommand.
+            "newcommand" => return self.new_command(Some(false)),
+            "renewcommand" => return self.new_command(Some(true)),
+            "providecommand" => return self.new_command(None),
             _ => return Err(ErrorKind::UnknownPrimitive),
         };
         self.buffer.push(I::Event(event));
@@ -1913,6 +1915,41 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             None => None,
             _ => return Err(ErrorKind::Argument),
         })
+    }
+
+    fn new_command(&mut self, should_already_exist: Option<bool>) -> InnerResult<()> {
+        let Argument::Group(mut group) = lex::argument(&mut self.content)? else {
+            return Err(ErrorKind::ControlSequence);
+        };
+        let cs = lex::control_sequence(&mut group)?;
+
+        if should_already_exist.is_some_and(|sae| sae != self.macro_context.contains(cs)) {
+            return Err(if should_already_exist.unwrap() {
+                ErrorKind::MacroNotDefined
+            } else {
+                ErrorKind::MacroAlreadyDefined
+            });
+        }
+
+        let arg_count = u8::from_str_radix(
+            lex::optional_argument(&mut self.content)?.ok_or(ErrorKind::Argument)?,
+            10,
+        )
+        .map_err(|_| ErrorKind::Number)?;
+        let optional_arg_default = lex::optional_argument(&mut self.content)?;
+        let max_args = if optional_arg_default.is_some() { 8 } else { 9 };
+        if arg_count > max_args {
+            return Err(ErrorKind::TooManyParams(arg_count, max_args));
+        }
+
+        let replacement_text = lex::brace_argument(&mut self.content)?;
+
+        if self.macro_context.contains(cs) && should_already_exist.is_none() {
+            return Ok(());
+        }
+        self.macro_context
+            .insert_command(cs, arg_count, optional_arg_default, replacement_text);
+        Ok(())
     }
 }
 
