@@ -49,3 +49,21 @@ fn subscript_torture(b: &mut Bencher) {
         );
     });
 }
+
+#[bench]
+fn basic_macros(b: &mut Bencher) {
+    b.iter(|| {
+        let storage = pulldown_latex::parser::Storage::new();
+        let parser = Parser::new(
+            r"\def\d{\mathrm{d}}
+                \oint_C \vec{B}\circ \d\vec{l} = \mu_0 \left( I_{\text{enc}}
+                + \varepsilon_0 \frac{\d}{\d t} \int_S {\vec{E} \circ \hat{n}}\;
+                \d a \right)",
+            &storage,
+        );
+        let mut str = String::new();
+        test::black_box(
+            pulldown_latex::mathml::push_mathml(&mut str, parser, Default::default()).unwrap(),
+        );
+    });
+}
