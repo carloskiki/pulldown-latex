@@ -27,3 +27,6 @@ jobs:
             styles.css
             font/
           generate_release_notes: true
+
+permissions:
+  contents: write
