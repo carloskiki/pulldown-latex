@@ -27,7 +27,7 @@ impl ParserError {
         const CONTEXT_PREFIX: &str = "context: ";
         const EXPANSION_PREFIX: &str = "which was expanded from: ";
 
-        span_stack.reach_original_call_site(place);
+        let index = span_stack.reach_original_call_site(place);
         let mut context = String::from(CONTEXT_PREFIX);
 
         let first_string = span_stack
@@ -35,7 +35,6 @@ impl ParserError {
             .last()
             .map(|exp| exp.full_expansion)
             .unwrap_or(span_stack.input);
-        let index: usize = place as usize - first_string.as_ptr() as usize;
 
         let (mut lower_bound, mut upper_bound) = (
             floor_char_boundary(first_string, index.saturating_sub(CONTEXT_SIZE)),
@@ -45,6 +44,7 @@ impl ParserError {
         span_stack
             .expansions
             .iter()
+            .rev()
             .enumerate()
             .for_each(|(index, expansion)| {
                 let context_str = &expansion.full_expansion[lower_bound..upper_bound];
@@ -52,11 +52,11 @@ impl ParserError {
                 context.push('\n');
                 context.push_str(EXPANSION_PREFIX);
 
-                let next_string = span_stack
-                    .expansions
-                    .get(index + 1)
-                    .map(|exp| exp.full_expansion)
+                let next_string = (span_stack.expansions.len() - 1)
+                    .checked_sub(index + 1)
+                    .map(|index| span_stack.expansions[index].full_expansion)
                     .unwrap_or(span_stack.input);
+
                 lower_bound = floor_char_boundary(
                     next_string,
                     expansion
@@ -71,7 +71,7 @@ impl ParserError {
             });
         context.push_str(&span_stack.input[lower_bound..upper_bound]);
         context.shrink_to_fit();
-        
+
         Self {
             inner: Box::new(Inner {
                 error,

@@ -222,7 +222,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
     /// [amsdocs]: https://mirror.its.dal.ca/ctan/macros/latex/required/amsmath/amsldoc.pdf
     fn parse(&mut self) -> InnerResult<Option<(Event<'store>, ScriptDescriptor)>> {
         // 1. Parse the next token and output everything to the staging stack.
-        let original_content = self.content;
+        let original_content = self.content.trim_start();
         let token = lex::token(&mut self.content)?;
         match token {
             Token::ControlSequence(cs) => {
@@ -444,7 +444,9 @@ impl<'store> SpanStack<'store> {
 
     fn add(&mut self, full_expansion: &'store str, call_site: &str, call_site_length: usize) {
         let call_site_start = self.reach_original_call_site(call_site.as_ptr());
-        let expansion_length = call_site_length - (call_site.len() - full_expansion.len());
+        let expansion_length = (call_site_length as isize
+            - (call_site.len() as isize - full_expansion.len() as isize))
+            as usize;
 
         self.expansions.push(ExpansionSpan {
             full_expansion,
@@ -457,12 +459,14 @@ impl<'store> SpanStack<'store> {
     /// the index of the beginning of the call-site in the top-most span in the stack.
     fn reach_original_call_site(&mut self, substr_start: *const u8) -> usize {
         let mut ptr_val = substr_start as isize;
+
         while let Some(expansion) = self.expansions.last() {
             let expansion_ptr = expansion.full_expansion.as_ptr() as isize;
+
             if ptr_val >= expansion_ptr
-                && ptr_val < expansion_ptr + expansion.full_expansion.len() as isize
+                && ptr_val <= expansion_ptr + expansion.full_expansion.len() as isize
             {
-                let index = if ptr_val < expansion_ptr + expansion.expansion_length as isize {
+                let index = if ptr_val <= expansion_ptr + expansion.expansion_length as isize {
                     (ptr_val - expansion_ptr) as usize
                 } else {
                     let distance_from_effective_stop =
@@ -482,7 +486,8 @@ impl<'store> SpanStack<'store> {
             self.expansions.pop();
         }
         let input_start = self.input.as_ptr() as isize;
-        assert!(ptr_val > input_start && ptr_val < input_start + self.input.len() as isize);
+
+        assert!(ptr_val > input_start && ptr_val <= input_start + self.input.len() as isize);
         (ptr_val - input_start) as usize
     }
 }
@@ -714,10 +719,10 @@ mod tests {
     #[test]
     fn error() {
         let store = Storage::new();
-        let parser = Parser::new(r"{", &store);
+        let parser = Parser::new(r"\def\blah#1#2{\fra#1#2} \def\abc#1{\blah{a}#1} \abc{b}", &store);
         let events = parser.collect::<Vec<_>>();
 
-        assert!(events[0].is_err() && events.len() == 1);
+        assert!(events[0].is_err());
     }
 }
 

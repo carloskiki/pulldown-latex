@@ -1,5 +1,5 @@
 use leptos::*;
-use pulldown_latex::{config::DisplayMode, parser::Storage, push_mathml, Parser, RenderConfig};
+use pulldown_latex::{config::DisplayMode, Storage, push_mathml, Parser, RenderConfig};
 
 #[component]
 pub fn App() -> impl IntoView {
