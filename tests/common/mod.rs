@@ -6,7 +6,7 @@ use fantoccini::{Client, ClientBuilder, Locator};
 use heck::ToTitleCase;
 use inventory::collect;
 use libtest_mimic::{Arguments, Conclusion, Failed, Trial};
-use pulldown_latex::{config::RenderConfig, mathml::push_mathml, parser::{Parser, Storage}};
+use pulldown_latex::{config::RenderConfig, mathml::push_mathml, Storage, Parser};
 use tokio::process::Command;
 
 #[allow(clippy::type_complexity)]
@@ -257,7 +257,7 @@ macro_rules! round_trip {
     (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {
             let inputs = &[$($input),*];
-            let mut storage = pulldown_latex::parser::Storage::new();
+            let mut storage = pulldown_latex::Storage::new();
             for input in inputs {
                 let mut parser = pulldown_latex::parser::Parser::new(input, &storage);
                 if !parser.all(|event| event.is_err()) {

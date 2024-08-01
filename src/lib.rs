@@ -15,4 +15,4 @@ pub use event::Event;
 #[doc(inline)]
 pub use mathml::{push_mathml, write_mathml};
 #[doc(inline)]
-pub use parser::{Parser, ParserError};
+pub use parser::{Parser, error::ParserError, storage::Storage};

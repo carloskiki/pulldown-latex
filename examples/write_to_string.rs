@@ -1,4 +1,4 @@
-use pulldown_latex::{mathml::push_mathml, parser::{Parser, Storage}};
+use pulldown_latex::{mathml::push_mathml, Parser, Storage};
 
 static INPUT_LATEX: &str = r#"
 \forall \epsilon > 0, \exists \delta > 0, \text{s.t.}

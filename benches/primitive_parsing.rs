@@ -9,7 +9,7 @@ use pulldown_latex::parser::Parser;
 #[bench]
 fn match_on_greek(b: &mut Bencher) {
     b.iter(|| {
-    let storage = pulldown_latex::parser::Storage::new();
+    let storage = pulldown_latex::Storage::new();
     let parser = Parser::new(r"
 \alpha \beta \gamma \delta \epsilon \zeta \eta \theta
 \iota \kappa \lambda \mu \nu \xi \omicron \pi
@@ -41,7 +41,7 @@ fn match_on_greek(b: &mut Bencher) {
 #[bench]
 fn subscript_torture(b: &mut Bencher) {
     b.iter(|| {
-        let storage = pulldown_latex::parser::Storage::new();
+        let storage = pulldown_latex::Storage::new();
         let parser = Parser::new("a_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_{5_5}}}}}}}}}}}", &storage);
         let mut str = String::new();
         test::black_box(
@@ -53,7 +53,7 @@ fn subscript_torture(b: &mut Bencher) {
 #[bench]
 fn basic_macros(b: &mut Bencher) {
     b.iter(|| {
-        let storage = pulldown_latex::parser::Storage::new();
+        let storage = pulldown_latex::Storage::new();
         let parser = Parser::new(
             r"\def\d{\mathrm{d}}
                 \oint_C \vec{B}\circ \d\vec{l} = \mu_0 \left( I_{\text{enc}}

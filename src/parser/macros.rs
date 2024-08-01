@@ -116,23 +116,29 @@ impl<'input> MacroContext<'input> {
         Ok(())
     }
 
-    /// If a macro is successfully expanded, the rest of the input must be discarded, and the
+    /// If a macro is successfully expanded, the rest of the input must be discarded and the
     /// returned string, which will contain the rest of the input appended, must be used instead.
+    ///
+    /// Along with the expanded string, the function returns the number of characters consumed
+    /// from the input.
     pub(crate) fn try_expand_in(
         &self,
         name: &'input str,
         input_rest: &'input str,
         storage: &'input bumpalo::Bump,
-    ) -> Option<InnerResult<&'input str>> {
+    ) -> Option<InnerResult<(&'input str, usize)>> {
         Some(self.expand_definition_in(self.definitions.get(name)?, input_rest, storage))
     }
 
+    /// Expand a definition in the storage and return the full expanded string along with the
+    /// length of the input that was consumed by the definition.
     fn expand_definition_in(
         &self,
         definition: &Definition<'input>,
         mut input_rest: &'input str,
         storage: &'input bumpalo::Bump,
-    ) -> InnerResult<&'input str> {
+    ) -> InnerResult<(&'input str, usize)> {
+        let original_length = input_rest.len();
         Ok(match definition {
             Definition::Macro(MacroDef {
                 prefix,
@@ -173,7 +179,10 @@ impl<'input> MacroContext<'input> {
                     }
                 }
 
-                expand_replacement(storage, replacement, &arguments, input_rest)
+                (
+                    expand_replacement(storage, replacement, &arguments, input_rest),
+                    original_length - input_rest.len(),
+                )
             }
             Definition::Alias(Token::Character(c)) => {
                 let ch = char::from(*c);
@@ -183,7 +192,7 @@ impl<'input> MacroContext<'input> {
                 );
                 string.push(ch);
                 string.push_str(input_rest);
-                string.into_bump_str()
+                (string.into_bump_str(), 0)
             }
             Definition::Alias(Token::ControlSequence(cs)) => {
                 let mut string = bumpalo::collections::String::with_capacity_in(
@@ -193,28 +202,30 @@ impl<'input> MacroContext<'input> {
                 string.push('\\');
                 string.push_str(cs);
                 string.push_str(input_rest);
-                string.into_bump_str()
+                (string.into_bump_str(), 0)
             }
             Definition::Command(CommandDef {
                 argument_count,
                 first_arg_default,
                 replacement,
             }) => {
-                let mut arguments = Vec::with_capacity(
-                    *argument_count as usize
-                );
+                let mut arguments = Vec::with_capacity(*argument_count as usize);
 
                 if let Some(default_argument) = first_arg_default {
-                    arguments.push(Ok(Argument::Group(lex::optional_argument(&mut input_rest)?.unwrap_or(default_argument))));
+                    arguments.push(Ok(Argument::Group(
+                        lex::optional_argument(&mut input_rest)?.unwrap_or(default_argument),
+                    )));
                 }
 
-                (0..(*argument_count - first_arg_default.is_some() as u8))
-                    .try_for_each(|_| {
-                        arguments.push(Ok(lex::argument(&mut input_rest)?));
-                        Ok(())
-                    })?;
+                (0..(*argument_count - first_arg_default.is_some() as u8)).try_for_each(|_| {
+                    arguments.push(Ok(lex::argument(&mut input_rest)?));
+                    Ok(())
+                })?;
 
-                expand_replacement(storage, replacement, &arguments, input_rest)
+                (
+                    expand_replacement(storage, replacement, &arguments, input_rest),
+                    original_length - input_rest.len(),
+                )
             }
         })
     }
@@ -296,30 +307,28 @@ fn expand_replacement<'store>(
     // If Ok, its a regular argument, if Err, its a raw string to be inserted.
     arguments: &[Result<Argument, &str>],
     input_rest: &str,
-    ) -> &'store str {
+) -> &'store str {
     let mut replacement_string = bumpalo::collections::String::new_in(storage);
 
     for token in replacement {
         match token {
-            ReplacementToken::Parameter(idx) => {
-                match &arguments[*idx as usize - 1] {
-                    Ok(Argument::Token(Token::Character(ch))) => {
-                        replacement_string.push(char::from(*ch));
-                    }
-                    Ok(Argument::Token(Token::ControlSequence(cs))) => {
-                        replacement_string.push('\\');
-                        replacement_string.push_str(cs);
-                    }
-                    Ok(Argument::Group(group)) => {
-                        replacement_string.push('{');
-                        replacement_string.push_str(group);
-                        replacement_string.push('}');
-                    }
-                    Err(str) => {
-                        replacement_string.push_str(str);
-                    }
+            ReplacementToken::Parameter(idx) => match &arguments[*idx as usize - 1] {
+                Ok(Argument::Token(Token::Character(ch))) => {
+                    replacement_string.push(char::from(*ch));
                 }
-            }
+                Ok(Argument::Token(Token::ControlSequence(cs))) => {
+                    replacement_string.push('\\');
+                    replacement_string.push_str(cs);
+                }
+                Ok(Argument::Group(group)) => {
+                    replacement_string.push('{');
+                    replacement_string.push_str(group);
+                    replacement_string.push('}');
+                }
+                Err(str) => {
+                    replacement_string.push_str(str);
+                }
+            },
             ReplacementToken::String(str) => {
                 replacement_string.push_str(str);
             }
