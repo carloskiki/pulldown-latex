@@ -29,8 +29,9 @@ jobs:
           body: ${{ env.RELEASE_NOTES }}
           files: |
             styles.css
-            font/
+            font/*
           generate_release_notes: true
+          fail_on_unmatched_files: true
 
 permissions:
   contents: write
