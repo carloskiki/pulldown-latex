@@ -1,6 +1,6 @@
 [package]
 name = "pulldown-latex"
-version = "0.3.0"
+version = "0.4.0"
 authors = ["Charles Edward Gagnon"]
 edition = "2021"
 description = "Pull parser to convert LaTeX equations to MathML"
