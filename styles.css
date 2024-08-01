@@ -46,6 +46,12 @@ m|mo.small {
     font-size: 70%;
 }
 
+m|merror > m|mtext {
+    font-family: monospace;
+    white-space-collapse: preserve;
+    display: block;
+}
+
 m|mtable {
     border-color: currentColor;
     border-spacing: 0;
