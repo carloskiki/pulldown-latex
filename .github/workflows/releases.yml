@@ -55,6 +55,11 @@ jobs:
         run: "cargo binstall --no-confirm trunk"
       - name: Build website
         run: "cd site && trunk build"
+      - name: Upload site artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload entire repository
+          path: 'site/dist/'
   
   deploy-site:
     # Deploy to the github-pages environment
@@ -71,13 +76,5 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          # Upload entire repository
-          path: 'site/dist/'
-      - id: deployment
-        name: Deploy to GitHub Pages
+      - name: Deploy to GitHub Pages
         uses: actions/deploy-pages@v3
