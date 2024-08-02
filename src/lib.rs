@@ -2,7 +2,7 @@
 //! available through the [`mathml`] module. This renderer closely follows the _MathML Core_
 //! specification.
 
-#![doc = include_str!("../site/docs/usage.md")]
+#![doc = include_str!("../docs/usage.md")]
 
 pub(crate) mod attribute;
 pub mod config;
