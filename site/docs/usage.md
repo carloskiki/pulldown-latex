@@ -33,4 +33,8 @@ latest version available.
 
 ### Using Local Files
 
-Download the files from the release page and include them in your project. Then, include the following lines in the
+Download the files from the [GitHub releases page](https://github.com/carloskiki/pulldown-latex/releases)
+and include them in your project.
+
+The `styles.css` file and the `font` directory should be placed together in the same directory.
+You can change this structure by modifying the paths in the `styles.css` file.

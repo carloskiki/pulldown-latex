@@ -1,6 +1,8 @@
-//! This crate provides a pull [`Parser`] for `LaTeX` math expressions, and a `MathML` renderer,
-//! available through the [`mathml`] module, which closely follows the _MathML Core_
+//! This crate provides a pull [`Parser`] for `LaTeX` math notation, and a `MathML` renderer,
+//! available through the [`mathml`] module. This renderer closely follows the _MathML Core_
 //! specification.
+
+#![doc = include_str!("../site/docs/usage.md")]
 
 pub(crate) mod attribute;
 pub mod config;

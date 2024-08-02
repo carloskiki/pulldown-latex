@@ -247,7 +247,8 @@ pub enum Grouping {
     /// ### Example
     ///
     /// __Input__: `\begin{array}{lcr} ... \end{array}`
-    /// __Generates__: ```
+    /// __Generates__:
+    /// ```
     /// Grouping::Array(Box::new([
     ///     ArrayColumn::Column(ColumnAlignment::Left),
     ///     ArrayColumn::Column(ColumnAlignment::Center),

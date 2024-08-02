@@ -1177,8 +1177,8 @@ impl<I: Iterator> Iterator for ManyPeek<I> {
     }
 }
 
-/// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>` as input, and renders a
-/// string of MathML into the input string.
+/// Takes a [`Parser`], or any `Iterator<Item = Result<Event<'_>, E>>` as input, and renders
+/// the MathML into the given string.
 ///
 /// [`Parser`]: crate::parser::Parser
 pub fn push_mathml<'a, I, E>(

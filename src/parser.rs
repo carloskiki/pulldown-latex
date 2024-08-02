@@ -29,7 +29,7 @@ pub(crate) use error::{ErrorKind, InnerResult, ParserError};
 /// Transforming the events into rendered math is a task for the
 /// [`mahtml`](crate::mathml) renderer.
 ///
-/// The algorithm of the [`Parser`] is driven by the [`Parser::next`] method on the [`Parser`].
+/// The algorithm of the [`Parser`] is driven by the [`Parser::next`] method.
 /// This method is provided through the [`Iterator`] trait implementation, thus an end user should
 /// only need to use the [`Parser`] as an iterator of `Result<Event, ParserError>`.
 #[derive(Debug)]
@@ -176,7 +176,7 @@ impl<'store> Iterator for Parser<'store> {
     }
 }
 
-pub struct InnerParser<'b, 'store> {
+struct InnerParser<'b, 'store> {
     content: &'store str,
     buffer: &'b mut Vec<Instruction<'store>>,
     state: ParserState<'b>,

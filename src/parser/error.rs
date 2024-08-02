@@ -9,7 +9,7 @@ use super::SpanStack;
 ///
 /// This error type is used to provide context to an error which occurs during the parsing stage.
 ///
-/// The [`Parser`] implements the [`Iterator`] trait, which returns a stream of `Result<Event, ParserError>`.
+/// The [`Parser`](crate::Parser) implements the [`Iterator`] trait, which returns a stream of `Result<Event, ParserError>`.
 #[derive(Debug)]
 pub struct ParserError {
     inner: Box<Inner>,
