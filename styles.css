@@ -113,7 +113,7 @@ m|mtable.menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber)) {
 m|mtable.menv-with-eqn>m|mtr:not(:has(> m|mtd.menv-nonumber))::after {
     position: absolute;
     right: 0;
-    padding: 0.5ex 0.4em;
+    padding: 0 0.4em;
     content: "(" counter(eq-number) ")";
 }
 

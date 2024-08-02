@@ -460,7 +460,7 @@ where
                 if let Some(spacing) = spacing {
                     write!(
                         self.writer,
-                        " style=\"margin-top: {}em\"",
+                        " style=\"height: {}em\"><mtd class=\"menv-nonumber\"></mtd></mtr><mtr",
                         tex_to_css_em(spacing)
                     )?;
                 }
