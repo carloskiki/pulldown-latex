@@ -23,7 +23,7 @@ jobs:
         run: |
           {
             echo 'RELEASE_NOTES<<EOF'
-            grep -A 1000 "^## \[$VERSION\]" CHANGELOG.md | sed '1d;/^## \[/,$d'
+            grep -A 1000 "^# \[$VERSION\]" CHANGELOG.md | sed '1d;/^# \[/,$d'
             echo 'EOF'
           } >> $GITHUB_ENV
       - name: Release

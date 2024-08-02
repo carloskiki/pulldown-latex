@@ -1,8 +1,10 @@
+//! Error type returned by the parser upon failure.
+//!
+//! This error type is used to provide context to an error which occurs during the parsing stage.
 use std::{error::Error, fmt::Display};
 use thiserror::Error;
 
 use crate::event::Grouping;
-
 use super::SpanStack;
 
 /// Anything that could possibly go wrong while parsing.

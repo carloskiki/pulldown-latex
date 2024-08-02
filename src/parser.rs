@@ -7,7 +7,7 @@
 //! [`write_mathml`]: crate::mathml::write_mathml
 pub mod error;
 mod lex;
-pub mod macros;
+mod macros;
 mod primitives;
 mod state;
 pub mod storage;
