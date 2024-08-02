@@ -63,7 +63,7 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
 
     # Add a dependency to the build job
-    needs: build
+    needs: build-site
     # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
     permissions:
       id-token: write   # to verify the deployment originates from an appropriate source
