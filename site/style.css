@@ -1,0 +1,21 @@
+#container {
+    display: flex;
+    justify-content: space-evenly;
+    align-items: center;
+    flex-direction: row;
+}
+
+#math-output {
+    width: 40%;
+    height: 20em;
+    padding: 1em;
+    display: block;
+    position: relative;
+    overflow: scroll;
+    background-color: #fff;
+    font-size: 121%;
+}
+
+body {
+    background-color: #f0f0f0;
+}

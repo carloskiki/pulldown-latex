@@ -21,9 +21,11 @@ pub fn App() -> impl IntoView {
     };
     
     view! {
-        <div>
-            <textarea rows="10" cols="50" on:input=update_input node_ref=input_ref />
-            <div inner_html=output_math>
+        <h1>"pulldown-latex"</h1>
+        <p>"A pull parser for LaTeX math rendering to MathML."</p>
+        <div id="container">
+            <textarea rows="20" cols="64" on:input=update_input node_ref=input_ref />
+            <div inner_html=output_math id="math-output">
             </div>
         </div>
     }
