@@ -39,8 +39,10 @@ jobs:
           generate_release_notes: true
           fail_on_unmatched_files: true
 
-  build-site:
+  deploy-site:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -55,26 +57,8 @@ jobs:
         run: "cargo binstall --no-confirm trunk"
       - name: Build website
         run: "cd site && trunk build"
-      - name: Upload site artifact
-        uses: actions/upload-pages-artifact@v3
+      - name: Deploy 🚀
+        uses: JamesIves/github-pages-deploy-action@v4
         with:
-          # Upload entire repository
-          path: 'site/dist/'
-  
-  deploy-site:
-    # Deploy to the github-pages environment
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+          folder: site/dist
 
-    # Add a dependency to the build job
-    needs: build-site
-    # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
-    permissions:
-      id-token: write   # to verify the deployment originates from an appropriate source
-      pages: write      # to deploy to Pages
-
-    runs-on: ubuntu-latest
-    steps:
-      - name: Deploy to GitHub Pages
-        uses: actions/deploy-pages@v3
