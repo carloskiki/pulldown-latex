@@ -22,7 +22,7 @@ pub fn App() -> impl IntoView {
     
     view! {
         <h1>"pulldown-latex"</h1>
-        <p>"A pull parser for LaTeX math rendering to MathML."</p>
+        <p>"A pull parser for LaTeX math parsing and MathML rendering."</p>
         <div id="container">
             <textarea rows="20" cols="64" on:input=update_input node_ref=input_ref />
             <div inner_html=output_math id="math-output">
