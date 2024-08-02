@@ -12,6 +12,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Zip font files
+        run: |
+          zip -r font.zip font
       - name: Extract version from tag
         run: |
           VERSION=$(echo ${GITHUB_REF} | sed 's/refs\/tags\///')
@@ -29,7 +32,7 @@ jobs:
           body: ${{ env.RELEASE_NOTES }}
           files: |
             styles.css
-            font/*
+            font.zip
           generate_release_notes: true
           fail_on_unmatched_files: true
 
