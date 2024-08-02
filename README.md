@@ -29,12 +29,11 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 - [ ] Errors
 
 ### TODO's/Known Bugs
-__For later__:
 - [ ] Better documentation for state changes, and for invariants that the parser satisfies.
-- [ ] `Dimension` values are unnecessarily big
-- [ ] Square bracket matrices do not have equal spacing on the left and the right.
+- [ ] `Dimension` values are unnecessarily big (memory wise).
+- [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
 - [ ] Italic numbers are not italic because they do not exist in unicode.
-- [ ] `\bar` make a tiny bar, should be bigger.
+- [ ] `\bar` makes a tiny bar, should be bigger.
 - [ ] Color API rework
 - [ ] `\sideset`
 
@@ -53,16 +52,17 @@ __For later__:
     (See TeXbook p. 267 for a complete definition)
 - `\magnification` parameter & `true` sizes
 - Case insensitive keywords matching. 
-    According to TeXbook p. 265, keywords such as `pt`, `em`, `true`, etc. are matched case insensitively (e.g.,
+    According to TeXbook p. 265, keywords such as `pt`, `em`, `mm`, etc. are matched case insensitively (e.g.,
     `pT` would match `pt`). This library does not support this behavior, as keywords must match exactly (i.e., 
-    `em`, `true`, `pt`, etc.).
+    `em`, `mm`, `pt`, etc.).
 - `fil` units
     TeX allows the use of `fil`(ll...) units, this library does not.
 - `\outer` specifier on definitions
 - `\edef`, we do not support pre-expansion of macros.
 - `\csname` & `\endcsname`
 - `\begingroup` and `{`, and `\endgroup` and `}` behave the same way; that is to say, 
-    `\begingroup` and `\endgroup` do not have the property of "keeping the same mode" (TeXbook p. 275).
+    `\begingroup` and `\endgroup` do not have the property of "keeping the same mode" (TeXbook p. 275),
+    which only makes sense in text mode.
 - All vertical list manipulation commands.
     Things like `\vskip`, `\vfil`, `\moveleft` etc.
 - `\hfil`, `\hfill`
