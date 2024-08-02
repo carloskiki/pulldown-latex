@@ -2,6 +2,8 @@
 
 A pull parser for $\LaTeX$ parsing and `mathml` rendering.
 
+[__Try it out!__](https://carloskiki.github.io/pulldown-latex/)
+
 This project is inspired `KaTeX`, `Temml`, `MathJax`, etc. It is actively maintained, and is in a stage of development where
 95% of what `KaTeX` and the likes support is properly working and minimally tested. This software
 should be functional for most use cases. However, it is not recommended for large scale production
