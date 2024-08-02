@@ -219,7 +219,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "sigma" => ordinary('σ'),
             "tau" => ordinary('τ'),
             "upsilon" => ordinary('υ'),
-            "phi" => ordinary('φ'),
+            "phi" => ordinary('ϕ'),
             "chi" => ordinary('χ'),
             "psi" => ordinary('ψ'),
             "omega" => ordinary('ω'),
@@ -256,7 +256,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "varrho" => ordinary('ϱ'),
             "varsigma" => ordinary('ς'),
             "varpi" => ordinary('ϖ'),
-            "varphi" => ordinary('ϕ'),
+            "varphi" => ordinary('φ'),
             // Uppercase Greek Variants
             "varGamma" => ordinary('𝛤'),
             "varDelta" => ordinary('𝛥'),
