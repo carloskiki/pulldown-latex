@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+# [Unreleased]
+
+## Added
+
+- Robust CI setup.
+
+## Changed
+
+- Use criterion for benchmarks.
+- Set MSRV to 1.74.1.
+
+## Fixed
+
+- Expansion spans being to eagerly popped.
+- Benchmark errors and doc-tests not compiling.
+
 # [0.5.1] - 2024-08-02
 
 ## Changed

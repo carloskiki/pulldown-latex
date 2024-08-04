@@ -231,9 +231,6 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     self.macro_context
                         .try_expand_in(cs, self.content, self.storage)
                 {
-                    // TODO: Some ptr arithmetic with original_content, new_content, to figure out
-                    // things for macro span.
-
                     let (new_content, arguments_consumed_length) = result?;
                     let call_site_length = cs.len() + arguments_consumed_length + 1;
                     self.span_stack

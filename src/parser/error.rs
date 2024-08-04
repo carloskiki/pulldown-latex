@@ -23,6 +23,7 @@ struct Inner {
     context: Box<str>,
 }
 
+// TODO: add arrows: ^^^ to show where in the context the error occurred.
 impl ParserError {
     pub(super) fn new(error: ErrorKind, place: *const u8, span_stack: &mut SpanStack) -> Self {
         const CONTEXT_SIZE: usize = 12;
