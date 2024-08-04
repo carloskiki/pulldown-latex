@@ -236,8 +236,6 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
                     let (new_content, arguments_consumed_length) = result?;
                     let call_site_length = cs.len() + arguments_consumed_length + 1;
-                    dbg!(&self);
-                    dbg!(&original_content);
                     self.span_stack
                         .add(new_content, original_content, call_site_length);
 
@@ -463,8 +461,6 @@ impl<'store> SpanStack<'store> {
     fn reach_original_call_site(&mut self, substr_start: *const u8) -> usize {
         let ptr_val = substr_start as isize;
 
-        dbg!(&self, ptr_val);
-
         while let Some(expansion) = self.expansions.last() {
             let expansion_ptr = expansion.full_expansion.as_ptr() as isize;
 
@@ -476,8 +472,6 @@ impl<'store> SpanStack<'store> {
             self.expansions.pop();
         }
         let input_start = self.input.as_ptr() as isize;
-
-        dbg!(&self, ptr_val, input_start, self.input, self.input.len());
 
         assert!(ptr_val > input_start && ptr_val <= input_start + self.input.len() as isize);
         (ptr_val - input_start) as usize
