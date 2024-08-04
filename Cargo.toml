@@ -11,8 +11,8 @@ keywords = ["latex", "mathml", "parser"]
 categories = ["parsing", "parser-implementations", "mathematics"]
 
 [dependencies]
-thiserror = "1.0.63"
-bumpalo = { version = "3.16.0", features = ["collections"] }
+thiserror = "1.0"
+bumpalo = { version = "3.16", features = ["collections"] }
 
 [dev-dependencies]
 anyhow = "1"
