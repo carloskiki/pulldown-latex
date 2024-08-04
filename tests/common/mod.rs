@@ -6,7 +6,7 @@ use fantoccini::{Client, ClientBuilder, Locator};
 use heck::ToTitleCase;
 use inventory::collect;
 use libtest_mimic::{Arguments, Conclusion, Failed, Trial};
-use pulldown_latex::{config::RenderConfig, mathml::push_mathml, Storage, Parser};
+use pulldown_latex::{config::RenderConfig, mathml::push_mathml, Parser, Storage};
 use tokio::process::Command;
 
 #[allow(clippy::type_complexity)]

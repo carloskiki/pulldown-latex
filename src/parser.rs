@@ -711,7 +711,10 @@ mod tests {
     #[test]
     fn error() {
         let store = Storage::new();
-        let parser = Parser::new(r"\def\blah#1#2{\fra#1#2} \def\abc#1{\blah{a}#1} \abc{b}", &store);
+        let parser = Parser::new(
+            r"\def\blah#1#2{\fra#1#2} \def\abc#1{\blah{a}#1} \abc{b}",
+            &store,
+        );
         let events = parser.collect::<Vec<_>>();
 
         assert!(events[0].is_err());

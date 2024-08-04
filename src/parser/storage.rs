@@ -22,4 +22,3 @@ impl Storage {
         self.0.reset();
     }
 }
-

@@ -49,14 +49,14 @@ impl ParserError {
                 .map(|index| span_stack.expansions[index].full_expansion)
                 .unwrap_or(span_stack.input);
 
-            
             if lower_bound > expansion.expansion_length {
                 lower_bound += expansion.call_site_in_origin.start;
-                upper_bound = (expansion.call_site_in_origin.end + upper_bound).min(next_string.len());
-                
+                upper_bound =
+                    (expansion.call_site_in_origin.end + upper_bound).min(next_string.len());
+
                 continue;
             }
-            
+
             let context_str = &expansion.full_expansion[lower_bound..upper_bound];
             context.push_str(context_str);
             context.push('\n');

@@ -19,9 +19,9 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
             ErrorKind::CommentInParamText
         } else {
             ErrorKind::BracesInParamText
-        })
+        });
     }
-    
+
     *input = rest;
     let replacement_text = group_content(input, "{", "}")?;
 
@@ -148,9 +148,7 @@ pub fn delimiter(input: &mut &str) -> InnerResult<(char, DelimiterType)> {
 ///
 /// Returns the control sequence, the token it should be assigned to, and the rest of the input
 /// with both tokens not consumed.
-pub fn futurelet_assignment<'a>(
-    input: &mut &'a str,
-) -> InnerResult<(&'a str, Token<'a>, &'a str)> {
+pub fn futurelet_assignment<'a>(input: &mut &'a str) -> InnerResult<(&'a str, Token<'a>, &'a str)> {
     let control_sequence = control_sequence(input)?;
 
     let input_with_tokens = *input;
