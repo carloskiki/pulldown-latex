@@ -9,6 +9,10 @@ This project is inspired `KaTeX`, `Temml`, `MathJax`, etc. It is actively mainta
 should be functional for most use cases. However, it is not recommended for large scale production
 use as more robust testing is required.
 
+## Rust Version
+
+This crate requires `Rust` version `1.71.1` or higher.
+
 ## Goals
 
 __Follow modern LaTeX principles:__
