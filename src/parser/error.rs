@@ -2,7 +2,6 @@
 //!
 //! This error type is used to provide context to an error which occurs during the parsing stage.
 use std::{error::Error, fmt::Display};
-use thiserror::Error;
 
 use super::SpanStack;
 use crate::event::Grouping;
@@ -144,81 +143,93 @@ impl Display for ParserError {
 
 pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 
-#[derive(Debug, Error)]
+#[derive(Debug)]
 pub(crate) enum ErrorKind {
     // TODO: this error is very misleading. Rework it.
-    #[error("unbalanced group found, expected {:?}", .0)]
     UnbalancedGroup(Option<Grouping>),
-    #[error("unkown mathematical environment found")]
     Environment,
-    #[error(
-        "unexpected math `$` (math shift) character - this character cannot be used inside math mode"
-    )]
     MathShift,
-    #[error(
-        "unexpected hash sign `#` character - this character can only be used in macro definitions"
-    )]
     HashSign,
-    #[error("unexpected end of input")]
     EndOfInput,
-    #[error("expected a dimension or glue argument")]
     DimensionArgument,
-    #[error("expected a dimensional unit")]
     DimensionUnit,
-    #[error("expected mathematical units (mu) in dimension specification")]
     MathUnit,
-    #[error("expected a delimiter token")]
     Delimiter,
-    #[error("expected a control sequence")]
     ControlSequence,
-    #[error("expected a number")]
     Number,
-    #[error("expected a character representing a number after '`'. found a non ascii character")]
     CharacterNumber,
-    #[error("expected an argument")]
     Argument,
-    #[error("expected an argument delimited by `{{}}`")]
     GroupArgument,
-    #[error("trying to add a subscript twice to the same element")]
     DoubleSubscript,
-    #[error("trying to add a superscript twice to the same element")]
     DoubleSuperscript,
-    #[error("unknown primitive command found")]
     UnknownPrimitive,
-    #[error("control sequence found as argument to a command that does not support them")]
     ControlSequenceAsArgument,
-    #[error("subscript and/or superscript found as argument to a command")]
     ScriptAsArgument,
-    #[error("empty control sequence")]
     EmptyControlSequence,
-    #[error("unkown color. colors must either be predefined or in the form `#RRGGBB`")]
     UnknownColor,
-    #[error("expected a number in the range 0..=255 for it to be translated into a character")]
     InvalidCharNumber,
-    #[error("cannot use the `\\relax` command in this context")]
     Relax,
-    #[error("macro definition of parameters contains '{{' or '}}'")]
     BracesInParamText,
-    #[error("macro definition of parameters contains a (`%`) comment")]
     CommentInParamText,
-    #[error("macro definition found parameter #{0} but expected #{1}")]
     IncorrectMacroParams(u8, u8),
-    #[error(
-        "macro definition found parameter #{0} but expected a parameter in the range [#1, #{1}]"
-    )]
     IncorrectReplacementParams(u8, u8),
-    #[error("macro definition contains too many parameters, the maximum is 9")]
     TooManyParams,
-    #[error("macro definition contains a standalone '#'")]
     StandaloneHashSign,
     // TODO: should specify what the macro expects the prefix string to be.
-    #[error("macro use does not match its definition, expected it to begin with a prefix string as specified in the definition")]
     IncorrectMacroPrefix,
-    #[error("macro already defined")]
     MacroAlreadyDefined,
-    #[error("macro not defined")]
     MacroNotDefined,
 }
+
+impl Display for ErrorKind {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            // TODO: this error is very misleading. Rework it.
+            ErrorKind::UnbalancedGroup(_) => f.write_str("unbalanced group found"),
+            ErrorKind::Environment => f.write_str("unkown mathematical environment found"),
+            ErrorKind::MathShift => f.write_str(
+                "unexpected math `$` (math shift) character - this character cannot be used inside math mode"),
+            ErrorKind::HashSign => f.write_str(
+                "unexpected hash sign `#` character - this character can only be used in macro definitions"
+            ),
+            ErrorKind::EndOfInput => f.write_str("unexpected end of input"),
+            ErrorKind::MathUnit => f.write_str("expected mathematical units (mu) in dimension specification"),
+            ErrorKind::Delimiter => f.write_str("expected a delimiter token"),
+            ErrorKind::ControlSequence => f.write_str("expected a control sequence"),
+            ErrorKind::Number => f.write_str("expected a number"),
+            ErrorKind::CharacterNumber => f.write_str("expected a character representing a number after '`'. found a non ascii character"),
+            ErrorKind::Argument => f.write_str("expected an argument"),
+            ErrorKind::GroupArgument => f.write_str("expected an argument delimited by `{{}}`"),
+            ErrorKind::DoubleSubscript => f.write_str("trying to add a subscript twice to the same element"),
+            ErrorKind::DoubleSuperscript => f.write_str("trying to add a superscript twice to the same element"),
+            ErrorKind::UnknownPrimitive => f.write_str("unknown primitive command found"),
+            ErrorKind::ControlSequenceAsArgument => f.write_str("control sequence found as argument to a command that does not support them"),
+            ErrorKind::ScriptAsArgument => f.write_str("subscript and/or superscript found as argument to a command"),
+            ErrorKind::EmptyControlSequence => f.write_str("empty control sequence"),
+            ErrorKind::UnknownColor => f.write_str("unkown color. colors must either be predefined or in the form `#RRGGBB`"),
+            ErrorKind::InvalidCharNumber => f.write_str("expected a number in the range 0..=255 for it to be translated into a character"),
+            ErrorKind::Relax => f.write_str("cannot use the `\\relax` command in this context"),
+            ErrorKind::BracesInParamText => f.write_str("macro definition of parameters contains '{{' or '}}'"),
+            ErrorKind::CommentInParamText => f.write_str("macro definition of parameters contains a (`%`) comment"),
+            ErrorKind::IncorrectMacroParams(found, expected) => {
+                write!(f, "macro definition found parameter #{} but expected #{}", found, expected)
+            }
+            ErrorKind::IncorrectReplacementParams(found, expected) => {
+                write!(f, "macro definition found parameter #{} but expected a parameter in the range [1, {}]", found, expected)
+            }
+            ErrorKind::TooManyParams => f.write_str("macro definition contains too many parameters, the maximum is 9"),
+            ErrorKind::StandaloneHashSign => f.write_str("macro definition contains a standalone '#'"),
+            // TODO: should specify what the macro expects the prefix string to be.
+            ErrorKind::IncorrectMacroPrefix => f.write_str("macro use does not match its definition, expected it to begin with a prefix string as specified in the definition"),
+            ErrorKind::MacroAlreadyDefined => f.write_str("macro already defined"),
+            ErrorKind::MacroNotDefined => f.write_str("macro not defined"),
+            ErrorKind::DimensionArgument => f.write_str("expected a dimension or glue argument"),
+            ErrorKind::DimensionUnit => f.write_str("expected a dimensional unit"),
+        }
+    }
+}
+
+impl Error for ErrorKind {}
 
 fn floor_char_boundary(str: &str, index: usize) -> usize {
     if index >= str.len() {

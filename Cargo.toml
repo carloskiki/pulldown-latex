@@ -12,7 +12,6 @@ categories = ["parsing", "parser-implementations", "mathematics"]
 rust-version = "1.74.1"
 
 [dependencies]
-thiserror = "1.0"
 bumpalo = { version = "3.16", features = ["collections"] }
 
 [dev-dependencies]
