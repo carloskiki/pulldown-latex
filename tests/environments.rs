@@ -33,7 +33,8 @@ macro_rules! round_trip_display {
     }
 }
 
-round_trip_display!(arrays,
+round_trip_display!(
+    arrays,
     r#"\begin{array}{||c|r|l||}
     a + b \\[2em]
     a + b & c & d \\[2em] \hline

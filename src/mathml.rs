@@ -1019,12 +1019,8 @@ fn array_close_line<W: Write>(writer: &mut W, rest_cols: &[ArrayColumn]) -> io::
         })
         .try_for_each(|line| {
             writer.write_all(match line {
-                Line::Solid => {
-                    b"<mtd class=\"menv-right-solid menv-border-only\"></mtd>"
-                }
-                Line::Dashed => {
-                    b"<mtd class=\"menv-right-dashed menv-border-only\"></mtd>"
-                }
+                Line::Solid => b"<mtd class=\"menv-right-solid menv-border-only\"></mtd>",
+                Line::Dashed => b"<mtd class=\"menv-right-dashed menv-border-only\"></mtd>",
             })
         })?;
     writer.write_all(b"</mtr><mtr")
