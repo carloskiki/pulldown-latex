@@ -249,11 +249,12 @@ pub enum Grouping {
     /// __Input__: `\begin{array}{lcr} ... \end{array}`
     /// __Generates__:
     /// ```
+    /// # use pulldown_latex::event::{ArrayColumn, ColumnAlignment, Grouping};
     /// Grouping::Array(Box::new([
     ///     ArrayColumn::Column(ColumnAlignment::Left),
     ///     ArrayColumn::Column(ColumnAlignment::Center),
     ///     ArrayColumn::Column(ColumnAlignment::Right)
-    ///]))
+    ///]));
     /// ```
     Array(Box<[ArrayColumn]>),
     /// The `matrix` environment of `LaTeX`.

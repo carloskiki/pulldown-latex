@@ -4,8 +4,8 @@
 use std::{error::Error, fmt::Display};
 use thiserror::Error;
 
-use crate::event::Grouping;
 use super::SpanStack;
+use crate::event::Grouping;
 
 /// Anything that could possibly go wrong while parsing.
 ///
@@ -27,7 +27,7 @@ impl ParserError {
     pub(super) fn new(error: ErrorKind, place: *const u8, span_stack: &mut SpanStack) -> Self {
         const CONTEXT_SIZE: usize = 12;
         const CONTEXT_PREFIX: &str = "context: ";
-        const EXPANSION_PREFIX: &str = "which was expanded from: ";
+        const EXPANSION_PREFIX: &str = "    which was expanded from: ";
 
         let index = span_stack.reach_original_call_site(place);
         let mut context = String::from(CONTEXT_PREFIX);
@@ -43,34 +43,37 @@ impl ParserError {
             floor_char_boundary(first_string, index + CONTEXT_SIZE),
         );
 
-        span_stack
-            .expansions
-            .iter()
-            .rev()
-            .enumerate()
-            .for_each(|(index, expansion)| {
-                let context_str = &expansion.full_expansion[lower_bound..upper_bound];
-                context.push_str(context_str);
-                context.push('\n');
-                context.push_str(EXPANSION_PREFIX);
+        for (index, expansion) in span_stack.expansions.iter().rev().enumerate() {
+            let next_string = (span_stack.expansions.len() - 1)
+                .checked_sub(index + 1)
+                .map(|index| span_stack.expansions[index].full_expansion)
+                .unwrap_or(span_stack.input);
 
-                let next_string = (span_stack.expansions.len() - 1)
-                    .checked_sub(index + 1)
-                    .map(|index| span_stack.expansions[index].full_expansion)
-                    .unwrap_or(span_stack.input);
+            
+            if lower_bound > expansion.expansion_length {
+                lower_bound += expansion.call_site_in_origin.start;
+                upper_bound = (expansion.call_site_in_origin.end + upper_bound).min(next_string.len());
+                
+                continue;
+            }
+            
+            let context_str = &expansion.full_expansion[lower_bound..upper_bound];
+            context.push_str(context_str);
+            context.push('\n');
+            context.push_str(EXPANSION_PREFIX);
 
-                lower_bound = floor_char_boundary(
-                    next_string,
-                    expansion
-                        .call_site_in_origin
-                        .start
-                        .saturating_sub(CONTEXT_SIZE),
-                );
-                upper_bound = floor_char_boundary(
-                    next_string,
-                    expansion.call_site_in_origin.end + CONTEXT_SIZE,
-                );
-            });
+            lower_bound = floor_char_boundary(
+                next_string,
+                expansion
+                    .call_site_in_origin
+                    .start
+                    .saturating_sub(CONTEXT_SIZE),
+            );
+            upper_bound = floor_char_boundary(
+                next_string,
+                expansion.call_site_in_origin.end + CONTEXT_SIZE,
+            );
+        }
         context.push_str(&span_stack.input[lower_bound..upper_bound]);
         context.shrink_to_fit();
 
@@ -82,6 +85,45 @@ impl ParserError {
         }
     }
 }
+
+// fn reach_original_call_site(&mut self, substr_start: *const u8) -> usize {
+//     let mut ptr_val = substr_start as isize;
+//
+//     dbg!(&self, ptr_val);
+//
+//     while let Some(expansion) = self.expansions.last() {
+//         let expansion_ptr = expansion.full_expansion.as_ptr() as isize;
+//
+//         if ptr_val >= expansion_ptr
+//             && ptr_val <= expansion_ptr + expansion.full_expansion.len() as isize
+//         {
+//             let index = if ptr_val <= expansion_ptr + expansion.expansion_length as isize {
+//                 (ptr_val - expansion_ptr) as usize
+//             } else {
+//                 dbg!("we are here");
+//                 let distance_from_effective_stop =
+//                     ptr_val - expansion_ptr - expansion.expansion_length as isize;
+//                 self.expansions.pop();
+//                 ptr_val = self
+//                     .expansions
+//                     .last()
+//                     .map(|exp| exp.full_expansion)
+//                     .unwrap_or(self.input)
+//                     .as_ptr() as isize
+//                     + distance_from_effective_stop;
+//                 continue;
+//             };
+//             return index;
+//         }
+//         self.expansions.pop();
+//     }
+//     let input_start = self.input.as_ptr() as isize;
+//
+//     dbg!(&self, ptr_val, input_start, self.input, self.input.len());
+//
+//     assert!(ptr_val > input_start && ptr_val <= input_start + self.input.len() as isize);
+//     (ptr_val - input_start) as usize
+// }
 
 impl Error for ParserError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {

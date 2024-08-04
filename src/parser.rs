@@ -176,6 +176,7 @@ impl<'store> Iterator for Parser<'store> {
     }
 }
 
+#[derive(Debug)]
 struct InnerParser<'b, 'store> {
     content: &'store str,
     buffer: &'b mut Vec<Instruction<'store>>,
@@ -235,6 +236,8 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
                     let (new_content, arguments_consumed_length) = result?;
                     let call_site_length = cs.len() + arguments_consumed_length + 1;
+                    dbg!(&self);
+                    dbg!(&original_content);
                     self.span_stack
                         .add(new_content, original_content, call_site_length);
 
@@ -458,7 +461,9 @@ impl<'store> SpanStack<'store> {
     /// Navigate down the stack until we reach the original span for the given substring. Returns
     /// the index of the beginning of the call-site in the top-most span in the stack.
     fn reach_original_call_site(&mut self, substr_start: *const u8) -> usize {
-        let mut ptr_val = substr_start as isize;
+        let ptr_val = substr_start as isize;
+
+        dbg!(&self, ptr_val);
 
         while let Some(expansion) = self.expansions.last() {
             let expansion_ptr = expansion.full_expansion.as_ptr() as isize;
@@ -466,26 +471,13 @@ impl<'store> SpanStack<'store> {
             if ptr_val >= expansion_ptr
                 && ptr_val <= expansion_ptr + expansion.full_expansion.len() as isize
             {
-                let index = if ptr_val <= expansion_ptr + expansion.expansion_length as isize {
-                    (ptr_val - expansion_ptr) as usize
-                } else {
-                    let distance_from_effective_stop =
-                        ptr_val - expansion_ptr - expansion.expansion_length as isize;
-                    self.expansions.pop();
-                    ptr_val = self
-                        .expansions
-                        .last()
-                        .map(|exp| exp.full_expansion)
-                        .unwrap_or(self.input)
-                        .as_ptr() as isize
-                        + distance_from_effective_stop;
-                    continue;
-                };
-                return index;
+                return (ptr_val - expansion_ptr) as usize;
             }
             self.expansions.pop();
         }
         let input_start = self.input.as_ptr() as isize;
+
+        dbg!(&self, ptr_val, input_start, self.input, self.input.len());
 
         assert!(ptr_val > input_start && ptr_val <= input_start + self.input.len() as isize);
         (ptr_val - input_start) as usize
@@ -733,8 +725,8 @@ mod tests {
 // 1. Trim any trailing whitespace from a line.
 //
 // 2. If '\' (escape character) is encountered, parse the next token.
-//  '\n' => _The name is empty_???
 //  'is_ascii_alphabetic' => parse until an non ASCII alphabetic, and the name is the token
+//  '\n' => _The name is empty_???
 //  'otherwise' => parse next character, and the name is the symbol.
 //
 //  Go to SkipBlanks mode if the token is a word or a space symbol.
