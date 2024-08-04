@@ -11,7 +11,7 @@ use as more robust testing is required.
 
 ## Rust Version
 
-This crate requires `Rust` version `1.73` or higher.
+This crate requires `Rust` version `1.74.1` or higher.
 
 ## Goals
 

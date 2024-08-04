@@ -9,7 +9,7 @@ readme = "README.md"
 license = "MIT"
 keywords = ["latex", "mathml", "parser"]
 categories = ["parsing", "parser-implementations", "mathematics"]
-rust-version = "1.73"
+rust-version = "1.74.1"
 
 [dependencies]
 thiserror = "1.0"
