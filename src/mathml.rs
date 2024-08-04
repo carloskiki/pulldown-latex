@@ -435,24 +435,7 @@ where
                 if let Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) =
                     self.env_stack.last()
                 {
-                    self.writer.write_all(b"</mtd>")?;
-                    cols[*cols_index..]
-                        .iter()
-                        .map_while(|col| match col {
-                            ArrayColumn::Separator(line) => Some(line),
-                            _ => None,
-                        })
-                        .try_for_each(|line| {
-                            self.writer.write_all(match line {
-                                Line::Solid => {
-                                    b"<mtd class=\"menv-right-solid menv-border-only\"></mtd>"
-                                }
-                                Line::Dashed => {
-                                    b"<mtd class=\"menv-right-dashed menv-border-only\"></mtd>"
-                                }
-                            })
-                        })?;
-                    self.writer.write_all(b"</mtr><mtr")?;
+                    array_close_line(&mut self.writer, &cols[*cols_index..])?;
                 } else {
                     self.writer.write_all(b"</mtd></mtr><mtr")?;
                 }
@@ -460,9 +443,21 @@ where
                 if let Some(spacing) = spacing {
                     write!(
                         self.writer,
-                        " style=\"height: {}em\"><mtd class=\"menv-nonumber\"></mtd></mtr><mtr",
+                        " style=\"height: {}em\">",
                         tex_to_css_em(spacing)
                     )?;
+                    if let Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) =
+                        self.env_stack.last_mut()
+                    {
+                        let mut index = array_newline(&mut self.writer, cols)?;
+                        while index < *cols_index {
+                            array_align(&mut self.writer, cols, &mut index)?;
+                        }
+                        array_close_line(&mut self.writer, &cols[index..])?;
+                    } else {
+                        self.writer
+                            .write_all(b"<mtd class=\"menv-nonumber\"></mtd></mtr><mtr")?;
+                    }
                 }
                 let mut iter = horizontal_lines.iter();
                 if let Some(last_line) = iter.next_back() {
@@ -527,61 +522,7 @@ where
                         self.writer.write_all(b"</mtd><mtd>")
                     }
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
-                        self.writer.write_all(b"</mtd><mtd")?;
-                        cols[*cols_index..]
-                            .iter()
-                            .map_while(|col| match col {
-                                ArrayColumn::Separator(line) => Some(line),
-                                _ => None,
-                            })
-                            .try_for_each(|line| {
-                                *cols_index += 1;
-                                self.writer.write_all(match line {
-                                    Line::Solid => {
-                                        b" class=\"menv-right-solid menv-border-only\"></mtd><mtd"
-                                    }
-                                    Line::Dashed => {
-                                        b" class=\"menv-right-dashed menv-border-only\"></mtd><mtd"
-                                    }
-                                })
-                            })?;
-
-                        let to_append: &[u8] = match (cols[*cols_index], cols.get(*cols_index + 1))
-                        {
-                            (ArrayColumn::Column(col), Some(ArrayColumn::Separator(line))) => {
-                                *cols_index += 2;
-                                match (col, line) {
-                                    (ColumnAlignment::Left, Line::Solid) => {
-                                        b" class=\"cell-left menv-right-solid\">"
-                                    }
-                                    (ColumnAlignment::Left, Line::Dashed) => {
-                                        b" class=\"cell-left menv-right-dashed\">"
-                                    }
-                                    (ColumnAlignment::Center, Line::Solid) => {
-                                        b" class=\"menv-right-solid\">"
-                                    }
-                                    (ColumnAlignment::Center, Line::Dashed) => {
-                                        b" class=\"menv-right-dashed\">"
-                                    }
-                                    (ColumnAlignment::Right, Line::Solid) => {
-                                        b" class=\"cell-right menv-right-solid\">"
-                                    }
-                                    (ColumnAlignment::Right, Line::Dashed) => {
-                                        b" class=\"cell-right menv-right-dashed\">"
-                                    }
-                                }
-                            }
-                            (ArrayColumn::Column(col), _) => {
-                                *cols_index += 1;
-                                match col {
-                                    ColumnAlignment::Left => b" class=\"cell-left\">",
-                                    ColumnAlignment::Center => b">",
-                                    ColumnAlignment::Right => b" class=\"cell-right\">",
-                                }
-                            }
-                            (ArrayColumn::Separator(_), _) => unreachable!(),
-                        };
-                        self.writer.write_all(to_append)
+                        array_align(&mut self.writer, cols, cols_index)
                     }
                     _ => panic!("alignment not allowed in current environment"),
                 }
@@ -1019,6 +960,70 @@ fn array_newline<W: Write>(writer: &mut W, cols: &[ArrayColumn]) -> io::Result<u
     writer.write_all(to_append)?;
 
     Ok(index)
+}
+
+fn array_align<W: Write>(
+    writer: &mut W,
+    cols: &[ArrayColumn],
+    cols_index: &mut usize,
+) -> io::Result<()> {
+    writer.write_all(b"</mtd><mtd")?;
+    cols[*cols_index..]
+        .iter()
+        .map_while(|col| match col {
+            ArrayColumn::Separator(line) => Some(line),
+            _ => None,
+        })
+        .try_for_each(|line| {
+            *cols_index += 1;
+            writer.write_all(match line {
+                Line::Solid => b" class=\"menv-right-solid menv-border-only\"></mtd><mtd",
+                Line::Dashed => b" class=\"menv-right-dashed menv-border-only\"></mtd><mtd",
+            })
+        })?;
+
+    let to_append: &[u8] = match (cols[*cols_index], cols.get(*cols_index + 1)) {
+        (ArrayColumn::Column(col), Some(ArrayColumn::Separator(line))) => {
+            *cols_index += 2;
+            match (col, line) {
+                (ColumnAlignment::Left, Line::Solid) => b" class=\"cell-left menv-right-solid\">",
+                (ColumnAlignment::Left, Line::Dashed) => b" class=\"cell-left menv-right-dashed\">",
+                (ColumnAlignment::Center, Line::Solid) => b" class=\"menv-right-solid\">",
+                (ColumnAlignment::Center, Line::Dashed) => b" class=\"menv-right-dashed\">",
+                (ColumnAlignment::Right, Line::Solid) => b" class=\"cell-right menv-right-solid\">",
+                (ColumnAlignment::Right, Line::Dashed) => {
+                    b" class=\"cell-right menv-right-dashed\">"
+                }
+            }
+        }
+        (ArrayColumn::Column(col), _) => {
+            *cols_index += 1;
+            match col {
+                ColumnAlignment::Left => b" class=\"cell-left\">",
+                ColumnAlignment::Center => b">",
+                ColumnAlignment::Right => b" class=\"cell-right\">",
+            }
+        }
+        (ArrayColumn::Separator(_), _) => unreachable!(),
+    };
+    writer.write_all(to_append)
+}
+
+fn array_close_line<W: Write>(writer: &mut W, rest_cols: &[ArrayColumn]) -> io::Result<()> {
+    writer.write_all(b"</mtd>")?;
+    rest_cols
+        .iter()
+        .map_while(|col| match col {
+            ArrayColumn::Separator(line) => Some(line),
+            _ => None,
+        })
+        .try_for_each(|line| {
+            writer.write_all(match line {
+                Line::Solid => b"<mtd class=\"menv-right-solid menv-border-only\"></mtd>",
+                Line::Dashed => b"<mtd class=\"menv-right-dashed menv-border-only\"></mtd>",
+            })
+        })?;
+    writer.write_all(b"</mtr><mtr")
 }
 
 enum Atom {

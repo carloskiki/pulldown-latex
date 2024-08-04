@@ -44,6 +44,11 @@ name = "cross-browser"
 path = "tests/cross-browser.rs"
 harness = false
 
+[[test]]
+name = "environments"
+path = "tests/environments.rs"
+harness = false
+
 [[bench]]
 name = "basic"
 harness = false
