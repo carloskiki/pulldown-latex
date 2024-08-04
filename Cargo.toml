@@ -23,6 +23,7 @@ inventory = "0.3"
 tempfile = "3"
 fantoccini = "0.21"
 tokio = { version = "1", features = ["test-util", "rt-multi-thread", "process", "fs"] }
+criterion = "0.3"
 
 [[example]]
 name = "write_to_string"
@@ -41,6 +42,10 @@ harness = false
 [[test]]
 name = "cross-browser"
 path = "tests/cross-browser.rs"
+harness = false
+
+[[bench]]
+name = "basic"
 harness = false
 
 [package.metadata.docs.rs]
