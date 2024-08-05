@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Expansion spans being to eagerly popped.
 - Benchmark errors and doc-tests not compiling.
 
+## Removed
+
+- Dependency on `thiserror`.
+
 # [0.5.1] - 2024-08-02
 
 ## Changed
