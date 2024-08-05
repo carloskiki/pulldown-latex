@@ -4,7 +4,7 @@
 use std::{error::Error, fmt::Display};
 
 use super::SpanStack;
-use crate::event::{Grouping, GroupingKind};
+use crate::event::GroupingKind;
 
 /// Anything that could possibly go wrong while parsing.
 ///

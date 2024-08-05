@@ -323,7 +323,6 @@ impl Grouping {
             Self::Multline => GroupingKind::Multline,
             Self::Split => GroupingKind::Split,
         }
-    
     }
 }
 
@@ -370,7 +369,7 @@ impl GroupingKind {
             Self::Split => "\\begin{split}",
         }
     }
-    
+
     pub(crate) fn closing_str(&self) -> &'static str {
         match self {
             Self::Normal => "}",
