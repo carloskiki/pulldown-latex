@@ -1,6 +1,6 @@
 use crate::{
     attribute::{Dimension, DimensionUnit, Glue},
-    event::DelimiterType,
+    event::{DelimiterType, GroupingKind},
 };
 
 use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token};
@@ -23,7 +23,7 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
     }
 
     *input = rest;
-    let replacement_text = group_content(input, "{", "}")?;
+    let replacement_text = group_content(input, GroupingKind::Normal)?;
 
     Ok((control_sequence, parameter_text, replacement_text))
 }
@@ -32,7 +32,7 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
 pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
     if let Some(rest) = input.trim_start().strip_prefix('{') {
         *input = rest;
-        let content = group_content(input, "{", "}")?;
+        let content = group_content(input, GroupingKind::Normal)?;
         Ok(Argument::Group(content))
     } else {
         Ok(Argument::Token(token(input)?))
@@ -42,7 +42,7 @@ pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
 pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>> {
     if let Some(rest) = input.trim_start().strip_prefix('[') {
         *input = rest;
-        let content = group_content(input, "[", "]")?;
+        let content = group_content(input, GroupingKind::OptionalArgument)?;
         Ok(Some(content))
     } else {
         Ok(None)
@@ -52,7 +52,7 @@ pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>
 pub fn brace_argument<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
     if let Some(rest) = input.trim_start().strip_prefix('{') {
         *input = rest;
-        group_content(input, "{", "}")
+        group_content(input, GroupingKind::Normal)
     } else {
         Err(ErrorKind::GroupArgument)
     }
@@ -62,7 +62,9 @@ pub fn brace_argument<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
 ///
 /// The output is the content within the group without the surrounding `start` and `end`.
 /// This content is guaranteed to be balanced.
-pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerResult<&'a str> {
+pub fn group_content<'a>(input: &mut &'a str, grouping: GroupingKind) -> InnerResult<&'a str> {
+    let start = grouping.opening_str();
+    let end = grouping.closing_str();
     let mut escaped = false;
     let mut index = 0;
     let mut depth = 0u32;
@@ -70,7 +72,7 @@ pub fn group_content<'a>(input: &mut &'a str, start: &str, end: &str) -> InnerRe
     while escaped || depth > 0 || !bytes[index..].starts_with(end.as_bytes()) {
         if index + end.len() > input.len() {
             *input = &input[input.len()..];
-            return Err(ErrorKind::UnbalancedGroup(None));
+            return Err(ErrorKind::UnbalancedGroup(Some(grouping)));
         }
         if !escaped && bytes[index..].starts_with(start.as_bytes()) {
             depth += 1;
@@ -123,7 +125,7 @@ pub fn content_with_suffix<'a>(input: &mut &'a str, suffix: &str) -> InnerResult
                 index += rest_pos;
             }
             b'{' if !escaped => {
-                let conetent = group_content(&mut &input[index + 1..], "{", "}")?;
+                let conetent = group_content(&mut &input[index + 1..], GroupingKind::Normal)?;
                 index += conetent.len() + 1;
             }
             _ => escaped = false,
@@ -448,8 +450,7 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        attribute::DimensionUnit,
-        parser::{lex, Token},
+        attribute::DimensionUnit, event::GroupingKind, parser::{lex, Token}
     };
 
     #[test]
@@ -550,7 +551,7 @@ mod tests {
     fn group_content() {
         let mut input =
             "this { { is a test } to see if { the content parsing { of this } } } works }";
-        let content = lex::group_content(&mut input, "{", "}").unwrap();
+        let content = lex::group_content(&mut input, GroupingKind::Normal).unwrap();
         assert_eq!(
             content,
             "this { { is a test } to see if { the content parsing { of this } } } works "
