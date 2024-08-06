@@ -6,7 +6,9 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, GroupingKind, Line, RelationContent, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
+        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
+        DelimiterSize, DelimiterType, Event as E, Grouping as G, Line, RelationContent,
+        ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V,
     },
 };
 
@@ -68,7 +70,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     },
             '{' => {
                 let str = &mut self.content;
-                let group = lex::group_content(str, GroupingKind::Normal)?;
+                let group = lex::group_content(str, "{", "}")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                     I::SubGroup { content: group, allowed_alignment_count: None },
@@ -530,7 +532,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 };
 
                 let curr_str = &mut self.content;
-                let group_content = lex::group_content(curr_str, GroupingKind::LeftRight)?;
+                let group_content = lex::group_content(curr_str, r"\left", r"\right")?;
                 let closing = if let Some(rest) = curr_str.strip_prefix('.') {
                     *curr_str = rest;
                     None
@@ -1436,7 +1438,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             }
 
             "begingroup" => {
-                let group = lex::group_content(&mut self.content, GroupingKind::BeginEnd)?;
+                let group = lex::group_content(&mut self.content, "begingroup", "endgroup")?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                     I::SubGroup {
@@ -1648,7 +1650,8 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
                 let content = lex::group_content(
                     &mut self.content,
-                    environment.as_kind()
+                    &format!(r"\begin{{{argument}}}"),
+                    &format!(r"\end{{{argument}}}"),
                 )?;
                 self.buffer.push(I::Event(E::Begin(environment)));
                 if let Some(style) = style {
