@@ -4,7 +4,7 @@
 use std::{error::Error, fmt::Display};
 
 use super::SpanStack;
-use crate::event::Grouping;
+use crate::event::GroupingKind;
 
 /// Anything that could possibly go wrong while parsing.
 ///
@@ -146,7 +146,7 @@ pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 #[derive(Debug)]
 pub(crate) enum ErrorKind {
     // TODO: this error is very misleading. Rework it.
-    UnbalancedGroup(Option<Grouping>),
+    UnbalancedGroup(Option<GroupingKind>),
     Environment,
     MathShift,
     HashSign,
@@ -185,7 +185,10 @@ impl Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             // TODO: this error is very misleading. Rework it.
-            ErrorKind::UnbalancedGroup(_) => f.write_str("unbalanced group found"),
+            ErrorKind::UnbalancedGroup(Some(missing)) => {
+                write!(f, "unbalanced group found, expected it to be closed with `{}`", missing.closing_str())
+            },
+            ErrorKind::UnbalancedGroup(None) => f.write_str("unbalanced group found, unexpected group closing found"),
             ErrorKind::Environment => f.write_str("unkown mathematical environment found"),
             ErrorKind::MathShift => f.write_str(
                 "unexpected math `$` (math shift) character - this character cannot be used inside math mode"),
