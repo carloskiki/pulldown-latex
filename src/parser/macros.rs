@@ -213,7 +213,7 @@ impl<'input> MacroContext<'input> {
 
                 if let Some(default_argument) = first_arg_default {
                     arguments.push(Ok(Argument::Group(
-                        lex::optional_argument(&mut input_rest)?.unwrap_or(default_argument),
+                        lex::optional_argument(&mut input_rest).unwrap_or(default_argument),
                     )));
                 }
 

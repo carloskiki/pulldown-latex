@@ -39,13 +39,13 @@ pub fn argument<'a>(input: &mut &'a str) -> InnerResult<Argument<'a>> {
     }
 }
 
-pub fn optional_argument<'a>(input: &mut &'a str) -> InnerResult<Option<&'a str>> {
+pub fn optional_argument<'a>(input: &mut &'a str) -> Option<&'a str> {
     if let Some(rest) = input.trim_start().strip_prefix('[') {
         *input = rest;
-        let content = group_content(input, "[", "]")?;
-        Ok(Some(content))
+        let content = group_content(input, GroupingKind::OptionalArgument).ok()?;
+        Some(content)
     } else {
-        Ok(None)
+        None
     }
 }
 
