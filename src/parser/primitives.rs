@@ -6,10 +6,7 @@ use core::panic;
 use crate::{
     attribute::{DimensionUnit, Font},
     event::{
-        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
-        DelimiterSize, DelimiterType, Event as E, Grouping as G, GroupingKind, Line,
-        RelationContent, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S,
-        Visual as V,
+        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C, DelimiterSize, DelimiterType, Event as E, Grouping as G, GroupingKind, Line, RelationContent, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S, Visual as V
     },
 };
 
@@ -1649,7 +1646,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     false
                 };
 
-                let content = lex::group_content(&mut self.content, environment.as_kind())?;
+                let content = lex::group_content(
+                    &mut self.content,
+                    environment.as_kind()
+                )?;
                 self.buffer.push(I::Event(E::Begin(environment)));
                 if let Some(style) = style {
                     self.buffer.push(I::Event(E::StateChange(SC::Style(style))));

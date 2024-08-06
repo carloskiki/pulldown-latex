@@ -450,9 +450,7 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        attribute::DimensionUnit,
-        event::GroupingKind,
-        parser::{lex, Token},
+        attribute::DimensionUnit, event::GroupingKind, parser::{lex, Token}
     };
 
     #[test]
