@@ -306,6 +306,134 @@ impl Grouping {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum GroupingKind {
+    Normal,
+    OptionalArgument,
+    BeginEnd,
+    LeftRight,
+    Array { display: bool },
+    Matrix { ty: MatrixType, column_spec: bool },
+    Cases { left: bool, display: bool },
+    Equation { eq_numbers: bool },
+    Align { eq_numbers: bool },
+    Aligned,
+    SubArray,
+    Alignat { eq_numbers: bool },
+    Alignedat,
+    Gather { eq_numbers: bool },
+    Gathered,
+    Multline,
+    Split,
+}
+
+impl GroupingKind {
+    pub(crate) fn opening_str(&self) -> &'static str {
+        match self {
+            Self::Normal => "{",
+            Self::OptionalArgument => "[",
+            Self::BeginEnd => "\\begin",
+            Self::LeftRight => "\\left",
+            Self::Array { display: false } => "\\begin{array}",
+            Self::Array { display: true } => "\\begin{darray}",
+            Self::Matrix { ty, column_spec } => match (ty, column_spec) {
+                (MatrixType::Normal, true) => "\\begin{matrix*}",
+                (MatrixType::Normal, false) => "\\begin{matrix}",
+                (MatrixType::Small, true) => "\\begin{smallmatrix*}",
+                (MatrixType::Small, false) => "\\begin{smallmatrix}",
+                (MatrixType::Parens, true) => "\\begin{pmatrix*}",
+                (MatrixType::Parens, false) => "\\begin{pmatrix}",
+                (MatrixType::Brackets, true) => "\\begin{bmatrix*}",
+                (MatrixType::Brackets, false) => "\\begin{bmatrix}",
+                (MatrixType::Braces, true) => "\\begin{Bmatrix*}",
+                (MatrixType::Braces, false) => "\\begin{Bmatrix}",
+                (MatrixType::Vertical, true) => "\\begin{vmatrix*}",
+                (MatrixType::Vertical, false) => "\\begin{vmatrix}",
+                (MatrixType::DoubleVertical, true) => "\\begin{Vmatrix*}",
+                (MatrixType::DoubleVertical, false) => "\\begin{Vmatrix}",
+            },
+            Self::Cases { left, display } => match (left, display) {
+                (true, false) => "\\begin{cases}",
+                (true, true) => "\\begin{dcases}",
+                (false, false) => "\\begin{rcases}",
+                (false, true) => "\\begin{drcases}",
+            },
+            Self::Equation { eq_numbers: true } => "\\begin{equation}",
+            Self::Equation { eq_numbers: false } => "\\begin{equation*}",
+            Self::Align { eq_numbers: true } => "\\begin{align}",
+            Self::Align { eq_numbers: false } => "\\begin{align*}",
+            Self::Aligned => "\\begin{aligned}",
+            Self::SubArray => "\\begin{subarray}",
+            Self::Alignat { eq_numbers: true } => "\\begin{alignat}",
+            Self::Alignat { eq_numbers: false } => "\\begin{alignat*}",
+            Self::Alignedat => "\\begin{alignedat}",
+            Self::Gather { eq_numbers: true } => "\\begin{gather}",
+            Self::Gather { eq_numbers: false } => "\\begin{gather*}",
+            Self::Gathered => "\\begin{gathered}",
+            Self::Multline => "\\begin{multline}",
+            Self::Split => "\\begin{split}",
+        }
+    }
+
+    pub(crate) fn closing_str(&self) -> &'static str {
+        match self {
+            Self::Normal => "}",
+            Self::OptionalArgument => "]",
+            Self::BeginEnd => "\\end",
+            Self::LeftRight => "\\right",
+            Self::Array { display: false } => "\\end{array}",
+            Self::Array { display: true } => "\\end{darray}",
+            Self::Matrix { ty, column_spec } => match (ty, column_spec) {
+                (MatrixType::Normal, true) => "\\end{matrix*}",
+                (MatrixType::Normal, false) => "\\end{matrix}",
+                (MatrixType::Small, true) => "\\end{smallmatrix*}",
+                (MatrixType::Small, false) => "\\end{smallmatrix}",
+                (MatrixType::Parens, true) => "\\end{pmatrix*}",
+                (MatrixType::Parens, false) => "\\end{pmatrix}",
+                (MatrixType::Brackets, true) => "\\end{bmatrix*}",
+                (MatrixType::Brackets, false) => "\\end{bmatrix}",
+                (MatrixType::Braces, true) => "\\end{Bmatrix*}",
+                (MatrixType::Braces, false) => "\\end{Bmatrix}",
+                (MatrixType::Vertical, true) => "\\end{vmatrix*}",
+                (MatrixType::Vertical, false) => "\\end{vmatrix}",
+                (MatrixType::DoubleVertical, true) => "\\end{Vmatrix*}",
+                (MatrixType::DoubleVertical, false) => "\\end{Vmatrix}",
+            },
+            Self::Cases { left, display } => match (left, display) {
+                (true, false) => "\\end{cases}",
+                (true, true) => "\\end{dcases}",
+                (false, false) => "\\end{rcases}",
+                (false, true) => "\\end{drcases}",
+            },
+            Self::Equation { eq_numbers: true } => "\\end{equation}",
+            Self::Equation { eq_numbers: false } => "\\end{equation*}",
+            Self::Align { eq_numbers: true } => "\\end{align}",
+            Self::Align { eq_numbers: false } => "\\end{align*}",
+            Self::Aligned => "\\end{aligned}",
+            Self::SubArray => "\\end{subarray}",
+            Self::Alignat { eq_numbers: true } => "\\end{alignat}",
+            Self::Alignat { eq_numbers: false } => "\\end{alignat*}",
+            Self::Alignedat => "\\end{alignedat}",
+            Self::Gather { eq_numbers: true } => "\\end{gather}",
+            Self::Gather { eq_numbers: false } => "\\end{gather*}",
+            Self::Gathered => "\\end{gathered}",
+            Self::Multline => "\\end{multline}",
+            Self::Split => "\\end{split}",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum MatrixType {
+    Normal,
+    Small,
+    Parens,
+    Brackets,
+    Braces,
+    Vertical,
+    DoubleVertical,
+}
+
 /// Represents a column in a matrix or array environment.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum ColumnAlignment {
