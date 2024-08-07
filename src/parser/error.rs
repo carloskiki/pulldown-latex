@@ -145,7 +145,6 @@ pub(crate) type InnerResult<T> = std::result::Result<T, ErrorKind>;
 
 #[derive(Debug)]
 pub(crate) enum ErrorKind {
-    // TODO: this error is very misleading. Rework it.
     UnbalancedGroup(Option<GroupingKind>),
     Environment,
     MathShift,
@@ -175,7 +174,6 @@ pub(crate) enum ErrorKind {
     IncorrectReplacementParams(u8, u8),
     TooManyParams,
     StandaloneHashSign,
-    // TODO: should specify what the macro expects the prefix string to be.
     IncorrectMacroPrefix,
     MacroAlreadyDefined,
     MacroNotDefined,
