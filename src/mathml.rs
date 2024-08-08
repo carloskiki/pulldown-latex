@@ -142,6 +142,7 @@ where
                 // newlines (`&` or `\\`).
                 //
                 // For these reasons, they don't use the `open_tag` method.
+                // TODO: Make `StateChange::Style` be maintained across math_env groups.
                 self.previous_atom = None;
                 if grouping.is_math_env() {
                     self.state_stack.push(State::default())
