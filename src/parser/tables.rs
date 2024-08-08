@@ -107,46 +107,17 @@ pub fn is_relation(c: char) -> bool {
     )
 }
 
-#[rustfmt::skip]
 pub fn char_delimiter_map(c: char) -> Option<(char, DelimiterType)> {
     Some(match c {
-        '(' => (c, DelimiterType::Open),
-        ')' => (c, DelimiterType::Close),
-        '⦇' => (c, DelimiterType::Open),
-        '⦈' => (c, DelimiterType::Close),
-        '⟮' => (c, DelimiterType::Open),
-        '⟯' => (c, DelimiterType::Close),
-        '[' => (c, DelimiterType::Open),
-        ']' => (c, DelimiterType::Close),
-        '⟦' => (c, DelimiterType::Open),
-        '⟧' => (c, DelimiterType::Close),
-        '⦃' => (c, DelimiterType::Open),
-        '⦄' => (c, DelimiterType::Close),
-        '⟨' => (c, DelimiterType::Open),
-        '⟩' => (c, DelimiterType::Close),
-        '⟪' => (c, DelimiterType::Open),
-        '⟫' => (c, DelimiterType::Close),
-        '⦉' => (c, DelimiterType::Open),
-        '⦊' => (c, DelimiterType::Close),
-        '⌊' => (c, DelimiterType::Open),
-        '⌋' => (c, DelimiterType::Close),
-        '⌈' => (c, DelimiterType::Open),
-        '⌉' => (c, DelimiterType::Close),
-        '┌' => (c, DelimiterType::Open),
-        '┐' => (c, DelimiterType::Close),
-        '└' => (c, DelimiterType::Open),
-        '┘' => (c, DelimiterType::Close),
-        '⎰' => (c, DelimiterType::Open),
-        '⎱' => (c, DelimiterType::Close),
-        '|' => (c, DelimiterType::Fence),
-        '‖' => (c, DelimiterType::Fence),
-        '↑' => (c, DelimiterType::Fence),
-        '⇑' => (c, DelimiterType::Fence),
-        '↓' => (c, DelimiterType::Fence),
-        '⇓' => (c, DelimiterType::Fence),
-        '↕' => (c, DelimiterType::Fence),
-        '⇕' => (c, DelimiterType::Fence),
-        '/' => (c, DelimiterType::Fence),
+        '(' | '⦇' | '⟮' | '[' | '⟦' | '⦃' | '⟨' | '⟪' | '⦉' | '⌊' | '⌈' | '┌' | '└' | '⎰' => {
+            (c, DelimiterType::Open)
+        }
+        ')' | '⦈' | '⟯' | ']' | '⟧' | '⦄' | '⟩' | '⟫' | '⦊' | '⌋' | '⌉' | '┐' | '┘' | '⎱' => {
+            (c, DelimiterType::Close)
+        }
+        '|' | '‖' | '↑' | '⇑' | '↓' | '⇓' | '↕' | '⇕' | '/' => {
+            (c, DelimiterType::Fence)
+        }
         _ => return None,
     })
 }

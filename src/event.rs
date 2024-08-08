@@ -5,6 +5,10 @@
 //! by a renderer. This crate only provides a simple `mathml` renderer available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 //!
+//! This module tries to be comprehensive in explaining the invariants that are be upheld by the [`Parser`].
+//! If a user of this crate, or a renderer implementor finds a case where the invariants are not
+//! satisfied, then it is a bug in the parser, and should be reported.
+//!
 //! [`Parser`]: crate::parser::Parser
 //! [`push_mathml`]: crate::mathml::push_mathml
 //! [`write_mathml`]: crate::mathml::write_mathml
@@ -13,14 +17,15 @@ use crate::attribute::{Dimension, Font};
 
 /// All events that can be produced by the parser.
 ///
-/// ## For Renderer Implementors
+/// # For Renderer Implementors
 ///
 /// When an [`Event`] is referreing to an "_element_", it is referring to the next logical unit of
 /// content in the stream. This can be a single [`Event::Content`] element, a group marked
-/// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element, etc.
+/// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element,
+/// an [`Event::Space`], or an [`Event::StateChange`].
 ///
-/// [`Event::Space`]s, [`Event::StateChange`]s, [`Event::Alignment`]s, and [`Event::NewLine`]s
-/// are not considered elements.
+/// [`Event::Alignment`]s, and [`Event::NewLine`]s are not considered elements, and must never
+/// occur when an element is expected.
 ///
 /// ### Examples
 ///
@@ -51,18 +56,18 @@ pub enum Event<'a> {
     /// (i.e., a set of elements within `{}` in `LaTeX`), until the [`Event::End`] event
     /// is reached.
     Begin(Grouping),
-    /// Marks the end of a "group".
+    /// Marks the end of a group initiated with [`Event::Begin`].
     End,
-    /// The `n` events following this one constitute the content of the [`Visual`] element,
-    /// where `n` is specified in the documentation of for the [`Visual`] variant.
+    /// The `n` elements following this one constitute the content of the [`Visual`] element,
+    /// where `n` is specified in the documentation of for each of the [`Visual`] variants.
     Visual(Visual),
-    /// The `n` events following this one constitute a base and its script(s), where `n` is
-    /// specified in the documentation for the [`ScriptType`] variant.
+    /// The `n` elements following this one constitute a base and its script(s), where `n` is
+    /// specified in the documentation for each of the [`ScriptType`] variants.
     Script {
         ty: ScriptType,
         position: ScriptPosition,
     },
-    /// This events specifes a custom spacing. This is produced by commands such as
+    /// This event specifes a custom spacing. This is produced by commands such as
     /// `\kern`, `\hspace`, etc.
     ///
     /// If any of the components are `None`, then the spacing is set to 0 for that component.
@@ -98,30 +103,30 @@ pub enum Content<'a> {
     /// A function identifier, such as `sin`, `lim`, or a custom function with
     /// `\operatorname{arccotan}`.
     Function(&'a str),
-    /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and stuff that do not have
-    /// any spacing around them. This includes stuff that normally go in under and overscripts
-    /// which may be stretchy, such as `→`, `‾`, etc.
+    /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and other stuff that do not have
+    /// any spacing around them. This includes things that normally go in under and overscripts
+    /// which may be stretchy, e.g., `→`, `‾`, etc.
     Ordinary { content: char, stretchy: bool },
-    /// A large operator, such as `\sum`, `\int`, `\prod`, etc.
+    /// A large operator, e.g., `\sum`, `\int`, `\prod`, etc.
     LargeOp { content: char, small: bool },
-    /// A binary operator, such as `+`, `*`, `⊗`, `?`, etc.
+    /// A binary operator, e.g., `+`, `*`, `⊗`, `?`, etc.
     BinaryOp { content: char, small: bool },
-    /// A relation, such as `=`, `≠`, `≈`, etc.
+    /// A relation, e.g., `=`, `≠`, `≈`, etc.
     Relation {
         content: RelationContent,
         small: bool,
     },
-    /// An opening, closing, or fence delimiter, such as `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
+    /// An opening, closing, or fence delimiter, e.g., `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
     Delimiter {
         content: char,
         size: Option<DelimiterSize>,
         ty: DelimiterType,
     },
-    /// A punctuation character, such as `,`, `.`, `;`, etc.
+    /// A punctuation character, such as `,`, `.`, or `;`.
     Punctuation(char),
 }
 
-/// Modifies the visual representation of the following event(s)
+/// Modifies the visual representation of the following element(s)
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum Visual {
     /// The following element is the content of the root.
@@ -174,6 +179,9 @@ pub enum ScriptPosition {
 /// Represents a state change for the following content.
 ///
 /// State changes take effect for the current group nesting and all deeper groups.
+/// State changes are not maintained across `NewLine` and `Alignment` events, and are also reset
+/// when entering a new group that is not a `Grouping::Normal`, or a `Grouping::LeftRight`. The
+/// exception to the latter is `StateChange::Style`, which is maintained across all groups.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StateChange<'a> {
     /// Changes the font of the content.
@@ -185,7 +193,7 @@ pub enum StateChange<'a> {
     Color(ColorChange<'a>),
     /// Changes the style of the content (mostly affects the sizing of the content).
     ///
-    /// This state change does not affect scripts, and root indexes.
+    /// __Important__: This state change does not affect scripts and root indices.
     Style(Style),
 }
 
@@ -244,7 +252,7 @@ pub enum Grouping {
     ///
     /// It's content is an array of columns, which represents the column specification in `LaTeX`.
     ///
-    /// ### Example
+    /// ## Example
     ///
     /// __Input__: `\begin{array}{lcr} ... \end{array}`
     /// __Generates__:
@@ -485,7 +493,7 @@ impl DelimiterSize {
 pub enum DelimiterType {
     /// Corresponds to the left delimiter.
     Open,
-    /// Corresponds to a delimiter that is neither an opening nor a closing delimiter.
+    /// Corresponds to a delimiter that is introduced by the command `\middle`.
     Fence,
     /// Corresponds to the right delimiter.
     Close,

@@ -24,6 +24,10 @@ fantoccini = "0.21"
 tokio = { version = "1", features = ["test-util", "rt-multi-thread", "process", "fs"] }
 criterion = "0.5"
 
+# for minimal-versions
+[target.'cfg(any())'.dependencies]
+regex = { version = "1.5.1", optional = true }
+
 [[example]]
 name = "write_to_string"
 doc-scrape-examples = true
