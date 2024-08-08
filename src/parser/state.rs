@@ -15,6 +15,9 @@ pub struct ParserState<'a> {
     ///
     /// This affects things like whether we can parse the `\relax` command and
     /// subscripts/superscripts.
+    ///
+    /// Another example: if we are looking for an argument to a control sequence, we should not
+    /// allow '&' or '\\' to be parsed.
     pub handling_argument: bool,
     /// Number of `&` characters allowed in the current line of the current group.
     ///

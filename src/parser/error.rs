@@ -177,6 +177,8 @@ pub(crate) enum ErrorKind {
     IncorrectMacroPrefix,
     MacroAlreadyDefined,
     MacroNotDefined,
+    Alignment,
+    NewLine,
 }
 
 impl Display for ErrorKind {
@@ -226,6 +228,8 @@ impl Display for ErrorKind {
             ErrorKind::MacroNotDefined => f.write_str("macro not defined"),
             ErrorKind::DimensionArgument => f.write_str("expected a dimension or glue argument"),
             ErrorKind::DimensionUnit => f.write_str("expected a dimensional unit"),
+            ErrorKind::Alignment => f.write_str("alignment not allowed in current environment"),
+            ErrorKind::NewLine => f.write_str("new line command not allowed in current environment"),
         }
     }
 }

@@ -60,7 +60,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     .state
                     .allowed_alignment_count
                     .as_deref()
-                    .is_some_and(AlignmentCount::can_increment) => {
+                    .is_some_and(AlignmentCount::can_increment) && !self.state.handling_argument => {
                        self
                            .state
                            .allowed_alignment_count
@@ -69,6 +69,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                            .increment();
                         E::Alignment
                     },
+            '&' => return Err(ErrorKind::Alignment),
             '{' => {
                 let str = &mut self.content;
                 let group = lex::group_content(str, GroupingKind::Normal)?;
@@ -1795,7 +1796,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 return Ok(());
             }
             "end" => return Err(ErrorKind::UnbalancedGroup(None)),
-            "\\" | "cr" if self.state.allowed_alignment_count.is_some() => {
+            "\\" | "cr" if self.state.allowed_alignment_count.is_some() && !self.state.handling_argument => {
                 self.state.allowed_alignment_count.as_mut().unwrap().reset();
                 let additional_space =
                     if let Some(mut arg) = lex::optional_argument(&mut self.content) {
@@ -1826,6 +1827,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     horizontal_lines: horizontal_lines.into_boxed_slice(),
                 }
             }
+            "\\" | "cr" => return Err(ErrorKind::NewLine),
 
             // Delimiters
             cs if control_sequence_delimiter_map(cs).is_some() => {

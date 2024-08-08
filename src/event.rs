@@ -5,6 +5,10 @@
 //! by a renderer. This crate only provides a simple `mathml` renderer available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 //!
+//! This module tries to be comprehensive in explaining the INVARIANTS that are be upheld by the [`Parser`].
+//! If a user of this crate, or a renderer implementor finds a case where the INVARIANTS are not
+//! satisfied, then it is a bug in the parser, and should be reported.
+//!
 //! [`Parser`]: crate::parser::Parser
 //! [`push_mathml`]: crate::mathml::push_mathml
 //! [`write_mathml`]: crate::mathml::write_mathml
@@ -13,14 +17,15 @@ use crate::attribute::{Dimension, Font};
 
 /// All events that can be produced by the parser.
 ///
-/// ## For Renderer Implementors
+/// # For Renderer Implementors
 ///
 /// When an [`Event`] is referreing to an "_element_", it is referring to the next logical unit of
 /// content in the stream. This can be a single [`Event::Content`] element, a group marked
-/// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element, etc.
+/// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element,
+/// an [`Event::Space`], or an [`Event::StateChange`].
 ///
-/// [`Event::Space`]s, [`Event::StateChange`]s, [`Event::Alignment`]s, and [`Event::NewLine`]s
-/// are not considered elements.
+/// [`Event::Alignment`]s, and [`Event::NewLine`]s are not considered elements, and must never
+/// occur when an element is expected.
 ///
 /// ### Examples
 ///
@@ -174,6 +179,8 @@ pub enum ScriptPosition {
 /// Represents a state change for the following content.
 ///
 /// State changes take effect for the current group nesting and all deeper groups.
+/// State changes are not maintained across `NewLine` and `Alignment` events, and are also reset
+/// when entering a new group that is not a `Grouping::Normal`, or a `Grouping::LeftRight`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum StateChange<'a> {
     /// Changes the font of the content.
@@ -185,7 +192,7 @@ pub enum StateChange<'a> {
     Color(ColorChange<'a>),
     /// Changes the style of the content (mostly affects the sizing of the content).
     ///
-    /// This state change does not affect scripts, and root indexes.
+    /// __Important__: This state change does not affect scripts, and root indexes.
     Style(Style),
 }
 
