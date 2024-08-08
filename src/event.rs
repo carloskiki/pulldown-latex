@@ -5,8 +5,8 @@
 //! by a renderer. This crate only provides a simple `mathml` renderer available through the
 //! [`push_mathml`] and [`write_mathml`] functions.
 //!
-//! This module tries to be comprehensive in explaining the INVARIANTS that are be upheld by the [`Parser`].
-//! If a user of this crate, or a renderer implementor finds a case where the INVARIANTS are not
+//! This module tries to be comprehensive in explaining the invariants that are be upheld by the [`Parser`].
+//! If a user of this crate, or a renderer implementor finds a case where the invariants are not
 //! satisfied, then it is a bug in the parser, and should be reported.
 //!
 //! [`Parser`]: crate::parser::Parser
