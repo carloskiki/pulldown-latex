@@ -1796,7 +1796,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 return Ok(());
             }
             "end" => return Err(ErrorKind::UnbalancedGroup(None)),
-            "\\" | "cr" if self.state.allowed_alignment_count.is_some() && !self.state.handling_argument => {
+            "\\" | "cr"
+                if self.state.allowed_alignment_count.is_some()
+                    && !self.state.handling_argument =>
+            {
                 self.state.allowed_alignment_count.as_mut().unwrap().reset();
                 let additional_space =
                     if let Some(mut arg) = lex::optional_argument(&mut self.content) {
