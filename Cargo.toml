@@ -57,5 +57,5 @@ name = "basic"
 harness = false
 
 [package.metadata.docs.rs]
-rustdoc-args = ["--generate-link-to-definition"]
+rustdoc-args = ["--generate-link-to-definition", "--show-coverage"]
 cargo-args = ["-Zunstable-options", "-Zrustdoc-scrape-examples"]
