@@ -4,7 +4,6 @@
 
 #![doc = include_str!("../docs/usage.md")]
 
-pub(crate) mod attribute;
 pub mod config;
 pub mod event;
 pub mod mathml;

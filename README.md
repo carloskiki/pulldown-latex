@@ -34,7 +34,7 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 
 ### TODO's/Known Bugs
 - [x] Better documentation for state changes, and for invariants that the parser satisfies.
-- [ ] `Dimension` values are unnecessarily big (memory wise) and not well supported.
+- [x] `Dimension` values are unnecessarily big (memory wise) and not well supported.
 - [ ] Color API rework.
 - [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
 - [ ] Italic numbers are not italic because they do not exist in unicode.

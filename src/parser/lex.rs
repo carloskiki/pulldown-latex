@@ -1,7 +1,4 @@
-use crate::{
-    attribute::{Dimension, DimensionUnit, Glue},
-    event::{DelimiterType, GroupingKind},
-};
+use crate::event::{DelimiterType, Dimension, DimensionUnit, Glue, GroupingKind};
 
 use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token};
 
@@ -243,7 +240,7 @@ pub fn glue(input: &mut &str) -> InnerResult<Glue> {
 pub fn dimension(input: &mut &str) -> InnerResult<Dimension> {
     let number = floating_point(input)?;
     let unit = dimension_unit(input)?;
-    Ok((number, unit))
+    Ok(Dimension::new(number, unit))
 }
 
 /// Parse a dimension unit (TeXBook p. 266).
@@ -450,8 +447,7 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
 #[cfg(test)]
 mod tests {
     use crate::{
-        attribute::DimensionUnit,
-        event::GroupingKind,
+        event::{Dimension, DimensionUnit, GroupingKind},
         parser::{lex, Token},
     };
 
@@ -518,7 +514,7 @@ mod tests {
         let mut input = "1.2pt";
         let dim = lex::dimension(&mut input).unwrap();
 
-        assert_eq!(dim, (1.2, DimensionUnit::Pt));
+        assert_eq!(dim, Dimension::new(1.2, DimensionUnit::Pt));
         assert_eq!(input, "");
     }
 
@@ -530,9 +526,9 @@ mod tests {
         assert_eq!(
             glue,
             (
-                (1.2, DimensionUnit::Pt),
-                Some((3.4, DimensionUnit::Pt)),
-                Some((5.6, DimensionUnit::Pt))
+                Dimension::new(1.2, DimensionUnit::Pt),
+                Some(Dimension::new(3.4, DimensionUnit::Pt)),
+                Some(Dimension::new(5.6, DimensionUnit::Pt))
             )
         );
         assert_eq!(input, "nope");
