@@ -64,7 +64,9 @@ pub enum Event<'a> {
     /// The `n` elements following this one constitute a base and its script(s), where `n` is
     /// specified in the documentation for each of the [`ScriptType`] variants.
     Script {
+        /// The type of the script.
         ty: ScriptType,
+        /// The position of the script.
         position: ScriptPosition,
     },
     /// This event specifes a custom spacing. This is produced by commands such as
@@ -72,7 +74,9 @@ pub enum Event<'a> {
     ///
     /// If any of the components are `None`, then the spacing is set to 0 for that component.
     Space {
+        /// The amount of space to add before the element.
         width: Option<Dimension>,
+        /// The amount of space to add after the element.
         height: Option<Dimension>,
     },
     /// This event specifies a state change in the renderer.
@@ -87,7 +91,9 @@ pub enum Event<'a> {
     ///
     /// This event is only emitted when inside a `Grouping` that allows it.
     NewLine {
+        /// The amount of space to add after the line break.
         spacing: Option<Dimension>,
+        /// The horizontal lines to draw after the line break.
         horizontal_lines: Box<[Line]>,
     },
 }
@@ -105,20 +111,42 @@ pub enum Content<'a> {
     /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and other stuff that do not have
     /// any spacing around them. This includes things that normally go in under and overscripts
     /// which may be stretchy, e.g., `→`, `‾`, etc.
-    Ordinary { content: char, stretchy: bool },
+    Ordinary {
+        /// The content character.
+        content: char,
+        /// Whether the character is stretchy.
+        ///
+        /// This applies to characters that are in under and overscripts, such as `→`.
+        stretchy: bool,
+    },
     /// A large operator, e.g., `\sum`, `\int`, `\prod`, etc.
-    LargeOp { content: char, small: bool },
+    LargeOp {
+        /// The content character.
+        content: char,
+        /// Whether the operator is a small variant, e.g., `\smallint`.
+        small: bool,
+    },
     /// A binary operator, e.g., `+`, `*`, `⊗`, `?`, etc.
-    BinaryOp { content: char, small: bool },
+    BinaryOp {
+        /// The content character.
+        content: char,
+        /// Whether the operator is a small variant, e.g., `\smallsetminus`.
+        small: bool,
+    },
     /// A relation, e.g., `=`, `≠`, `≈`, etc.
     Relation {
+        /// The content of the relation.
         content: RelationContent,
+        /// Whether the relation is a small variant, e.g., `\shortparallel`.
         small: bool,
     },
     /// An opening, closing, or fence delimiter, e.g., `(`, `[`, `{`, `|`, `)`, `]`, `}`, etc.
     Delimiter {
+        /// The delimiter character.
         content: char,
+        /// The size of the delimiter, if any.
         size: Option<DelimiterSize>,
+        /// The type of the delimiter.
         ty: DelimiterType,
     },
     /// A punctuation character, such as `,`, `.`, or `;`.
@@ -298,40 +326,51 @@ pub enum Grouping {
     /// ```
     Array(Box<[ArrayColumn]>),
     /// The `matrix` environment of `LaTeX`.
-    ///
-    /// The default alignment is `ColumnAlignment::Center`, but it can be specified by in `LaTeX`
-    /// when using the `\begin{matrix*}[l] ... \end{matrix*}` syntax.
-    Matrix { alignment: ColumnAlignment },
+    Matrix {
+        /// The default alignment is `ColumnAlignment::Center`, but it can be specified by in `LaTeX`
+        /// when using the `\begin{matrix*}[l] ... \end{matrix*}` syntax.
+        alignment: ColumnAlignment,
+    },
     /// The `cases` environment of `LaTeX`.
-    ///
-    /// `left` is true if the environment is `cases` and false if the environment is `rcases`.
-    Cases { left: bool },
+    Cases {
+        /// `left` is true if the environment is `cases` and false if the environment is `rcases`.
+        left: bool,
+    },
     /// The `equation` environment of `LaTeX`.
-    ///
-    /// If `eq_numbers` is true, then equation numbers are displayed.
-    Equation { eq_numbers: bool },
+    Equation {
+        /// If `eq_numbers` is true, then equation numbers are displayed.
+        eq_numbers: bool,
+    },
     /// The `align` environment of `LaTeX`.
-    ///
-    /// If `eq_numbers` is true, then equation numbers are displayed.
-    Align { eq_numbers: bool },
+    Align {
+        /// If `eq_numbers` is true, then equation numbers are displayed.
+        eq_numbers: bool,
+    },
     /// The `aligned` environment of `LaTeX`.
     Aligned,
     /// The `subarray` environment of `LaTeX`.
-    SubArray { alignment: ColumnAlignment },
+    SubArray {
+        /// The alignment of the columns in the subarray.
+        alignment: ColumnAlignment,
+    },
     /// The `alignat` environment of `LaTeX`.
-    ///
-    /// If `eq_numbers` is true, then equation numbers are displayed.
-    /// `pairs` specifies the number of left-right column pairs specified in the environment
-    /// declaration.
-    Alignat { pairs: u16, eq_numbers: bool },
+    Alignat {
+        /// `pairs` specifies the number of left-right column pairs specified in the environment
+        /// declaration.
+        pairs: u16,
+        /// If `eq_numbers` is true, then equation numbers are displayed.
+        eq_numbers: bool,
+    },
     /// The `alignedat` environment of `LaTeX`.
-    ///
-    /// `pairs` specifies the number of left-right column pairs specified in the environment
-    Alignedat { pairs: u16 },
+    Alignedat {
+        /// `pairs` specifies the number of left-right column pairs specified in the environment
+        pairs: u16,
+    },
     /// The `gather` environment of `LaTeX`.
-    ///
-    /// If `eq_numbers` is true, then equation numbers are displayed.
-    Gather { eq_numbers: bool },
+    Gather {
+        /// If `eq_numbers` is true, then equation numbers are displayed.
+        eq_numbers: bool,
+    },
     /// The `gathered` environment of `LaTeX`.
     Gathered,
     /// The `multline` environment of `LaTeX`.
