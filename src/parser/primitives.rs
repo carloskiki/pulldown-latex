@@ -3,14 +3,11 @@
 
 use core::panic;
 
-use crate::{
-    attribute::{DimensionUnit, Font},
-    event::{
-        ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
-        DelimiterSize, DelimiterType, Event as E, Grouping as G, GroupingKind, Line, MatrixType,
-        RelationContent, ScriptPosition as SP, ScriptType as ST, StateChange as SC, Style as S,
-        Visual as V,
-    },
+use crate::event::{
+    ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
+    DelimiterSize, DelimiterType, Dimension, DimensionUnit, Event as E, Font, Grouping as G,
+    GroupingKind, Line, MatrixType, RelationContent, ScriptPosition as SP, ScriptType as ST,
+    StateChange as SC, Style as S, Visual as V,
 };
 
 use super::{
@@ -172,9 +169,8 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let argument = lex::argument(&mut self.content)?;
                 self.buffer.extend([
                     I::Event(E::Space {
-                        width: Some((1., DimensionUnit::Em)),
+                        width: Some(Dimension::new(1., DimensionUnit::Em)),
                         height: None,
-                        depth: None,
                     }),
                     I::Event(E::Begin(G::Normal)),
                     I::Event(E::Content(C::Delimiter {
@@ -684,39 +680,32 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             // Spacing //
             /////////////
             "," | "thinspace" => E::Space {
-                width: Some((3. / 18., DimensionUnit::Em)),
+                width: Some(Dimension::new(3. / 18., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             ">" | ":" | "medspace" => E::Space {
-                width: Some((4. / 18., DimensionUnit::Em)),
+                width: Some(Dimension::new(4. / 18., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             ";" | "thickspace" => E::Space {
-                width: Some((5. / 18., DimensionUnit::Em)),
+                width: Some(Dimension::new(5. / 18., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             "enspace" => E::Space {
-                width: Some((0.5, DimensionUnit::Em)),
+                width: Some(Dimension::new(0.5, DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             "quad" => E::Space {
-                width: Some((1., DimensionUnit::Em)),
+                width: Some(Dimension::new(1., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             "qquad" => E::Space {
-                width: Some((2., DimensionUnit::Em)),
+                width: Some(Dimension::new(2., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             "mathstrut" => E::Space {
                 width: None,
-                height: Some((0.7, DimensionUnit::Em)),
-                depth: Some((0.3, DimensionUnit::Em)),
+                height: Some(Dimension::new(0.7, DimensionUnit::Em)),
             },
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
@@ -725,7 +714,6 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 E::Space {
                     width: Some(dimension),
                     height: None,
-                    depth: None,
                 }
             }
             "hskip" => {
@@ -733,16 +721,14 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 E::Space {
                     width: Some(glue.0),
                     height: None,
-                    depth: None,
                 }
             }
             "mkern" => {
                 let dimension = lex::dimension(&mut self.content)?;
-                if dimension.1 == DimensionUnit::Mu {
+                if dimension.unit == DimensionUnit::Mu {
                     E::Space {
                         width: Some(dimension),
                         height: None,
-                        depth: None,
                     }
                 } else {
                     return Err(ErrorKind::MathUnit);
@@ -750,14 +736,17 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             }
             "mskip" => {
                 let glue = lex::glue(&mut self.content)?;
-                if glue.0 .1 == DimensionUnit::Mu
-                    && glue.1.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
-                    && glue.2.map_or(true, |(_, unit)| unit == DimensionUnit::Mu)
+                if glue.0.unit == DimensionUnit::Mu
+                    && glue
+                        .1
+                        .map_or(true, |Dimension { unit, .. }| unit == DimensionUnit::Mu)
+                    && glue
+                        .2
+                        .map_or(true, |Dimension { unit, .. }| unit == DimensionUnit::Mu)
                 {
                     E::Space {
                         width: Some(glue.0),
                         height: None,
-                        depth: None,
                     }
                 } else {
                     return Err(ErrorKind::MathUnit);
@@ -771,24 +760,20 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 E::Space {
                     width: Some(glue.0),
                     height: None,
-                    depth: None,
                 }
             }
             // Negative spacing
             "!" | "negthinspace" => E::Space {
-                width: Some((-3. / 18., DimensionUnit::Em)),
+                width: Some(Dimension::new(-3. / 18., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             "negmedspace" => E::Space {
-                width: Some((-4. / 18., DimensionUnit::Em)),
+                width: Some(Dimension::new(-4. / 18., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
             "negthickspace" => E::Space {
-                width: Some((-5. / 18., DimensionUnit::Em)),
+                width: Some(Dimension::new(-5. / 18., DimensionUnit::Em)),
                 height: None,
-                depth: None,
             },
 
             ////////////////////////
@@ -1320,14 +1305,19 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 return Ok(());
             }
             "binom" => {
-                self.fraction_like(Some('('), Some(')'), Some((0., DimensionUnit::Em)), None)?;
+                self.fraction_like(
+                    Some('('),
+                    Some(')'),
+                    Some(Dimension::new(0., DimensionUnit::Em)),
+                    None,
+                )?;
                 return Ok(());
             }
             "dbinom" => {
                 self.fraction_like(
                     Some('('),
                     Some(')'),
-                    Some((0., DimensionUnit::Em)),
+                    Some(Dimension::new(0., DimensionUnit::Em)),
                     Some(S::Display),
                 )?;
                 return Ok(());
@@ -1336,7 +1326,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.fraction_like(
                     Some('('),
                     Some(')'),
-                    Some((0., DimensionUnit::Em)),
+                    Some(Dimension::new(0., DimensionUnit::Em)),
                     Some(S::Text),
                 )?;
                 return Ok(());
@@ -1393,9 +1383,8 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.buffer.extend([
                     I::Event(E::Visual(V::SquareRoot)),
                     I::Event(E::Space {
-                        width: Some((0., DimensionUnit::Em)),
-                        height: Some((0.7, DimensionUnit::Em)),
-                        depth: None,
+                        width: Some(Dimension::new(0., DimensionUnit::Em)),
+                        height: Some(Dimension::new(0.7, DimensionUnit::Em)),
                     }),
                 ]);
                 return Ok(());
@@ -1978,7 +1967,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         &mut self,
         open: Option<char>,
         close: Option<char>,
-        bar_size: Option<(f32, DimensionUnit)>,
+        bar_size: Option<Dimension>,
         style: Option<S>,
     ) -> InnerResult<()> {
         let open_close_group = open.is_some() || close.is_some();

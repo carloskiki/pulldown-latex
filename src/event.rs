@@ -13,7 +13,7 @@
 //! [`push_mathml`]: crate::mathml::push_mathml
 //! [`write_mathml`]: crate::mathml::write_mathml
 
-use crate::attribute::{Dimension, Font};
+use std::fmt::Display;
 
 /// All events that can be produced by the parser.
 ///
@@ -74,7 +74,6 @@ pub enum Event<'a> {
     Space {
         width: Option<Dimension>,
         height: Option<Dimension>,
-        depth: Option<Dimension>,
     },
     /// This event specifies a state change in the renderer.
     ///
@@ -195,6 +194,39 @@ pub enum StateChange<'a> {
     ///
     /// __Important__: This state change does not affect scripts and root indices.
     Style(Style),
+}
+
+/// Available font styles from LaTeX.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Font {
+    /// The bold and calligraphic font-face.
+    BoldScript,
+    /// The bold and italic font-face.
+    BoldItalic,
+    /// The bold font-face.
+    Bold,
+    /// The fraktur font-face.
+    Fraktur,
+    /// The calligraphic font-face.
+    Script,
+    /// The monospace font-face.
+    Monospace,
+    /// The sans-serif font-face.
+    SansSerif,
+    /// The double-struck font-face.
+    DoubleStruck,
+    /// The italic font-face.
+    Italic,
+    /// The bold fraktur font-face.
+    BoldFraktur,
+    /// The bold sans-serif font-face.
+    SansSerifBoldItalic,
+    /// The sans-serif italic font-face.
+    SansSerifItalic,
+    /// The sans-serif bold font-face.
+    BoldSansSerif,
+    /// The normal font-face.
+    UpRight,
 }
 
 /// The style of the content.
@@ -336,7 +368,7 @@ pub(crate) enum GroupingKind {
 }
 
 impl GroupingKind {
-    pub(crate) fn opening_str(&self) -> &'static str {
+    pub fn opening_str(&self) -> &'static str {
         match self {
             Self::Normal => "{",
             Self::OptionalArgument => "[",
@@ -383,7 +415,7 @@ impl GroupingKind {
         }
     }
 
-    pub(crate) fn closing_str(&self) -> &'static str {
+    pub fn closing_str(&self) -> &'static str {
         match self {
             Self::Normal => "}",
             Self::OptionalArgument => "]",
@@ -539,4 +571,114 @@ impl RelationContent {
         }
         &buf[..len]
     }
+}
+
+/// Represents a glue specification.
+pub type Glue = (Dimension, Option<Dimension>, Option<Dimension>);
+
+/// Represents a LaTeX dimension.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Dimension {
+    /// The value of the dimension.
+    pub value: f32,
+    /// The unit of the dimension.
+    pub unit: DimensionUnit,
+}
+
+impl Dimension {
+    /// Creates a new dimension.
+    pub fn new(value: f32, unit: DimensionUnit) -> Self {
+        Self { value, unit }
+    }
+}
+
+/// Displays a LaTeX dimension into a CSS dimension string.
+///
+/// The conversion is done using the following relations between the TeX and CSS units:
+/// | TeX unit         | CSS unit          |
+/// | ---------------- | ----------------- |
+/// | 1 em             | 1 em              |
+/// | 18 mu            | 1 em              |
+/// | 1 ex             | 1 ex              |
+/// | 1 mm             | 1 mm              |
+/// | 1 cm             | 1 cm              |
+/// | 1 in             | 1 in              |
+/// | 1 bp             | 1 pt              |
+/// | 72.27 pt         | 72 pt             |
+/// | 72.27 pc         | 72 pc             |
+/// | 65536 * 72.27 sp | 1 pt              |
+/// | 1157 * 72.27 dd  | 1238 * 72 pt      |
+/// | 1157 * 72.27 cc  | 12 * 1238 * 72 pt |
+impl Display for Dimension {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const BP_PER_PT: f32 = 72. / 72.27;
+        const BP_PER_SP: f32 = 1. / 65536. * BP_PER_PT;
+        const BP_PER_DD: f32 = 1238. / 1157. * BP_PER_PT;
+        const BP_PER_CC: f32 = 12. * BP_PER_DD;
+        const EM_PER_MU: f32 = 1. / 18.;
+        let mut value = self.value;
+        let unit = match self.unit {
+            DimensionUnit::Em => "em",
+            DimensionUnit::Mu => {
+                value *= EM_PER_MU;
+                "mu"
+            }
+            DimensionUnit::Ex => "ex",
+            DimensionUnit::Mm => "mm",
+            DimensionUnit::Cm => "cm",
+            DimensionUnit::In => "in",
+            DimensionUnit::Bp => "pt",
+            DimensionUnit::Pt => {
+                value *= BP_PER_PT;
+                "pt"
+            }
+            DimensionUnit::Pc => {
+                value *= BP_PER_PT;
+                "pc"
+            }
+            DimensionUnit::Sp => {
+                value *= BP_PER_SP;
+                "pt"
+            }
+            DimensionUnit::Dd => {
+                value *= BP_PER_DD;
+                "pt"
+            }
+            DimensionUnit::Cc => {
+                value *= BP_PER_CC;
+                "pt"
+            }
+        };
+        write!(f, "{}{}", value, unit)
+    }
+}
+
+// From the TeXbook, p. 57, 60, 167.
+/// Represents a dimension unit in LaTeX.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DimensionUnit {
+    /// The `em` unit.
+    Em,
+    /// The "math" unit.
+    Mu,
+    /// The `ex` unit.
+    Ex,
+    /// The "point" unit.
+    Pt,
+    /// The "picas" unit.
+    Pc,
+    /// The "inch" unit.
+    In,
+    /// The "big point" unit.
+    Bp,
+    /// The "centimeter" unit.
+    Cm,
+    /// The "millimeter" unit.
+    Mm,
+    /// The "didot point" unit.
+    Dd,
+    /// The "cicero" unit.
+    Cc,
+    /// The "scaled point" unit.
+    Sp,
 }

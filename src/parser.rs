@@ -61,6 +61,7 @@ pub struct Parser<'store> {
 }
 
 impl<'store> Parser<'store> {
+    /// Create a new parser from the given input string and storage.
     pub fn new<'input>(input: &'input str, storage: &'store Storage) -> Self
     where
         'input: 'store,
