@@ -1,6 +1,9 @@
 use crate::event::{DelimiterType, Dimension, DimensionUnit, Glue, GroupingKind};
 
-use super::{tables::token_to_delim, Argument, CharToken, ErrorKind, InnerResult, Token};
+use super::{
+    tables::{primitive_color, token_to_delim},
+    Argument, CharToken, ErrorKind, InnerResult, Token,
+};
 
 /// Parse the right-hand side of a definition (TeXBook p. 271).
 ///
@@ -441,6 +444,19 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
             Ok(Token::Character(CharToken::from_str(context)))
         }
         None => Err(ErrorKind::EndOfInput),
+    }
+}
+
+pub fn color(color: &str) -> Option<(u8, u8, u8)> {
+    match color.strip_prefix('#') {
+        Some(color) if color.len() == 6 => {
+            let r = u8::from_str_radix(&color[..2], 16).ok()?;
+            let g = u8::from_str_radix(&color[2..4], 16).ok()?;
+            let b = u8::from_str_radix(&color[4..], 16).ok()?;
+            Some((r, g, b))
+        }
+        None => primitive_color(color),
+        _ => None,
     }
 }
 

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Use criterion for benchmarks.
 - Set MSRV to 1.74.1. (__Breaking Change__)
 - The Dimension `type` is now a `newtype`, and is more ergonomic. (__Breaking Change__)
+- The `ColorChange` event changed to be smaller in memory. (__Breaking Change__)
 
 ## Fixed
 

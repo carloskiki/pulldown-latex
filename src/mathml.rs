@@ -21,7 +21,7 @@ struct MathmlWriter<'a, I: Iterator, W> {
     writer: W,
     config: RenderConfig<'a>,
     env_stack: Vec<Environment>,
-    state_stack: Vec<State<'a>>,
+    state_stack: Vec<State>,
     previous_atom: Option<Atom>,
 }
 
@@ -90,34 +90,33 @@ where
             }
         }
 
+        let prefix = |style_written: &mut bool| {
+            if !*style_written {
+                *style_written = true;
+                " style=\""
+            } else {
+                "; "
+            }
+        };
+
         let mut style_written = false;
-        if let Some(text_color) = text_color {
-            write!(self.writer, " style=\"color: {}", text_color)?;
+        if let Some((r, g, b)) = text_color {
+            write!(self.writer, " style=\"color: rgb({r} {g} {b})")?;
             style_written = true;
         }
-        if let Some(border_color) = border_color {
-            if style_written {
-                write!(self.writer, "; border: 0.06em solid {}", border_color)?;
-            } else {
-                write!(
-                    self.writer,
-                    " style=\"border: 0.06em solid {}",
-                    border_color
-                )?;
-                style_written = true;
-            }
+        if let Some((r, g, b)) = border_color {
+            write!(
+                self.writer,
+                "{}border: 0.06em solid rgb({r} {g} {b})",
+                prefix(&mut style_written)
+            )?;
         }
-        if let Some(background_color) = background_color {
-            if style_written {
-                write!(self.writer, "; background-color: {}", background_color)?;
-            } else {
-                write!(
-                    self.writer,
-                    " style=\"background-color: {}",
-                    background_color
-                )?;
-                style_written = true;
-            }
+        if let Some((r, g, b)) = background_color {
+            write!(
+                self.writer,
+                "{}background-color: rgb({r} {g} {b})",
+                prefix(&mut style_written)
+            )?;
         }
         if style_written {
             self.writer.write_all(b"\"")?;
@@ -728,7 +727,7 @@ where
         }
     }
 
-    fn handle_state_change(&mut self, state_change: StateChange<'a>) {
+    fn handle_state_change(&mut self, state_change: StateChange) {
         let state = self.state_stack.last_mut().expect("state stack is empty");
         match state_change {
             StateChange::Font(font) => state.font = font,
@@ -802,7 +801,7 @@ where
         }
     }
 
-    fn state(&self) -> &State<'a> {
+    fn state(&self) -> &State {
         self.state_stack.last().expect("state stack is empty")
     }
 
@@ -1120,11 +1119,11 @@ fn visual_tag(visual: Visual) -> &'static str {
 }
 
 #[derive(Debug, Clone, Copy, Default)]
-struct State<'a> {
+struct State {
     font: Option<Font>,
-    text_color: Option<&'a str>,
-    border_color: Option<&'a str>,
-    background_color: Option<&'a str>,
+    text_color: Option<(u8, u8, u8)>,
+    border_color: Option<(u8, u8, u8)>,
+    background_color: Option<(u8, u8, u8)>,
     style: Option<Style>,
 }
 
