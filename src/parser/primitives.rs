@@ -13,8 +13,7 @@ use crate::event::{
 use super::{
     lex,
     tables::{
-        char_delimiter_map, control_sequence_delimiter_map, is_binary,
-        is_relation, token_to_delim,
+        char_delimiter_map, control_sequence_delimiter_map, is_binary, is_relation, token_to_delim,
     },
     AlignmentCount, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I,
     Token,
@@ -467,7 +466,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let Argument::Group(color) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
-                
+
                 let color = lex::color(color).ok_or(ErrorKind::UnknownColor)?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
@@ -489,7 +488,8 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 };
 
                 let frame_color = lex::color(frame_color).ok_or(ErrorKind::UnknownColor)?;
-                let background_color = lex::color(background_color).ok_or(ErrorKind::UnknownColor)?;
+                let background_color =
+                    lex::color(background_color).ok_or(ErrorKind::UnknownColor)?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                     I::Event(E::StateChange(SC::Color(CC {
