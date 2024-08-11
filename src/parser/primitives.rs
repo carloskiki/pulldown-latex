@@ -13,7 +13,7 @@ use crate::event::{
 use super::{
     lex,
     tables::{
-        char_delimiter_map, control_sequence_delimiter_map, is_binary, is_primitive_color,
+        char_delimiter_map, control_sequence_delimiter_map, is_binary,
         is_relation, token_to_delim,
     },
     AlignmentCount, Argument, CharToken, ErrorKind, InnerParser, InnerResult, Instruction as I,
@@ -438,9 +438,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 };
                 self.state.skip_scripts = true;
 
-                if !is_primitive_color(color) {
-                    return Err(ErrorKind::UnknownColor);
-                }
+                let color = lex::color(color).ok_or(ErrorKind::UnknownColor)?;
                 E::StateChange(SC::Color(CC {
                     color,
                     target: CT::Text,
@@ -452,9 +450,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     return Err(ErrorKind::Argument);
                 };
 
-                if !is_primitive_color(color) {
-                    return Err(ErrorKind::UnknownColor);
-                }
+                let color = lex::color(color).ok_or(ErrorKind::UnknownColor)?;
                 let modified = lex::argument(str)?;
 
                 self.buffer.extend([
@@ -471,9 +467,8 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let Argument::Group(color) = lex::argument(&mut self.content)? else {
                     return Err(ErrorKind::Argument);
                 };
-                if !is_primitive_color(color) {
-                    return Err(ErrorKind::UnknownColor);
-                }
+                
+                let color = lex::color(color).ok_or(ErrorKind::UnknownColor)?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                     I::Event(E::StateChange(SC::Color(CC {
@@ -492,14 +487,14 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let Argument::Group(background_color) = lex::argument(str)? else {
                     return Err(ErrorKind::Argument);
                 };
-                if !is_primitive_color(frame_color) || !is_primitive_color(background_color) {
-                    return Err(ErrorKind::UnknownColor);
-                }
+
+                let frame_color = lex::color(frame_color).ok_or(ErrorKind::UnknownColor)?;
+                let background_color = lex::color(background_color).ok_or(ErrorKind::UnknownColor)?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
                     I::Event(E::StateChange(SC::Color(CC {
                         color: frame_color,
-                        target: CT::Text,
+                        target: CT::Border,
                     }))),
                     I::Event(E::StateChange(SC::Color(CC {
                         color: background_color,

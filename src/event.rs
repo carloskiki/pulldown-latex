@@ -82,7 +82,7 @@ pub enum Event<'a> {
     /// This event specifies a state change in the renderer.
     ///
     /// This state change only applies to the current group nesting and deeper groups.
-    StateChange(StateChange<'a>),
+    StateChange(StateChange),
     /// This event specifies an alignment mark in a mathematical environment.
     ///
     /// This event is only emitted when inside a `Grouping` that allows it.
@@ -210,14 +210,14 @@ pub enum ScriptPosition {
 /// when entering a new group that is not a `Grouping::Normal`, or a `Grouping::LeftRight`. The
 /// exception to the latter is `StateChange::Style`, which is maintained across all groups.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub enum StateChange<'a> {
+pub enum StateChange {
     /// Changes the font of the content.
     ///
     /// If the font is `None`, then the default renderer font is used, otherwise the font is set to
     /// the specified font.
     Font(Option<Font>),
     /// Changes the color of the content.
-    Color(ColorChange<'a>),
+    Color(ColorChange),
     /// Changes the style of the content (mostly affects the sizing of the content).
     ///
     /// __Important__: This state change does not affect scripts and root indices.
@@ -275,12 +275,12 @@ pub enum Style {
 
 /// Represents a color change.
 #[derive(Debug, Clone, Copy, PartialEq)]
-pub struct ColorChange<'a> {
+pub struct ColorChange {
     /// The color to change to.
     ///
     /// A string that represents the color to change to, either as a hex RGB color in the form #RRGGBB,
     /// or as one of the color names existing as part of CSS3 (e.g., "red").
-    pub color: &'a str,
+    pub color: (u8, u8, u8),
     /// The target of the color change.
     ///
     /// Specifies which part of the content to change the color of.
