@@ -253,6 +253,25 @@ pub fn cross_browser_tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
 }
 
 #[macro_export]
+macro_rules! round_trip_display {
+    ($name:ident, $($input:literal),+ $(,)?) => {
+        $crate::round_trip!(
+            $name,
+            $($input),+,
+            display_mode = pulldown_latex::config::DisplayMode::Block
+        );
+    };
+    (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
+        $crate::round_trip!(
+            should_panic,
+            $name,
+            $($input),+
+        );
+    }
+}
+
+
+#[macro_export]
 macro_rules! round_trip {
     (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
         pub fn $name() -> Result<(), libtest_mimic::Failed> {

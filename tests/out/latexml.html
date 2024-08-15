@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>LaTeXML Tests</title>
+<link rel="stylesheet" type="text/css" href="/Users/charles/Code/rust/pulldown-latex/styles.css">
+<meta charset="UTF-8">
+</head>
+<body>
+<table style="max-width: 60vw; margin: auto;"><tr><th colspan="2">Cauchy Shwartz Inequality</th></tr><tr><td>
+    \left( \sum_{k=1}^n a_k b_k \right)^2
+\leq \left( \sum_{k=1}^n a_k^2 \right)
+\left( \sum_{k=1}^n b_k^2 \right)
+    </td><td style="position: relative"><math display="block"><msup><mrow><mo stretchy="true">(</mo><munderover><mo movablelimits="false">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msub><mi>a</mi><mi>k</mi></msub><msub><mi>b</mi><mi>k</mi></msub><mo stretchy="true">)</mo></mrow><mn>2</mn></msup><mo>≤</mo><mrow><mo stretchy="true">(</mo><munderover><mo movablelimits="false">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msubsup><mi>a</mi><mi>k</mi><mn>2</mn></msubsup><mo stretchy="true">)</mo></mrow><mrow><mo stretchy="true">(</mo><munderover><mo movablelimits="false">∑</mo><mrow><mi>k</mi><mo>=</mo><mn>1</mn></mrow><mi>n</mi></munderover><msubsup><mi>b</mi><mi>k</mi><mn>2</mn></msubsup><mo stretchy="true">)</mo></mrow></math></td></tr><tr><th colspan="2">Cross Product</th></tr><tr><td>
+    \mathbf{V}_1 \times \mathbf{V}_2 =
+\begin{vmatrix}
+\mathbf{i} & \mathbf{j} & \mathbf{k} \\
+\frac{\partial X}{\partial u} &
+\frac{\partial Y}{\partial u} & 0 \\
+\frac{\partial X}{\partial v} &
+\frac{\partial Y}{\partial v} & 0
+\end{vmatrix}
+    </td><td style="position: relative"><math display="block"><msub><mrow><mi>𝐕</mi></mrow><mn>1</mn></msub><mo>×</mo><msub><mrow><mi>𝐕</mi></mrow><mn>2</mn></msub><mo>=</mo><mrow><mo stretchy="true">|</mo><mtable class="menv-arraylike"><mtr><mtd><mrow><mi>𝐢</mi></mrow></mtd><mtd><mrow><mi>𝐣</mi></mrow></mtd><mtd><mrow><mi>𝐤</mi></mrow></mtd></mtr><mtr><mtd><mfrac><mrow><mi>∂</mi><mi>X</mi></mrow><mrow><mi>∂</mi><mi>u</mi></mrow></mfrac></mtd><mtd><mfrac><mrow><mi>∂</mi><mi>Y</mi></mrow><mrow><mi>∂</mi><mi>u</mi></mrow></mfrac></mtd><mtd><mn>0</mn></mtd></mtr><mtr><mtd><mfrac><mrow><mi>∂</mi><mi>X</mi></mrow><mrow><mi>∂</mi><mi>v</mi></mrow></mfrac></mtd><mtd><mfrac><mrow><mi>∂</mi><mi>Y</mi></mrow><mrow><mi>∂</mi><mi>v</mi></mrow></mfrac></mtd><mtd><mn>0</mn></mtd></mtr></mtable><mo stretchy="true">|</mo></mrow></math></td></tr><tr><th colspan="2">Lorenz Eqautions</th></tr><tr><td>
+    \begin{aligned}
+\dot{x} & = \sigma(y-x) \\
+\dot{y} & = \rho x - y - xz \\
+\dot{z} & = -\beta z + xy
+\end{aligned}
+    </td><td style="position: relative"><math display="block"><mtable class="menv-alignlike menv-align"><mtr><mtd><mover><mrow><mi>x</mi></mrow><mi>˙</mi></mover></mtd><mtd><mo>=</mo><mi>σ</mi><mo symmetric="false" stretchy="false">(</mo><mi>y</mi><mo>−</mo><mi>x</mi><mo symmetric="false" stretchy="false">)</mo></mtd></mtr><mtr><mtd><mover><mrow><mi>y</mi></mrow><mi>˙</mi></mover></mtd><mtd><mo>=</mo><mi>ρ</mi><mi>x</mi><mo>−</mo><mi>y</mi><mo>−</mo><mi>x</mi><mi>z</mi></mtd></mtr><mtr><mtd><mover><mrow><mi>z</mi></mrow><mi>˙</mi></mover></mtd><mtd><mo>=</mo><mi>−</mi><mi>β</mi><mi>z</mi><mo>+</mo><mi>x</mi><mi>y</mi></mtd></mtr></mtable></math></td></tr><tr><th colspan="2">Maxwell Equations</th></tr><tr><td>
+\begin{aligned}
+\nabla \times \vec{\mathbf{B}} -
+\frac1c\, \frac{\partial\vec{
+\mathbf{E}}}{\partial t} &
+= \frac{4\pi}{c}\vec{\mathbf{j}} \\
+\nabla \cdot \vec{\mathbf{E}} &
+= 4 \pi \rho \\
+\nabla \times \vec{\mathbf{E}}\, +\,
+\frac1c\, \frac{\partial\vec{
+\mathbf{B}}}{\partial t} &
+= \vec{\mathbf{0}} \\
+\nabla \cdot \vec{\mathbf{B}} &
+= 0
+\end{aligned}
+    </td><td style="position: relative"><math display="block"><mtable class="menv-alignlike menv-align"><mtr><mtd><mi>∇</mi><mo>×</mo><mover><mrow><mrow><mi>𝐁</mi></mrow></mrow><mi>→</mi></mover><mo>−</mo><mfrac><mn>1</mn><mi>c</mi></mfrac><mspace width="0.16666667em" /><mfrac><mrow><mi>∂</mi><mover><mrow><mrow><mi>𝐄</mi></mrow></mrow><mi>→</mi></mover></mrow><mrow><mi>∂</mi><mi>t</mi></mrow></mfrac></mtd><mtd><mo>=</mo><mfrac><mrow><mn>4</mn><mi>π</mi></mrow><mrow><mi>c</mi></mrow></mfrac><mover><mrow><mrow><mi>𝐣</mi></mrow></mrow><mi>→</mi></mover></mtd></mtr><mtr><mtd><mi>∇</mi><mo>⋅</mo><mover><mrow><mrow><mi>𝐄</mi></mrow></mrow><mi>→</mi></mover></mtd><mtd><mo>=</mo><mn>4</mn><mi>π</mi><mi>ρ</mi></mtd></mtr><mtr><mtd><mi>∇</mi><mo>×</mo><mover><mrow><mrow><mi>𝐄</mi></mrow></mrow><mi>→</mi></mover><mspace width="0.16666667em" /><mo>+</mo><mspace width="0.16666667em" /><mfrac><mn>1</mn><mi>c</mi></mfrac><mspace width="0.16666667em" /><mfrac><mrow><mi>∂</mi><mover><mrow><mrow><mi>𝐁</mi></mrow></mrow><mi>→</mi></mover></mrow><mrow><mi>∂</mi><mi>t</mi></mrow></mfrac></mtd><mtd><mo>=</mo><mover><mrow><mrow><mn>𝟎</mn></mrow></mrow><mi>→</mi></mover></mtd></mtr><mtr><mtd><mi>∇</mi><mo>⋅</mo><mover><mrow><mrow><mi>𝐁</mi></mrow></mrow><mi>→</mi></mover></mtd><mtd><mo>=</mo><mn>0</mn></mtd></mtr></mtable></math></td></tr><tr><th colspan="2">N Choose K</th></tr><tr><td>
+    P(E) = \binom{n}{k} p^k (1-p)^{ n-k} \
+    </td><td style="position: relative"><math display="block"><mi>P</mi><mo symmetric="false" stretchy="false">(</mo><mi>E</mi><mo symmetric="false" stretchy="false">)</mo><mo>=</mo><mrow><mo stretchy="true">(</mo><mfrac linethickness="0em"><mrow><mi>n</mi></mrow><mrow><mi>k</mi></mrow></mfrac><mo stretchy="true">)</mo></mrow><msup><mi>p</mi><mi>k</mi></msup><mo symmetric="false" stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>p</mi><msup><mo symmetric="false" stretchy="false">)</mo><mrow><mi>n</mi><mo>−</mo><mi>k</mi></mrow></msup><mtext>&nbsp;</mtext></math></td></tr><tr><th colspan="2">Ramanujan Identity</th></tr><tr><td>
+\frac{1}{\Bigl(\sqrt{\phi \sqrt{5}}-
+\phi\Bigr) e^{\frac25 \pi}} =
+1+\frac{e^{-2\pi}} {1+\frac{e^{-4\pi}}
+{1+\frac{e^{-6\pi}}
+{1+\frac{e^{-8\pi}} {1+\ldots} } } }
+    </td><td style="position: relative"><math display="block"><mfrac><mrow><mn>1</mn></mrow><mrow><mo symmetric="true" stretchy="true"minsize="1.8em" maxsize="1.8em">(</mo><msqrt><mrow><mi>ϕ</mi><msqrt><mrow><mn>5</mn></mrow></msqrt></mrow></msqrt><mo>−</mo><mi>ϕ</mi><mo symmetric="true" stretchy="true"minsize="1.8em" maxsize="1.8em">)</mo><msup><mi>e</mi><mrow><mfrac><mn>25</mn><mi>π</mi></mfrac></mrow></msup></mrow></mfrac><mo>=</mo><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>e</mi><mrow><mi>−</mi><mn>2</mn><mi>π</mi></mrow></msup></mrow><mrow><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>e</mi><mrow><mi>−</mi><mn>4</mn><mi>π</mi></mrow></msup></mrow><mrow><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>e</mi><mrow><mi>−</mi><mn>6</mn><mi>π</mi></mrow></msup></mrow><mrow><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>e</mi><mrow><mi>−</mi><mn>8</mn><mi>π</mi></mrow></msup></mrow><mrow><mn>1</mn><mo>+</mo><mi>…</mi></mrow></mfrac></mrow></mfrac></mrow></mfrac></mrow></mfrac></math></td></tr><tr><th colspan="2">Rogers Ramanujan Identity</th></tr><tr><td>
+1 + \frac{q^2}{(1-q)}+
+\frac{q^6}{(1-q)(1-q^2)}+\cdots =
+\prod_{j=0}^{\infty}\frac{1}
+{(1-q^{5j+2})(1-q^{5j+3})},
+\quad\quad \text{for} |q|<1.
+    </td><td style="position: relative"><math display="block"><mn>1</mn><mo>+</mo><mfrac><mrow><msup><mi>q</mi><mn>2</mn></msup></mrow><mrow><mo symmetric="false" stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>q</mi><mo symmetric="false" stretchy="false">)</mo></mrow></mfrac><mo>+</mo><mfrac><mrow><msup><mi>q</mi><mn>6</mn></msup></mrow><mrow><mo symmetric="false" stretchy="false">(</mo><mn>1</mn><mo>−</mo><mi>q</mi><mo symmetric="false" stretchy="false">)</mo><mo symmetric="false" stretchy="false">(</mo><mn>1</mn><mo>−</mo><msup><mi>q</mi><mn>2</mn></msup><mo symmetric="false" stretchy="false">)</mo></mrow></mfrac><mo>+</mo><mi>⋯</mi><mo>=</mo><munderover><mo movablelimits="false">∏</mo><mrow><mi>j</mi><mo>=</mo><mn>0</mn></mrow><mrow><mi>∞</mi></mrow></munderover><mfrac><mrow><mn>1</mn></mrow><mrow><mo symmetric="false" stretchy="false">(</mo><mn>1</mn><mo>−</mo><msup><mi>q</mi><mrow><mn>5</mn><mi>j</mi><mo>+</mo><mn>2</mn></mrow></msup><mo symmetric="false" stretchy="false">)</mo><mo symmetric="false" stretchy="false">(</mo><mn>1</mn><mo>−</mo><msup><mi>q</mi><mrow><mn>5</mn><mi>j</mi><mo>+</mo><mn>3</mn></mrow></msup><mo symmetric="false" stretchy="false">)</mo></mrow></mfrac><mo>,</mo><mspace width="1em" /><mspace width="1em" /><mtext>for</mtext><mi>|</mi><mi>q</mi><mi>|</mi><mo><</mo><mn>1</mn><mo>.</mo></math></td></tr></table></body>
+</html>
