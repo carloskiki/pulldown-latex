@@ -52,13 +52,12 @@ name = "latexml"
 path = "tests/latexml.rs"
 harness = false
 
-[[test]]
-name = "environments"
-path = "tests/environments.rs"
+[[bench]]
+name = "basic"
 harness = false
 
 [[bench]]
-name = "basic"
+name = "environments"
 harness = false
 
 [package.metadata.docs.rs]
