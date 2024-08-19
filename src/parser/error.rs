@@ -179,7 +179,7 @@ pub(crate) enum ErrorKind {
     MacroNotDefined,
     Alignment,
     NewLine,
-    ArrayNoColumns
+    ArrayNoColumns,
 }
 
 impl Display for ErrorKind {

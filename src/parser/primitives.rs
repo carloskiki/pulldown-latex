@@ -2004,7 +2004,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     'c' => {
                         contains_column = true;
                         AC::Column(ColumnAlignment::Center)
-                    },
+                    }
                     'l' => {
                         contains_column = true;
                         AC::Column(ColumnAlignment::Left)

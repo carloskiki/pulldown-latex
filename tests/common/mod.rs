@@ -270,7 +270,6 @@ macro_rules! round_trip_display {
     }
 }
 
-
 #[macro_export]
 macro_rules! round_trip {
     (should_panic, $name:ident, $($input:literal),+ $(,)?) => {

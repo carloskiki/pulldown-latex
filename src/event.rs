@@ -325,7 +325,7 @@ pub enum Grouping {
     ///]));
     /// ```
     /// ## Invariant
-    /// 
+    ///
     /// The content of the `Array` variant is guaranteed to be non-empty, and contain at least one
     /// [`ArrayColumn::Column`].
     Array(Box<[ArrayColumn]>),

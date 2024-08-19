@@ -55,7 +55,7 @@ fn matrices(c: &mut Criterion) {
     });
 }
 // Write benchmarks that cover all of the following types of environments:
-// 
+//
 //  Cases {
 //      /// `left` is true if the environment is `cases` and false if the environment is `rcases`.
 //      left: bool,
@@ -267,5 +267,8 @@ fn split(c: &mut Criterion) {
     });
 }
 
-criterion_group!(benches, arrays, matrices, cases, align, aligned, subarray, alignat, alignedat, gather, gathered, multline, split);
+criterion_group!(
+    benches, arrays, matrices, cases, align, aligned, subarray, alignat, alignedat, gather,
+    gathered, multline, split
+);
 criterion_main!(benches);
