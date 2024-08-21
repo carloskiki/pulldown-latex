@@ -24,7 +24,7 @@ fn error_rendering() {
     push_mathml(&mut out, parser, Default::default()).unwrap();
 }
 
-should_error!{
+should_error! {
     double_scripts,
     r"a^b^c",
     r"a_b_c",

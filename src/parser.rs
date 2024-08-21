@@ -542,9 +542,7 @@ mod tests {
     fn subsuperscript() {
         let store = Storage::new();
         let parser = Parser::new(r"a^{1+3}_2", &store);
-        let events = parser
-            .collect::<Result<Vec<_>, ParserError>>()
-            .unwrap();
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
 
         assert_eq!(
             events,
@@ -739,13 +737,24 @@ mod tests {
                 }),
                 Event::Content(Content::Number("0")),
                 Event::End,
-                Event::Content(Content::Ordinary { content: 'f', stretchy: false }),
-                Event::Content(Content::Delimiter { content: '(', size: None, ty: DelimiterType::Open }),
+                Event::Content(Content::Ordinary {
+                    content: 'f',
+                    stretchy: false
+                }),
+                Event::Content(Content::Delimiter {
+                    content: '(',
+                    size: None,
+                    ty: DelimiterType::Open
+                }),
                 Event::Content(Content::Ordinary {
                     content: 'x',
                     stretchy: false
                 }),
-                Event::Content(Content::Delimiter { content: ')', size: None, ty: DelimiterType::Close }),
+                Event::Content(Content::Delimiter {
+                    content: ')',
+                    size: None,
+                    ty: DelimiterType::Close
+                }),
             ]
         );
     }
