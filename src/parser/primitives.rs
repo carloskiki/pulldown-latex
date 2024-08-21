@@ -115,11 +115,11 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 if ty == DelimiterType::Fence {
                     ordinary(content)
                 } else {
-                E::Content(C::Delimiter {
-                    content,
-                    size: None,
-                    ty,
-                })
+                    E::Content(C::Delimiter {
+                        content,
+                        size: None,
+                        ty,
+                    })
                 }
             }
             c => ordinary(c),

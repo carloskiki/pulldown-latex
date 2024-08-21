@@ -43,14 +43,18 @@ path = "tests/mozilla.rs"
 harness = false
 
 [[test]]
+name = "latexml"
+path = "tests/latexml.rs"
+harness = false
+
+[[test]]
 name = "cross-browser"
 path = "tests/cross-browser.rs"
 harness = false
 
 [[test]]
-name = "latexml"
-path = "tests/latexml.rs"
-harness = false
+name = "errors"
+path = "tests/errors.rs"
 
 [[bench]]
 name = "basic"

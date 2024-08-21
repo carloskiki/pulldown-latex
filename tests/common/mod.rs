@@ -163,7 +163,7 @@ pub async fn cross_browser() -> anyhow::Result<()> {
         },
     ];
     // Wait for processes to start, otherwise the clients will fail to connect
-    tokio::time::sleep(std::time::Duration::from_millis(800)).await;
+    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
     // Safety: This is safe because all elements of the array do not need to be initialized.
     let mut clients: [MaybeUninit<Client>; 3] = unsafe { MaybeUninit::uninit().assume_init() };
     for (i, (_, _, port)) in driver_processes.iter().enumerate() {
@@ -199,7 +199,7 @@ pub async fn cross_browser() -> anyhow::Result<()> {
                 let screenshot = elem.screenshot().await?;
 
                 tokio::fs::write(
-                    format!("{OUTPUT_DIR}/test-output/{name}/{table_name}.png"),
+                    format!("{OUTPUT_DIR}/screenshots/{name}/{table_name}.png"),
                     screenshot,
                 )
                 .await?;
@@ -242,7 +242,7 @@ pub fn cross_browser_tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
             file.write_all(b"</td>")?;
             for browser in ["chrome", "firefox", "safari"] {
                 file.write_fmt(
-                    format_args!(r#"<td class="image-container"><img class="{browser}-img" src="{OUTPUT_DIR}/test-output/{browser}/{table_name}.png"></td>"#)
+                    format_args!(r#"<td class="image-container"><img class="{browser}-img" src="{OUTPUT_DIR}/screenshots/{browser}/{table_name}.png"></td>"#)
                 )?;
             }
             file.write_all(b"</tr>")?;

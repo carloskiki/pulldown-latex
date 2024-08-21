@@ -87,16 +87,14 @@ impl<'store> Iterator for Parser<'store> {
 
     fn next(&mut self) -> Option<Self::Item> {
         match self.instruction_stack.last_mut() {
-            Some(Instruction::Event(_)) => {
-                let event = self
-                    .instruction_stack
-                    .pop()
-                    .expect("there is something in the stack");
-                Some(Ok(match event {
-                    Instruction::Event(event) => event,
-                    _ => unreachable!(),
-                }))
-            }
+            Some(Instruction::Event(_)) => Some(Ok(self
+                .instruction_stack
+                .pop()
+                .and_then(|i| match i {
+                    Instruction::Event(e) => Some(e),
+                    _ => None,
+                })
+                .expect("there is something in the stack"))),
             Some(Instruction::SubGroup { content, .. }) if content.trim_start().is_empty() => {
                 self.instruction_stack.pop();
                 self.next()
@@ -280,6 +278,12 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             self.content = &self.content[1..];
             let arg = lex::argument(&mut self.content)?;
             self.handle_argument(arg)?;
+
+            match self.content.chars().next() {
+                Some('_') => return Err(ErrorKind::DoubleSubscript),
+                Some('^') => return Err(ErrorKind::DoubleSuperscript),
+                _ => {}
+            }
         } else if next_char == Some('_') || next_char == Some('^') {
             return Err(if subscript_first {
                 ErrorKind::DoubleSubscript
@@ -502,7 +506,7 @@ struct ExpansionSpan<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Content, Visual};
+    use crate::event::{Content, DelimiterType, RelationContent, Visual};
 
     use super::*;
 
@@ -710,6 +714,41 @@ mod tests {
         let events = parser.collect::<Vec<_>>();
 
         assert!(events[0].is_err());
+    }
+
+    #[test]
+    fn no_limits() {
+        let store = Storage::new();
+        let parser = Parser::new(r#"\lim \nolimits _{x \to 0} f(x)"#, &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right
+                },
+                Event::Content(Content::Function("lim")),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Ordinary {
+                    content: 'x',
+                    stretchy: false
+                }),
+                Event::Content(Content::Relation {
+                    content: RelationContent::single_char('→'),
+                    small: false
+                }),
+                Event::Content(Content::Number("0")),
+                Event::End,
+                Event::Content(Content::Ordinary { content: 'f', stretchy: false }),
+                Event::Content(Content::Delimiter { content: '(', size: None, ty: DelimiterType::Open }),
+                Event::Content(Content::Ordinary {
+                    content: 'x',
+                    stretchy: false
+                }),
+                Event::Content(Content::Delimiter { content: ')', size: None, ty: DelimiterType::Close }),
+            ]
+        );
     }
 }
 
