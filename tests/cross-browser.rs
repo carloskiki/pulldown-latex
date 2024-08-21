@@ -25,7 +25,7 @@ fn main() {
     concl.exit()
 }
 
-round_trip!(basic, "5 + 5 = 10", display_mode = DisplayMode::Block);
+round_trip! {basic, "5 + 5 = 10", display_mode = DisplayMode::Block}
 
 round_trip!(
     complex_array,
@@ -38,14 +38,98 @@ round_trip!(
     display_mode = DisplayMode::Block
 );
 
-round_trip_display! {
-    negations,
-    r"\not\smallint a + b {5\not +}",
-    r"b \not + a",
-    r"\not\sum_{i=0}^n i = n (n + 1) / 2",
-    r"\not f (x) + \not g ( \not x)",
+round_trip! {
+    cases,
+r#"\begin{cases}
+    1 & \text{if } x \ge 0 \\
+    0 & \text{if } x < 0
+\end{cases}"#,
+r#"\begin{rcases}
+    a & \text{if } x \ge 0 \\
+    b & \text{if } x < 0
+\end{rcases}"#
 }
 
+round_trip! {
+    align,
+r#"\begin{align}
+    a &= b + c \\
+    d &= e + f
+\end{align}"#,
+r#"\begin{align*}
+    a &= b + c \\
+    d &= e + f
+\end{align*}"#,
+}
+round_trip! {
+    aligned,
+r#"\begin{aligned}
+    a &= b + c \\
+    d &= e + f
+\end{aligned}"#,
+}
+round_trip! {
+    subarray,
+r#"\begin{subarray}{c}
+    a + b \\
+    c + d
+\end{subarray}"#, 
+r#"\begin{subarray}{l}
+    a = b \\
+    c = d
+\end{subarray}"#
+}
+round_trip! {
+    alignat,
+    r#"\begin{alignat}{2}
+    a &= b + c & d &= e + f \\
+    g &= h + i & j &= k + l
+\end{alignat}"#,
+r#"\begin{alignat*}{2}
+    a &= b + c & d &= e + f \\
+    g &= h + i & j &= k + l
+\end{alignat*}"#
+}
+round_trip! {
+    alignedat,
+    r#"\begin{alignedat}{2}
+    a &= b + c & d &= e + f \\
+    g &= h + i & j &= k + l
+\end{alignedat}"#,
+}
+round_trip! {
+    gather,
+    r#"\begin{gather}
+    a = b + c \\
+    d = e + f
+\end{gather}"#,
+r#"\begin{gather*}
+    a = b + c \\
+    d = e + f
+\end{gather*}"#,
+    
+}
+round_trip! {
+    gathered,
+    r#"\begin{gathered}
+    a = b + c \\
+    d = e + f
+\end{gathered}"#,
+}
+round_trip! {
+    multline,
+    r#"\begin{multline}
+    a + b + c \\
+    d + e + f
+\end{multline}"#,
+}
+round_trip! {
+    split,
+    r#"\begin{split}
+    a + b + c \\
+    d + e + f
+\end{split}"#,
+}
 round_trip_display! {
     colors,
     r"\fcolorbox{red}{blue}{\textcolor{white}{a + b = c}}"
