@@ -543,7 +543,6 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"a^{1+3}_2", &store);
         let events = parser
-            .inspect(|e| println!("{:?}", e))
             .collect::<Result<Vec<_>, ParserError>>()
             .unwrap();
 
@@ -749,6 +748,17 @@ mod tests {
                 Event::Content(Content::Delimiter { content: ')', size: None, ty: DelimiterType::Close }),
             ]
         );
+    }
+
+    #[test]
+    fn expansions_in_groups() {
+        let store = Storage::new();
+        let mut parser = Parser::new(
+            r"\def\abc#1{#1} {\abc{a} + \abc{b}} = c \shoulderror",
+            &store,
+        );
+        assert!(parser.by_ref().collect::<Result<Vec<_>, _>>().is_err());
+        assert!(parser.span_stack.expansions.is_empty());
     }
 }
 

@@ -37,3 +37,16 @@ round_trip!(
             \end{array}",
     display_mode = DisplayMode::Block
 );
+
+round_trip_display!{
+    negations,
+    r"\not\smallint a + b {5\not +}",
+    r"b \not + a",
+    r"\not\sum_{i=0}^n i = n (n + 1) / 2",
+    r"\not f (x) + \not g ( \not x)",
+}
+
+round_trip_display!{
+    colors,
+    r"\fcolorbox{red}{blue}{\textcolor{white}{a + b = c}}"
+}

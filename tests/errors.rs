@@ -1,3 +1,5 @@
+use pulldown_latex::push_mathml;
+
 macro_rules! should_error {
     ($name:ident, $($input:literal),+ $(,)?) => {
         #[test]
@@ -12,6 +14,14 @@ macro_rules! should_error {
             }
         }
     };
+}
+
+#[test]
+fn error_rendering() {
+    let storage = pulldown_latex::Storage::new();
+    let mut out = String::new();
+    let parser = pulldown_latex::parser::Parser::new(r"\errors \should \render", &storage);
+    push_mathml(&mut out, parser, Default::default()).unwrap();
 }
 
 should_error!{
