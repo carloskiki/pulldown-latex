@@ -12,7 +12,7 @@ fn arrays(c: &mut Criterion) {
     c.bench_function("arrays", |b| {
         b.iter(|| {
             round_trip(
-r#"\begin{array}{||c|r|l||}
+                r#"\begin{array}{||c|r|l||}
     a + b \\[2em]
     a + b & c & d \\[2em] \hline
     a + b
@@ -173,7 +173,7 @@ fn subarray(c: &mut Criterion) {
     c.bench_function("subarray", |b| {
         b.iter(|| {
             round_trip(
-r#"\begin{subarray}{c}
+                r#"\begin{subarray}{c}
     a + b \\
     c + d
 \end{subarray}

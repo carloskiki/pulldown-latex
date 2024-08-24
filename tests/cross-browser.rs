@@ -107,7 +107,7 @@ r#"\begin{gather*}
     a = b + c \\
     d = e + f
 \end{gather*}"#,
-    
+
 }
 round_trip! {
     gathered,
