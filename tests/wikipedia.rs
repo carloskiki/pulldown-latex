@@ -16,23 +16,6 @@ fn main() {
     concl.exit();
 }
 
-macro_rules! round_trip_display {
-    ($name:ident, $($input:literal),+ $(,)?) => {
-        $crate::round_trip!(
-            $name,
-            $($input),+,
-            display_mode = pulldown_latex::config::DisplayMode::Block
-        );
-    };
-    (should_panic, $name:ident, $($input:literal),+ $(,)?) => {
-        $crate::round_trip!(
-            should_panic,
-            $name,
-            $($input),+
-        );
-    }
-}
-
 // General Stuff
 
 round_trip_display!(

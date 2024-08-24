@@ -115,11 +115,11 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 if ty == DelimiterType::Fence {
                     ordinary(content)
                 } else {
-                E::Content(C::Delimiter {
-                    content,
-                    size: None,
-                    ty,
-                })
+                    E::Content(C::Delimiter {
+                        content,
+                        size: None,
+                        ty,
+                    })
                 }
             }
             c => ordinary(c),
@@ -1995,14 +1995,24 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         };
 
         let mut column_count: u16 = 0;
+        let mut contains_column = false;
         let array_columns = array_columns_str
             .chars()
             .map(|c| {
                 column_count += 1;
                 Ok(match c {
-                    'c' => AC::Column(ColumnAlignment::Center),
-                    'l' => AC::Column(ColumnAlignment::Left),
-                    'r' => AC::Column(ColumnAlignment::Right),
+                    'c' => {
+                        contains_column = true;
+                        AC::Column(ColumnAlignment::Center)
+                    }
+                    'l' => {
+                        contains_column = true;
+                        AC::Column(ColumnAlignment::Left)
+                    }
+                    'r' => {
+                        contains_column = true;
+                        AC::Column(ColumnAlignment::Right)
+                    }
                     '|' => {
                         column_count -= 1;
                         AC::Separator(Line::Solid)
@@ -2015,6 +2025,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 })
             })
             .collect::<Result<_, _>>()?;
+
+        if !contains_column {
+            return Err(ErrorKind::ArrayNoColumns);
+        }
 
         Ok((G::Array(array_columns), column_count.saturating_sub(1)))
     }

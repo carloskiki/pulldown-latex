@@ -179,6 +179,7 @@ pub(crate) enum ErrorKind {
     MacroNotDefined,
     Alignment,
     NewLine,
+    ArrayNoColumns,
 }
 
 impl Display for ErrorKind {
@@ -230,6 +231,7 @@ impl Display for ErrorKind {
             ErrorKind::DimensionUnit => f.write_str("expected a dimensional unit"),
             ErrorKind::Alignment => f.write_str("alignment not allowed in current environment"),
             ErrorKind::NewLine => f.write_str("new line command not allowed in current environment"),
+            ErrorKind::ArrayNoColumns => f.write_str("array must have at least one column of the type `c`, `l` or `r`"),
         }
     }
 }
