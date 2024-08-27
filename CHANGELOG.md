@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Robust CI setup.
 - Miscellaneous documentation improvements.
+- Errors are now pretty :)
 
 ## Changed
 
