@@ -103,7 +103,7 @@ fn write_context_str(context: &str, out: &mut String, last: bool, has_previous_c
         out.push_str(line);
         out.push('\n');
     }
-    
+
     lines.for_each(|line| {
         out.push_str("│ ");
         out.push_str(line);
@@ -117,7 +117,7 @@ fn write_context_str(context: &str, out: &mut String, last: bool, has_previous_c
         out.push_str("╰─");
         (0..last_line_len).for_each(|_| out.push('─'));
     } else {
-        out.push_str("├─" );
+        out.push_str("├─");
     }
 }
 
