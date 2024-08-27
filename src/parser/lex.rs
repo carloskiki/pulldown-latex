@@ -12,7 +12,7 @@ use super::{
 /// Returns the control sequence, the parameter text, and the replacement text.
 pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a str)> {
     let control_sequence = control_sequence(input)?;
-    let (parameter_text, rest) = input.split_once('{').ok_or(ErrorKind::EndOfInput)?;
+    let (parameter_text, rest) = input.split_once('{').ok_or(ErrorKind::MissingExpansion)?;
 
     if let Some(idx) = parameter_text.find(|c: char| c == '%' || c == '}') {
         return Err(if parameter_text.as_bytes()[idx] == b'%' {
@@ -72,7 +72,7 @@ pub fn group_content<'a>(input: &mut &'a str, grouping_kind: GroupingKind) -> In
     while escaped || depth > 0 || !bytes[index..].starts_with(end.as_bytes()) {
         if index + end.len() > input.len() {
             *input = &input[input.len()..];
-            return Err(ErrorKind::UnbalancedGroup(None));
+            return Err(ErrorKind::UnbalancedGroup(Some(grouping_kind)));
         }
         if !escaped && bytes[index..].starts_with(start.as_bytes()) {
             depth += 1;

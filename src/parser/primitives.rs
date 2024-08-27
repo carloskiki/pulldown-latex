@@ -80,8 +80,6 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 return Err(ErrorKind::UnbalancedGroup(None))
             },
 
-            // Special ( ~ = nobreak space)
-            // TODO: Make this a `Spacing` event
             '~' => {
                 E::Content(C::Text("&nbsp;"))
             },
