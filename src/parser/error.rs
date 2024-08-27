@@ -26,8 +26,8 @@ struct Inner {
 impl ParserError {
     pub(super) fn new(error: ErrorKind, place: *const u8, span_stack: &mut SpanStack) -> Self {
         const CONTEXT_SIZE: usize = 12;
-        const CONTEXT_PREFIX: &str = "context: ";
-        const EXPANSION_PREFIX: &str = "    which was expanded from: ";
+        const CONTEXT_PREFIX: &str = "╭─► context:\n";
+        const EXPANSION_PREFIX: &str = "─► which was expanded from:\n";
 
         let index = span_stack.reach_original_call_site(place);
         let mut context = String::from(CONTEXT_PREFIX);
@@ -58,8 +58,7 @@ impl ParserError {
             }
 
             let context_str = &expansion.full_expansion[lower_bound..upper_bound];
-            context.push_str(context_str);
-            context.push('\n');
+            write_context_str(context_str, &mut context, false, lower_bound > 0);
             context.push_str(EXPANSION_PREFIX);
 
             lower_bound = floor_char_boundary(
@@ -74,7 +73,12 @@ impl ParserError {
                 expansion.call_site_in_origin.end + CONTEXT_SIZE,
             );
         }
-        context.push_str(&span_stack.input[lower_bound..upper_bound]);
+        write_context_str(
+            &span_stack.input[lower_bound..upper_bound],
+            &mut context,
+            true,
+            lower_bound > 0,
+        );
         context.shrink_to_fit();
 
         Self {
@@ -83,6 +87,37 @@ impl ParserError {
                 context: context.into_boxed_str(),
             }),
         }
+    }
+}
+
+fn write_context_str(context: &str, out: &mut String, last: bool, has_previous_content: bool) {
+    out.push_str("│\n");
+    let mut lines = context.lines();
+    if let Some(line) = lines.next() {
+        out.push('│');
+        if has_previous_content {
+            out.push('…');
+        } else {
+            out.push(' ');
+        }
+        out.push_str(line);
+        out.push('\n');
+    }
+    
+    lines.for_each(|line| {
+        out.push_str("│ ");
+        out.push_str(line);
+        out.push('\n');
+    });
+    let last_line_len = context.lines().last().unwrap_or_default().len();
+    out.push_str("│ ");
+    (0..last_line_len).for_each(|_| out.push('^'));
+    out.push('\n');
+    if last {
+        out.push_str("╰─");
+        (0..last_line_len).for_each(|_| out.push('─'));
+    } else {
+        out.push_str("├─" );
     }
 }
 
@@ -180,12 +215,12 @@ pub(crate) enum ErrorKind {
     Alignment,
     NewLine,
     ArrayNoColumns,
+    MissingExpansion,
 }
 
 impl Display for ErrorKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            // TODO: this error is very misleading. Rework it.
             ErrorKind::UnbalancedGroup(Some(missing)) => {
                 write!(f, "unbalanced group found, expected it to be closed with `{}`", missing.closing_str())
             },
@@ -223,7 +258,6 @@ impl Display for ErrorKind {
             }
             ErrorKind::TooManyParams => f.write_str("macro definition contains too many parameters, the maximum is 9"),
             ErrorKind::StandaloneHashSign => f.write_str("macro definition contains a standalone '#'"),
-            // TODO: should specify what the macro expects the prefix string to be.
             ErrorKind::IncorrectMacroPrefix => f.write_str("macro use does not match its definition, expected it to begin with a prefix string as specified in the definition"),
             ErrorKind::MacroAlreadyDefined => f.write_str("macro already defined"),
             ErrorKind::MacroNotDefined => f.write_str("macro not defined"),
@@ -232,6 +266,7 @@ impl Display for ErrorKind {
             ErrorKind::Alignment => f.write_str("alignment not allowed in current environment"),
             ErrorKind::NewLine => f.write_str("new line command not allowed in current environment"),
             ErrorKind::ArrayNoColumns => f.write_str("array must have at least one column of the type `c`, `l` or `r`"),
+            ErrorKind::MissingExpansion => f.write_str("The macro definition is missing an expansion"),
         }
     }
 }
