@@ -822,7 +822,7 @@ where
         }
         self.writer.write_all(b">")?;
         if self.config.annotation.is_some() {
-            self.writer.write_all(b"<semantics>")?;
+            self.writer.write_all(b"<semantics><mrow>")?;
         }
 
         while let Some(event) = self.input.next() {
@@ -873,7 +873,7 @@ where
                 "<annotation encoding=\"application/x-tex\">{}</annotation>",
                 annotation
             )?;
-            self.writer.write_all(b"</semantics>")?;
+            self.writer.write_all(b"</mrow></semantics>")?;
         }
         self.writer.write_all(b"</math>")
     }

@@ -37,6 +37,7 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 - [x] `Dimension` values are unnecessarily big (memory wise) and not well supported.
 - [x] Color API rework.
 - [x] More comprehensive benchmarks.
+- [ ] Match the `mathml` API to `pulldown-cmark`s API.
 - [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
 - [ ] Italic numbers are not italic because they do not exist in unicode.
 - [ ] `\sideset`
