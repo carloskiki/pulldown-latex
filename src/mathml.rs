@@ -868,12 +868,13 @@ where
         }
 
         if let Some(annotation) = self.config.annotation {
+            self.writer.write_all(b"</mrow>")?;
             write!(
                 self.writer,
                 "<annotation encoding=\"application/x-tex\">{}</annotation>",
                 annotation
             )?;
-            self.writer.write_all(b"</mrow></semantics>")?;
+            self.writer.write_all(b"</semantics>")?;
         }
         self.writer.write_all(b"</math>")
     }
