@@ -33,14 +33,14 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 - [ ] Cargo Mutants
 
 ### TODO's/Known Bugs
-- [x] Better documentation for state changes, and for invariants that the parser satisfies.
-- [x] `Dimension` values are unnecessarily big (memory wise) and not well supported.
-- [x] Color API rework.
-- [x] More comprehensive benchmarks.
+- [ ] array `\hline` and `\hdashline` before any content.
+- [ ] raise and lower boxes.
+- [ ] `\sideset`
+- [ ] `\mathop` and `\mathbin`, etc.
+- [ ] Correctly use the `accent` attribute: https://w3c.github.io/mathml-core/#dfn-accent
 - [ ] Match the `mathml` API to `pulldown-cmark`s API.
 - [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
 - [ ] Italic numbers are not italic because they do not exist in unicode.
-- [ ] `\sideset`
 
 ## Unsupported Plain-TeX & LaTeX behavior
 
