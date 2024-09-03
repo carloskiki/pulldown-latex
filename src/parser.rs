@@ -475,7 +475,7 @@ impl<'store> SpanStack<'store> {
         }
         let input_start = self.input.as_ptr() as isize;
 
-        assert!(ptr_val > input_start && ptr_val <= input_start + self.input.len() as isize);
+        assert!(ptr_val >= input_start && ptr_val <= input_start + self.input.len() as isize);
         (ptr_val - input_start) as usize
     }
 }
