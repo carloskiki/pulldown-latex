@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-# [Unreleased]
+# [0.6.3] - 2024-09-04
 
 ## Added
 
@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Removed
 
 - Removed the `ErrorKind::EndOfInput` variant in favor of more descriptive ones.
+
+# [0.6.2] - 2024-09-02
+
+No notable changes.
 
 # [0.6.1] - 2024-08-31
 
