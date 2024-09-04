@@ -223,7 +223,11 @@ impl<'b, 'store> InnerParser<'b, 'store> {
     fn parse(&mut self) -> InnerResult<Option<(Event<'store>, ScriptDescriptor)>> {
         // 1. Parse the next token and output everything to the staging stack.
         let original_content = self.content.trim_start();
-        let token = lex::token(&mut self.content)?;
+        let token = match lex::token(&mut self.content) {
+            Ok(token) => token,
+            Err(ErrorKind::Token) => return Ok(None),
+            Err(e) => return Err(e),
+        };
         match token {
             Token::ControlSequence(cs) => {
                 if let Some(result) =

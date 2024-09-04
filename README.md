@@ -34,6 +34,7 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 
 ### TODO's/Known Bugs
 - [ ] array `\hline` and `\hdashline` before any content.
+- [ ] Test comments
 - [ ] raise and lower boxes.
 - [ ] `\sideset`
 - [ ] `\mathop` and `\mathbin`, etc.

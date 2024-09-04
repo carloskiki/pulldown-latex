@@ -160,12 +160,12 @@ impl<'input> MacroContext<'input> {
                             let full_suffix = format!("{}{{", suffix);
                             let (before, _) = input_rest
                                 .split_once(&full_suffix)
-                                .ok_or(ErrorKind::EndOfInput)?;
+                                .ok_or(ErrorKind::MacroSuffixNotFound)?;
                             arguments.push(Err(before));
                             input_rest = &input_rest[before.len()..];
                         } else {
                             let (before, _) =
-                                input_rest.split_once('{').ok_or(ErrorKind::EndOfInput)?;
+                                input_rest.split_once('{').ok_or(ErrorKind::MacroSuffixNotFound)?;
                             arguments.push(Err(before));
                             input_rest = &input_rest[before.len()..];
                         }

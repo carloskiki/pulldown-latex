@@ -22,7 +22,6 @@ struct Inner {
     context: Box<str>,
 }
 
-// TODO: add arrows: ^^^ to show where in the context the error occurred.
 impl ParserError {
     pub(super) fn new(error: ErrorKind, place: *const u8, span_stack: &mut SpanStack) -> Self {
         const CONTEXT_SIZE: usize = 12;
@@ -121,45 +120,6 @@ fn write_context_str(context: &str, out: &mut String, last: bool, has_previous_c
     }
 }
 
-// fn reach_original_call_site(&mut self, substr_start: *const u8) -> usize {
-//     let mut ptr_val = substr_start as isize;
-//
-//     dbg!(&self, ptr_val);
-//
-//     while let Some(expansion) = self.expansions.last() {
-//         let expansion_ptr = expansion.full_expansion.as_ptr() as isize;
-//
-//         if ptr_val >= expansion_ptr
-//             && ptr_val <= expansion_ptr + expansion.full_expansion.len() as isize
-//         {
-//             let index = if ptr_val <= expansion_ptr + expansion.expansion_length as isize {
-//                 (ptr_val - expansion_ptr) as usize
-//             } else {
-//                 dbg!("we are here");
-//                 let distance_from_effective_stop =
-//                     ptr_val - expansion_ptr - expansion.expansion_length as isize;
-//                 self.expansions.pop();
-//                 ptr_val = self
-//                     .expansions
-//                     .last()
-//                     .map(|exp| exp.full_expansion)
-//                     .unwrap_or(self.input)
-//                     .as_ptr() as isize
-//                     + distance_from_effective_stop;
-//                 continue;
-//             };
-//             return index;
-//         }
-//         self.expansions.pop();
-//     }
-//     let input_start = self.input.as_ptr() as isize;
-//
-//     dbg!(&self, ptr_val, input_start, self.input, self.input.len());
-//
-//     assert!(ptr_val > input_start && ptr_val <= input_start + self.input.len() as isize);
-//     (ptr_val - input_start) as usize
-// }
-
 impl Error for ParserError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         Some(&self.inner.error)
@@ -184,7 +144,6 @@ pub(crate) enum ErrorKind {
     Environment,
     MathShift,
     HashSign,
-    EndOfInput,
     DimensionArgument,
     DimensionUnit,
     MathUnit,
@@ -210,12 +169,14 @@ pub(crate) enum ErrorKind {
     TooManyParams,
     StandaloneHashSign,
     IncorrectMacroPrefix,
+    MacroSuffixNotFound,
     MacroAlreadyDefined,
     MacroNotDefined,
     Alignment,
     NewLine,
     ArrayNoColumns,
     MissingExpansion,
+    Token
 }
 
 impl Display for ErrorKind {
@@ -231,7 +192,6 @@ impl Display for ErrorKind {
             ErrorKind::HashSign => f.write_str(
                 "unexpected hash sign `#` character - this character can only be used in macro definitions"
             ),
-            ErrorKind::EndOfInput => f.write_str("unexpected end of input"),
             ErrorKind::MathUnit => f.write_str("expected mathematical units (mu) in dimension specification"),
             ErrorKind::Delimiter => f.write_str("expected a delimiter token"),
             ErrorKind::ControlSequence => f.write_str("expected a control sequence"),
@@ -259,6 +219,7 @@ impl Display for ErrorKind {
             ErrorKind::TooManyParams => f.write_str("macro definition contains too many parameters, the maximum is 9"),
             ErrorKind::StandaloneHashSign => f.write_str("macro definition contains a standalone '#'"),
             ErrorKind::IncorrectMacroPrefix => f.write_str("macro use does not match its definition, expected it to begin with a prefix string as specified in the definition"),
+            ErrorKind::MacroSuffixNotFound => f.write_str("macro use does not match its definition, expected its argument(s) to end with a suffix string as specified in the definition"),
             ErrorKind::MacroAlreadyDefined => f.write_str("macro already defined"),
             ErrorKind::MacroNotDefined => f.write_str("macro not defined"),
             ErrorKind::DimensionArgument => f.write_str("expected a dimension or glue argument"),
@@ -267,6 +228,7 @@ impl Display for ErrorKind {
             ErrorKind::NewLine => f.write_str("new line command not allowed in current environment"),
             ErrorKind::ArrayNoColumns => f.write_str("array must have at least one column of the type `c`, `l` or `r`"),
             ErrorKind::MissingExpansion => f.write_str("The macro definition is missing an expansion"),
+            ErrorKind::Token => f.write_str("expected a token"),
         }
     }
 }

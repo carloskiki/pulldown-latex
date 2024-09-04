@@ -113,7 +113,7 @@ pub fn content_with_suffix<'a>(input: &mut &'a str, suffix: &str) -> InnerResult
     while escaped || !bytes[index..].starts_with(suffix.as_bytes()) {
         if index + suffix.len() > input.len() {
             *input = &input[input.len()..];
-            return Err(ErrorKind::EndOfInput);
+            return Err(ErrorKind::MacroSuffixNotFound);
         }
         match bytes[index] {
             b'\\' => escaped = !escaped,
@@ -181,7 +181,7 @@ pub fn control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
         input
             .chars()
             .next()
-            .map_or(Err(ErrorKind::EndOfInput), |_| {
+            .map_or(Err(ErrorKind::EmptyControlSequence), |_| {
                 Err(ErrorKind::ControlSequence)
             })
     }
@@ -249,10 +249,6 @@ pub fn dimension(input: &mut &str) -> InnerResult<Dimension> {
 /// Parse a dimension unit (TeXBook p. 266).
 pub fn dimension_unit(input: &mut &str) -> InnerResult<DimensionUnit> {
     *input = input.trim_start();
-    if input.len() < 2 {
-        return Err(ErrorKind::EndOfInput);
-    }
-
     let unit = input.get(0..2).ok_or(ErrorKind::DimensionUnit)?;
     let unit = match unit {
         "em" => DimensionUnit::Em,
@@ -290,17 +286,17 @@ pub fn integer(input: &mut &str) -> InnerResult<isize> {
 
 pub fn unsigned_integer(input: &mut &str) -> InnerResult<usize> {
     // The following character must be ascii.
-    let next_char = input.chars().next().ok_or(ErrorKind::EndOfInput)?;
+    let next_char = input.chars().next().ok_or(ErrorKind::Number)?;
     if next_char.is_ascii_digit() {
         return Ok(decimal(input));
     }
     *input = &input[1..];
     match next_char {
         '`' => {
-            let mut next_byte = *input.as_bytes().first().ok_or(ErrorKind::EndOfInput)?;
+            let mut next_byte = *input.as_bytes().first().ok_or(ErrorKind::Number)?;
             if next_byte == b'\\' {
                 *input = &input[1..];
-                next_byte = *input.as_bytes().first().ok_or(ErrorKind::EndOfInput)?;
+                next_byte = *input.as_bytes().first().ok_or(ErrorKind::Number)?;
             }
             if next_byte.is_ascii() {
                 *input = &input[1..];
@@ -434,7 +430,7 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
             Ok(Token::ControlSequence(rhs_control_sequence(input)?))
         }
         Some('%') => {
-            let (_, rest) = input.split_once('\n').ok_or(ErrorKind::EndOfInput)?;
+            let (_, rest) = input.split_once('\n').unwrap_or(("", &input[input.len()..]));
             *input = rest;
             token(input)
         }
@@ -443,7 +439,7 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
             *input = input.split_at(c.len_utf8()).1;
             Ok(Token::Character(CharToken::from_str(context)))
         }
-        None => Err(ErrorKind::EndOfInput),
+        None => Err(ErrorKind::Token),
     }
 }
 
