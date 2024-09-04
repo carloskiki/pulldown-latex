@@ -430,7 +430,9 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
             Ok(Token::ControlSequence(rhs_control_sequence(input)?))
         }
         Some('%') => {
-            let (_, rest) = input.split_once('\n').unwrap_or(("", &input[input.len()..]));
+            let (_, rest) = input
+                .split_once('\n')
+                .unwrap_or(("", &input[input.len()..]));
             *input = rest;
             token(input)
         }

@@ -176,7 +176,7 @@ pub(crate) enum ErrorKind {
     NewLine,
     ArrayNoColumns,
     MissingExpansion,
-    Token
+    Token,
 }
 
 impl Display for ErrorKind {

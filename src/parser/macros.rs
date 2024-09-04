@@ -164,8 +164,9 @@ impl<'input> MacroContext<'input> {
                             arguments.push(Err(before));
                             input_rest = &input_rest[before.len()..];
                         } else {
-                            let (before, _) =
-                                input_rest.split_once('{').ok_or(ErrorKind::MacroSuffixNotFound)?;
+                            let (before, _) = input_rest
+                                .split_once('{')
+                                .ok_or(ErrorKind::MacroSuffixNotFound)?;
                             arguments.push(Err(before));
                             input_rest = &input_rest[before.len()..];
                         }
