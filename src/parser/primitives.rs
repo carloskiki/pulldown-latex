@@ -5,9 +5,9 @@ use core::panic;
 
 use crate::event::{
     ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
-    DelimiterSize, DelimiterType, Dimension, DimensionUnit, Event as E, Font, Grouping as G,
-    GroupingKind, Line, MatrixType, RelationContent, ScriptPosition as SP, ScriptType as ST,
-    StateChange as SC, Style as S, Visual as V,
+    DelimiterSize, DelimiterType, Dimension, DimensionUnit, EnvironmentFlow, Event as E, Font,
+    Grouping as G, GroupingKind, Line, MatrixType, RelationContent, ScriptPosition as SP,
+    ScriptType as ST, StateChange as SC, Style as S, Visual as V,
 };
 
 use super::{
@@ -63,7 +63,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                            .as_mut()
                            .expect("we have checked that `allowed_alignment_count` is Some")
                            .increment();
-                        E::Alignment
+                        E::EnvironmentFlow(EnvironmentFlow::Alignment)
                     },
             '&' => return Err(ErrorKind::Alignment),
             '{' => {
@@ -1759,10 +1759,17 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     false
                 };
 
+                let horizontal_lines = lex::horizontal_lines(&mut self.content);
                 let content = lex::group_content(&mut self.content, grouping_kind)?;
                 self.buffer.push(I::Event(E::Begin(environment)));
                 if let Some(style) = style {
                     self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
+                }
+                if horizontal_lines.len() > 0 {
+                    self.buffer
+                        .push(I::Event(E::EnvironmentFlow(EnvironmentFlow::StartLines {
+                            lines: horizontal_lines,
+                        })));
                 }
                 self.buffer.extend([
                     I::SubGroup {
@@ -1790,27 +1797,11 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                         None
                     };
 
-                let mut horizontal_lines = Vec::new();
-                while let Some((rest, line)) = self
-                    .content
-                    .trim_start()
-                    .strip_prefix("\\hline")
-                    .map(|rest| (rest, Line::Solid))
-                    .or_else(|| {
-                        self.content
-                            .trim_start()
-                            .strip_prefix("\\hdashline")
-                            .map(|rest| (rest, Line::Dashed))
-                    })
-                {
-                    horizontal_lines.push(line);
-                    self.content = rest;
-                }
-
-                E::NewLine {
+                let horizontal_lines = lex::horizontal_lines(&mut self.content);
+                E::EnvironmentFlow(EnvironmentFlow::NewLine {
                     spacing: additional_space,
-                    horizontal_lines: horizontal_lines.into_boxed_slice(),
-                }
+                    horizontal_lines,
+                })
             }
             "\\" | "cr" => return Err(ErrorKind::NewLine),
 

@@ -41,11 +41,17 @@ use std::fmt::Display;
 /// ```
 /// # use pulldown_latex::event::{Event, Content, Grouping, ScriptType, ScriptPosition};
 /// [
-///     Event::Script { ty: ScriptType::SubSuperscript, position: ScriptPosition::Right },
+///     Event::Script {
+///         ty: ScriptType::SubSuperscript,
+///         position: ScriptPosition::Right,
+///     },
 ///     Event::Begin(Grouping::Normal),
 ///     Event::Content(Content::Text("max")),
 ///     Event::End,
-///     Event::Content(Content::Ordinary { content: 'x', stretchy: false }),
+///     Event::Content(Content::Ordinary {
+///         content: 'x',
+///         stretchy: false,
+///     }),
 /// ];
 /// ```
 #[derive(Debug, Clone, PartialEq)]
@@ -83,19 +89,10 @@ pub enum Event<'a> {
     ///
     /// This state change only applies to the current group nesting and deeper groups.
     StateChange(StateChange),
-    /// This event specifies an alignment mark in a mathematical environment.
-    ///
-    /// This event is only emitted when inside a `Grouping` that allows it.
-    Alignment,
-    /// This event specifies a line break in a mathematical environment.
-    ///
-    /// This event is only emitted when inside a `Grouping` that allows it.
-    NewLine {
-        /// The amount of space to add after the line break.
-        spacing: Option<Dimension>,
-        /// The horizontal lines to draw after the line break.
-        horizontal_lines: Box<[Line]>,
-    },
+
+    /// This is a flow event that is emitted in mathematical environments such as `align*` or
+    /// `cases`.
+    EnvironmentFlow(EnvironmentFlow),
 }
 
 /// Base events that produce `mathml` nodes
@@ -321,8 +318,8 @@ pub enum Grouping {
     /// Grouping::Array(Box::new([
     ///     ArrayColumn::Column(ColumnAlignment::Left),
     ///     ArrayColumn::Column(ColumnAlignment::Center),
-    ///     ArrayColumn::Column(ColumnAlignment::Right)
-    ///]));
+    ///     ArrayColumn::Column(ColumnAlignment::Right),
+    /// ]));
     /// ```
     /// ## Invariant
     ///
@@ -387,6 +384,97 @@ impl Grouping {
     pub(crate) fn is_math_env(&self) -> bool {
         !matches!(self, Self::Normal | Self::LeftRight(_, _))
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum EnvironmentFlow {
+    /// This event specifies an alignment mark in a mathematical environment.
+    ///
+    /// This event is only emitted when inside a `Grouping` that allows it.
+    Alignment,
+    /// This event specifies a line break in a mathematical environment.
+    ///
+    /// This event is only emitted when inside a of `Grouping` that allows it.
+    NewLine {
+        /// The amount of space to add after the line break.
+        spacing: Option<Dimension>,
+        /// The horizontal lines to draw after the line break.
+        horizontal_lines: Box<[Line]>,
+    },
+
+    /// This event is emitted specifically when an environment begins with horizontal lines
+    /// as the first element.
+    ///
+    /// ### Examples
+    /// ```
+    /// use pulldown_latex::{
+    ///     event::{ArrayColumn, ColumnAlignment, Content, EnvironmentFlow, Event, Grouping, Line},
+    ///     Parser, Storage,
+    /// };
+    ///
+    /// const INPUT: &str = r#"\begin{array}{|c|c|c|} \hline a & b & c \\ \hline d & e & f \\
+    /// \hline \end{array}"#;
+    ///
+    /// let storage = Storage::new();
+    /// let mut parser = Parser::new(INPUT, &storage);
+    /// let events = parser.collect::<Result<Vec<_>, _>>().unwrap();
+    ///
+    /// assert_eq!(
+    ///     events,
+    ///     vec![
+    ///         Event::Begin(Grouping::Array(Box::new([
+    ///             ArrayColumn::Separator(Line::Solid),
+    ///             ArrayColumn::Column(ColumnAlignment::Center),
+    ///             ArrayColumn::Separator(Line::Solid),
+    ///             ArrayColumn::Column(ColumnAlignment::Center),
+    ///             ArrayColumn::Separator(Line::Solid),
+    ///             ArrayColumn::Column(ColumnAlignment::Center),
+    ///             ArrayColumn::Separator(Line::Solid),
+    ///         ]))),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::StartLines {
+    ///             lines: Box::new([Line::Solid]),
+    ///         }),
+    ///         Event::Content(Content::Ordinary {
+    ///             content: 'a',
+    ///             stretchy: false,
+    ///         }),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::Alignment),
+    ///         Event::Content(Content::Ordinary {
+    ///             content: 'b',
+    ///             stretchy: false,
+    ///         }),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::Alignment),
+    ///         Event::Content(Content::Ordinary {
+    ///             content: 'c',
+    ///             stretchy: false,
+    ///         }),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::NewLine {
+    ///             spacing: None,
+    ///             horizontal_lines: Box::new([Line::Solid]),
+    ///         }),
+    ///         Event::Content(Content::Ordinary {
+    ///             content: 'd',
+    ///             stretchy: false,
+    ///         }),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::Alignment),
+    ///         Event::Content(Content::Ordinary {
+    ///             content: 'e',
+    ///             stretchy: false,
+    ///         }),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::Alignment),
+    ///         Event::Content(Content::Ordinary {
+    ///             content: 'f',
+    ///             stretchy: false,
+    ///         }),
+    ///         Event::EnvironmentFlow(EnvironmentFlow::NewLine {
+    ///             spacing: None,
+    ///             horizontal_lines: Box::new([Line::Solid]),
+    ///         }),
+    ///         Event::End,
+    ///     ]
+    /// );
+    /// ```
+    StartLines { lines: Box<[Line]> },
 }
 
 #[derive(Debug, Clone, Copy)]

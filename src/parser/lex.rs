@@ -1,4 +1,4 @@
-use crate::event::{DelimiterType, Dimension, DimensionUnit, Glue, GroupingKind};
+use crate::event::{DelimiterType, Dimension, DimensionUnit, Glue, GroupingKind, Line};
 
 use super::{
     tables::{primitive_color, token_to_delim},
@@ -456,6 +456,26 @@ pub fn color(color: &str) -> Option<(u8, u8, u8)> {
         None => primitive_color(color),
         _ => None,
     }
+}
+
+pub fn horizontal_lines(content: &mut &str) -> Box<[Line]> {
+    let mut horizontal_lines = Vec::new();
+    while let Some((rest, line)) = content
+        .trim_start()
+        .strip_prefix("\\hline")
+        .map(|rest| (rest, Line::Solid))
+        .or_else(|| {
+            content
+                .trim_start()
+                .strip_prefix("\\hdashline")
+                .map(|rest| (rest, Line::Dashed))
+        })
+    {
+        horizontal_lines.push(line);
+        *content = rest;
+    }
+
+    horizontal_lines.into()
 }
 
 #[cfg(test)]

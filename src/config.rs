@@ -73,7 +73,6 @@ impl<'a> Default for RenderConfig<'a> {
 /// | `ISO`     | _italic_   | _italic_   | _italic_   | _italic_   |
 /// | `French`  | _italic_   | upright    | upright    | upright    |
 /// | `Upright` | upright    | upright    | upright    | upright    |
-///
 #[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum MathStyle {
     /// The default style used in TeX.

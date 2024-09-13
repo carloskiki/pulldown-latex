@@ -6,17 +6,74 @@
 <meta charset="UTF-8">
 <link rel="stylesheet" type="text/css" href="/Users/charles/Code/rust/pulldown-latex/tests/out/cross-browser.css"></head>
 <body>
-<table style="margin: auto;"><tr><th>Input</th><th>Chrome</th><th>Firefox</th><th>Safari</th></tr><tr><th colspan="4">Basic</th></tr><tr><td class="input">5 + 5 = 10
-</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/basic.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/basic.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/basic.png"></td></tr><tr><th colspan="4">Colors</th></tr><tr><td class="input">\fcolorbox{red}{blue}{\textcolor{white}{a + b = c}}
+<table style="margin: auto;"><tr><th>Input</th><th>Chrome</th><th>Firefox</th><th>Safari</th></tr><tr><th colspan="4">Align</th></tr><tr><td class="input">\begin{align}
+    a &= b + c \\
+    d &= e + f
+\end{align}
+\begin{align*}
+    a &= b + c \\
+    d &= e + f
+\end{align*}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/align.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/align.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/align.png"></td></tr><tr><th colspan="4">Alignat</th></tr><tr><td class="input">\begin{alignat}{2}
+    a &= b + c & d &= e + f \\
+    g &= h + i & j &= k + l
+\end{alignat}
+\begin{alignat*}{2}
+    a &= b + c & d &= e + f \\
+    g &= h + i & j &= k + l
+\end{alignat*}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/alignat.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/alignat.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/alignat.png"></td></tr><tr><th colspan="4">Aligned</th></tr><tr><td class="input">\begin{aligned}
+    a &= b + c \\
+    d &= e + f
+\end{aligned}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/aligned.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/aligned.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/aligned.png"></td></tr><tr><th colspan="4">Alignedat</th></tr><tr><td class="input">\begin{alignedat}{2}
+    a &= b + c & d &= e + f \\
+    g &= h + i & j &= k + l
+\end{alignedat}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/alignedat.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/alignedat.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/alignedat.png"></td></tr><tr><th colspan="4">Basic</th></tr><tr><td class="input">5 + 5 = 10
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/basic.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/basic.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/basic.png"></td></tr><tr><th colspan="4">Cases</th></tr><tr><td class="input">\begin{cases}
+    1 & \text{if } x \ge 0 \\
+    0 & \text{if } x < 0
+\end{cases}
+\begin{rcases}
+    a & \text{if } x \ge 0 \\
+    b & \text{if } x < 0
+\end{rcases}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/cases.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/cases.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/cases.png"></td></tr><tr><th colspan="4">Colors</th></tr><tr><td class="input">\fcolorbox{red}{blue}{\textcolor{white}{a + b = c}}
 </td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/colors.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/colors.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/colors.png"></td></tr><tr><th colspan="4">Complex Array</th></tr><tr><td class="input">\begin{array}{||c|c::c|c||}
+            \hline
             A & B & C & D \\ \hdashline
             1 & 2 & 3 & 4 \\ \hline
             5 & 6 & 7 & 8 \\
             9 & 10 & 11 & 12
             \end{array}
-</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/complex_array.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/complex_array.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/complex_array.png"></td></tr><tr><th colspan="4">Negations</th></tr><tr><td class="input">\not\smallint a + b {5\not +}
-b \not + a
-\not\sum_{i=0}^n i = n (n + 1) / 2
-\not f (x) + \not g ( \not x)
-</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/negations.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/negations.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/negations.png"></td></tr></table></body>
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/complex_array.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/complex_array.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/complex_array.png"></td></tr><tr><th colspan="4">Gather</th></tr><tr><td class="input">\begin{gather}
+    a = b + c \\
+    d = e + f
+\end{gather}
+\begin{gather*}
+    a = b + c \\
+    d = e + f
+\end{gather*}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/gather.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/gather.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/gather.png"></td></tr><tr><th colspan="4">Gathered</th></tr><tr><td class="input">\begin{gathered}
+    a = b + c \\
+    d = e + f
+\end{gathered}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/gathered.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/gathered.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/gathered.png"></td></tr><tr><th colspan="4">Multline</th></tr><tr><td class="input">\begin{multline}
+    a + b + c \\
+    d + e + f
+\end{multline}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/multline.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/multline.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/multline.png"></td></tr><tr><th colspan="4">Split</th></tr><tr><td class="input">\begin{split}
+    a + b + c \\
+    d + e + f
+\end{split}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/split.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/split.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/split.png"></td></tr><tr><th colspan="4">Subarray</th></tr><tr><td class="input">\begin{subarray}{c}
+    a + b \\
+    c + d
+\end{subarray}
+\begin{subarray}{l}
+    a = b \\
+    c = d
+\end{subarray}
+</td><td class="image-container"><img class="chrome-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/chrome/subarray.png"></td><td class="image-container"><img class="firefox-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/firefox/subarray.png"></td><td class="image-container"><img class="safari-img" src="/Users/charles/Code/rust/pulldown-latex/tests/out/screenshots/safari/subarray.png"></td></tr></table></body>
 </html>

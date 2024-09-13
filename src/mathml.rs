@@ -11,8 +11,9 @@ use std::{
 use crate::{
     config::{DisplayMode, RenderConfig},
     event::{
-        ArrayColumn, ColorChange, ColorTarget, ColumnAlignment, Content, DelimiterType, Event,
-        Font, Grouping, Line, ScriptPosition, ScriptType, StateChange, Style, Visual,
+        ArrayColumn, ColorChange, ColorTarget, ColumnAlignment, Content, DelimiterType,
+        EnvironmentFlow, Event, Font, Grouping, Line, ScriptPosition, ScriptType, StateChange,
+        Style, Visual,
     },
 };
 
@@ -162,6 +163,18 @@ where
                     };
                 }
 
+                macro_rules! env_horizontal_lines {
+                    () => {
+                        if let Some(Ok(Event::EnvironmentFlow(EnvironmentFlow::StartLines {
+                            lines,
+                        }))) = self.input.peek_first()
+                        {
+                            env_horizontal_lines(&mut self.writer, lines)?;
+                            self.input.next();
+                        }
+                    };
+                }
+
                 let env_group = match grouping {
                     Grouping::Normal => EnvGrouping::Normal,
                     Grouping::LeftRight(opening, closing) => {
@@ -182,7 +195,9 @@ where
                         if eq_numbers {
                             self.writer.write_all(b" menv-with-eqn")?;
                         }
-                        self.writer.write_all(b"\"><mtr><mtd>")?;
+                        self.writer.write_all(b"\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Align
                     }
                     Grouping::Matrix { alignment } => {
@@ -192,7 +207,9 @@ where
                             ColumnAlignment::Center => b"\"",
                             ColumnAlignment::Right => b" menv-cells-right\"",
                         })?;
-                        self.writer.write_all(b"><mtr><mtd>")?;
+                        self.writer.write_all(b"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Matrix
                     }
                     Grouping::Cases { left } => {
@@ -200,9 +217,10 @@ where
                         if left {
                             self.writer.write_all(b"<mo stretchy=\"true\">{</mo>")?;
                         }
-                        self.writer.write_all(
-                            b"<mtable class=\"menv-cells-left menv-cases\"><mtr><mtd>",
-                        )?;
+                        self.writer
+                            .write_all(b"<mtable class=\"menv-cells-left menv-cases\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Cases {
                             left,
                             used_align: false,
@@ -210,7 +228,9 @@ where
                     }
                     Grouping::Array(cols) => {
                         self.writer
-                            .write_all(b"<mtable class=\"menv-arraylike\"><mtr>")?;
+                            .write_all(b"<mtable class=\"menv-arraylike\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b">")?;
                         let index = array_newline(&mut self.writer, &cols)?;
                         EnvGrouping::Array {
                             cols,
@@ -219,7 +239,9 @@ where
                     }
                     Grouping::Aligned => {
                         self.writer
-                            .write_all(b"<mtable class=\"menv-alignlike menv-align\"><mtr><mtd>")?;
+                            .write_all(b"<mtable class=\"menv-alignlike menv-align\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Align
                     }
                     Grouping::SubArray { alignment } => {
@@ -233,7 +255,9 @@ where
                                 self.writer.write_all(b" class=\"menv-cells-right\"")?
                             }
                         }
-                        self.writer.write_all(b"><mtr><mtd>")?;
+                        self.writer.write_all(b"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::SubArray
                     }
                     Grouping::Alignat { pairs, eq_numbers } => {
@@ -241,7 +265,9 @@ where
                         if eq_numbers {
                             self.writer.write_all(b" menv-with-eqn")?;
                         }
-                        self.writer.write_all(b"\"><mtr><mtd>")?;
+                        self.writer.write_all(b"\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Alignat {
                             pairs,
                             columns_used: 0,
@@ -249,7 +275,9 @@ where
                     }
                     Grouping::Alignedat { pairs } => {
                         self.writer.write_all(b"<mtable class=\"menv-alignlike\"")?;
-                        self.writer.write_all(b"><mtr><mtd>")?;
+                        self.writer.write_all(b"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Alignat {
                             pairs,
                             columns_used: 0,
@@ -260,21 +288,29 @@ where
                         if eq_numbers {
                             self.writer.write_all(b" class=\"menv-with-eqn\"")?;
                         }
-                        self.writer.write_all(b"><mtr><mtd>")?;
+                        self.writer.write_all(b"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Gather
                     }
                     Grouping::Gathered => {
-                        self.writer.write_all(b"<mtable><mtr><mtd>")?;
+                        self.writer.write_all(b"<mtable><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Gather
                     }
                     Grouping::Multline => {
                         self.writer
-                            .write_all(b"<mtable class=\"menv-multline\"><mtr><mtd>")?;
+                            .write_all(b"<mtable class=\"menv-multline\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Multline
                     }
                     Grouping::Split => {
                         self.writer
-                            .write_all(b"<mtable class=\"menv-alignlike\"><mtr><mtd>")?;
+                            .write_all(b"<mtable class=\"menv-alignlike\"><mtr")?;
+                        env_horizontal_lines!();
+                        self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Split { used_align: false }
                     }
                     Grouping::Equation { .. } => todo!(),
@@ -413,10 +449,10 @@ where
                 self.handle_state_change(state_change);
                 Ok(())
             }
-            Ok(Event::NewLine {
+            Ok(Event::EnvironmentFlow(EnvironmentFlow::NewLine {
                 spacing,
                 horizontal_lines,
-            }) => {
+            })) => {
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
 
@@ -443,19 +479,7 @@ where
                             .write_all(b"<mtd class=\"menv-nonumber\"></mtd></mtr><mtr")?;
                     }
                 }
-                let mut iter = horizontal_lines.iter();
-                if let Some(last_line) = iter.next_back() {
-                    iter.try_for_each(|line| {
-                        self.writer.write_all(match line {
-                            Line::Solid => b" class=\"menv-hline\"></mtr><mtr",
-                            Line::Dashed => b" class=\"menv-hdashline\"></mtr><mtr",
-                        })
-                    })?;
-                    self.writer.write_all(match last_line {
-                        Line::Solid => b" class=\"menv-hline\"",
-                        Line::Dashed => b" class=\"menv-hdashline\"",
-                    })?;
-                };
+                env_horizontal_lines(&mut self.writer, &horizontal_lines)?;
 
                 match self.env_stack.last_mut() {
                     Some(Environment::Group(
@@ -485,7 +509,7 @@ where
                     _ => panic!("newline not allowed in current environment"),
                 }
             }
-            Ok(Event::Alignment) => {
+            Ok(Event::EnvironmentFlow(EnvironmentFlow::Alignment)) => {
                 *self.state_stack.last_mut().expect("state stack is empty") = State::default();
                 self.previous_atom = None;
                 match self.env_stack.last_mut() {
@@ -511,6 +535,11 @@ where
                     _ => panic!("alignment not allowed in current environment"),
                 }
             }
+
+            Ok(Event::EnvironmentFlow(EnvironmentFlow::StartLines { .. })) => {
+                panic!("unexpected StartLines event found")
+            }
+
             Err(e) => {
                 let error_color = self.config.error_color;
                 write!(
@@ -780,7 +809,7 @@ where
                     | Event::Visual(Visual::Negation)
                     | Event::Script { .. },
                 ) => continue,
-                Ok(Event::End | Event::NewLine { .. } | Event::Alignment) | Err(_) => None,
+                Ok(Event::End | Event::EnvironmentFlow(_)) | Err(_) => None,
                 Ok(Event::Visual(_) | Event::Begin(_)) => Some(Atom::Inner),
                 Ok(Event::Content(content)) => match content {
                     Content::BinaryOp { .. } => Some(Atom::Bin),
@@ -1009,6 +1038,27 @@ fn array_close_line<W: Write>(writer: &mut W, rest_cols: &[ArrayColumn]) -> io::
             })
         })?;
     writer.write_all(b"</mtr><mtr")
+}
+
+fn env_horizontal_lines<W: Write>(writer: &mut W, lines: &[Line]) -> io::Result<()> {
+    let mut iter = lines.iter();
+    if let Some(last_line) = iter.next_back() {
+        iter.try_for_each(|line| {
+            writer.write_all(match line {
+                Line::Solid => {
+                    b" class=\"menv-hline\"><mtd class=\"menv-nonumber\"></mtd></mtr><mtr"
+                }
+                Line::Dashed => {
+                    b" class=\"menv-hdashline\"><mtd class=\"menv-nonumber\"></mtd></mtr><mtr"
+                }
+            })
+        })?;
+        writer.write_all(match last_line {
+            Line::Solid => b" class=\"menv-hline\"",
+            Line::Dashed => b" class=\"menv-hdashline\"",
+        })?;
+    };
+    Ok(())
 }
 
 enum Atom {

@@ -30,6 +30,7 @@ round_trip! {basic, "5 + 5 = 10", display_mode = DisplayMode::Block}
 round_trip!(
     complex_array,
     r"\begin{array}{||c|c::c|c||}
+            \hline
             A & B & C & D \\ \hdashline
             1 & 2 & 3 & 4 \\ \hline
             5 & 6 & 7 & 8 \\
