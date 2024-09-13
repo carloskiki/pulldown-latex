@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+# [Unreleased]
+
+## Fixed
+
+- `\hline` and `\hdashline` before any content in a math environment.
+
+## Changed
+
+- `Event::Alignment` and `Event::NewLine` were moved to `Event::EnvironmentFlow(EnvironmentFlow::Alignment)`
+    and `Event::EnvironmentFlow(EnvironmentFlow::NewLine)` respectively. (__Breaking Change__)
+
+## Added
+
+- Added the `Event::EnvironmentFlow(EnvironmentFlow::StartLines)` variant, for when the first thing in the environment
+    is a `\hline`/`\hdashline`.
+
 # [0.6.3] - 2024-09-04
 
 ## Added
