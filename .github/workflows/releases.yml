@@ -55,6 +55,8 @@ jobs:
         uses: cargo-bins/cargo-binstall@main
       - name: Install trunk
         run: "cargo binstall --no-confirm trunk"
+      - name: Install tailwindcss
+        run: "npm install -g tailwindcss"
       - name: Build website
         run: "cd site && trunk build"
       - name: Deploy 🚀

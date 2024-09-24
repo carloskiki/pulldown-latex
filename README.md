@@ -29,19 +29,23 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 
 ### To Test
 - [x] All the things `temml` and `katex` test
+- [ ] Comments
 - [ ] Errors
 - [ ] Cargo Mutants
 
 ### TODO's/Known Bugs
-- [ ] array `\hline` and `\hdashline` before any content.
-- [ ] Test comments
+- [x] array `\hline` and `\hdashline` before any content.
+- [ ] Publish to npm.
+- [ ] A home page.
 - [ ] raise and lower boxes.
-- [ ] `\sideset`
+- [ ] support `\equation`.
+- [ ] Fix `multline` environment.
 - [ ] `\mathop` and `\mathbin`, etc.
 - [ ] Correctly use the `accent` attribute: https://w3c.github.io/mathml-core/#dfn-accent
 - [ ] Match the `mathml` API to `pulldown-cmark`s API.
 - [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
 - [ ] Italic numbers are not italic because they do not exist in unicode.
+- [ ] `\sideset`
 
 ## Unsupported Plain-TeX & LaTeX behavior
 
