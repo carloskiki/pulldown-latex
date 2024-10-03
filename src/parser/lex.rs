@@ -70,6 +70,7 @@ pub fn group_content<'a>(input: &mut &'a str, grouping_kind: GroupingKind) -> In
     let mut depth = 0u32;
     let bytes = input.as_bytes();
     while escaped || depth > 0 || !bytes[index..].starts_with(end.as_bytes()) {
+        println!("{} + {} > {}", index, end.len(), &input);
         if index + end.len() > input.len() {
             *input = &input[input.len()..];
             return Err(ErrorKind::UnbalancedGroup(Some(grouping_kind)));
@@ -90,10 +91,9 @@ pub fn group_content<'a>(input: &mut &'a str, grouping_kind: GroupingKind) -> In
         match bytes[index] {
             b'\\' => escaped = !escaped,
             b'%' if !escaped => {
-                let rest_pos = bytes[index..]
-                    .iter()
-                    .position(|&c| c == b'\n')
-                    .unwrap_or(bytes.len());
+                let Some(rest_pos) = bytes[index..].iter().position(|&c| c == b'\n') else {
+                    return Err(ErrorKind::UnbalancedGroup(Some(grouping_kind)));
+                };
                 index += rest_pos;
             }
             _ => escaped = false,

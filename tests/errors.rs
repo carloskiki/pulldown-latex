@@ -1,4 +1,4 @@
-use pulldown_latex::push_mathml;
+use pulldown_latex::{push_mathml, Parser, Storage};
 
 macro_rules! should_error {
     ($name:ident, $($input:literal),+ $(,)?) => {
@@ -32,4 +32,18 @@ should_error! {
     r"a_b^c_d",
     r"a^b_c_d",
     r"a_b^c_d^e",
+}
+
+#[test]
+fn comments() {
+    let s = r#"{%"#;
+    let storage = Storage::new();
+    let parser = Parser::new(s, &storage);
+    let mut mathml = String::new();
+    let config = Default::default();
+
+    match push_mathml(&mut mathml, parser, config) {
+        Ok(()) => println!("{}", mathml),
+        Err(e) => eprintln!("Error while rendering: {}", e),
+    }
 }
