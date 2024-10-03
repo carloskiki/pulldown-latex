@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Fixed
 
+- Fix comments parsing inside of environments and groups.
 - `\hline` and `\hdashline` before any content in a math environment.
 
 ## Changed
