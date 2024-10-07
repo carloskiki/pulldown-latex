@@ -16,7 +16,7 @@ bumpalo = { version = "3.16", features = ["collections"] }
 
 [dev-dependencies]
 anyhow = "1"
-libtest-mimic = "0.8"
+libtest-mimic = "0.8.1"
 heck = "0.5"
 inventory = "0.3"
 tempfile = "3"
