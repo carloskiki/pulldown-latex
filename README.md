@@ -30,14 +30,14 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 ### To Test
 - [x] All the things `temml` and `katex` test
 - [ ] Errors
+- [ ] Comments parsing
+- [ ] _we would really benefit from having a fuzzer_.
 - [ ] Cargo Mutants
 
 ### TODO's/Known Bugs
-- [ ] array `\hline` and `\hdashline` before any content.
-- [ ] Test comments
 - [ ] raise and lower boxes.
 - [ ] `\sideset`
-- [ ] `\mathop` and `\mathbin`, etc.
+- [ ] `\mathop`, `\mathbin`, etc.
 - [ ] Correctly use the `accent` attribute: https://w3c.github.io/mathml-core/#dfn-accent
 - [ ] Match the `mathml` API to `pulldown-cmark`s API.
 - [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
