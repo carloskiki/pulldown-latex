@@ -14,8 +14,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## Changed
 
-- `Event::Alignment` and `Event::NewLine` were moved to `Event::EnvironmentFlow(EnvironmentFlow::Alignment)`
-    and `Event::EnvironmentFlow(EnvironmentFlow::NewLine)` respectively. (__Breaking Change__)
+- __Breaking Change__: `Event::Alignment` and `Event::NewLine` were moved to
+    `Event::EnvironmentFlow(EnvironmentFlow::Alignment)` and
+    `Event::EnvironmentFlow(EnvironmentFlow::NewLine)` respectively.
 
 ## Added
 

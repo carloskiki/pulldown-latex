@@ -31,6 +31,7 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 - [x] All the things `temml` and `katex` test
 - [ ] Errors
 - [ ] Comments parsing
+- [ ] _we would really benefit from having a fuzzer_.
 - [ ] Cargo Mutants
 
 ### TODO's/Known Bugs
