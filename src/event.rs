@@ -90,8 +90,8 @@ pub enum Event<'a> {
     /// This state change only applies to the current group nesting and deeper groups.
     StateChange(StateChange),
 
-    /// This is a flow event that is emitted in mathematical environments such as `align*` or
-    /// `cases`.
+    /// This is a flow event that is emitted in mathematical environments such as `align`,
+    /// `cases`, `array`, etc.
     EnvironmentFlow(EnvironmentFlow),
 }
 
