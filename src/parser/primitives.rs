@@ -1668,12 +1668,12 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     }
                     "equation" => (
                         G::Equation { eq_numbers: true },
-                        u16::MAX,
+                        0,
                         GroupingKind::Equation { eq_numbers: true },
                     ),
                     "equation*" => (
                         G::Equation { eq_numbers: false },
-                        u16::MAX,
+                        0,
                         GroupingKind::Equation { eq_numbers: false },
                     ),
                     "align" => (

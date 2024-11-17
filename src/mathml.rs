@@ -313,7 +313,14 @@ where
                         self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Split { used_align: false }
                     }
-                    Grouping::Equation { .. } => todo!(),
+                    Grouping::Equation { eq_numbers } => {
+                        self.writer.write_all(b"<mtable")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" class=\"menv-with-eqn\"")?;
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Equation
+                    },
                 };
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
@@ -349,6 +356,7 @@ where
                     | EnvGrouping::SubArray
                     | EnvGrouping::Gather
                     | EnvGrouping::Multline
+                    | EnvGrouping::Equation
                     | EnvGrouping::Split { .. }
                     | EnvGrouping::Alignat { .. } => {
                         self.writer.write_all(b"</mtd></mtr></mtable>")
@@ -505,6 +513,10 @@ where
                         *columns_used = 0;
                         self.writer.write_all(b"><mtd>")
                     }
+
+                    // LaTeX does _nothing_ when a newline is encountered in an eqution, we do the
+                    // same thing.
+                    Some(Environment::Group(EnvGrouping::Equation)) => Ok(()),
 
                     _ => panic!("newline not allowed in current environment"),
                 }
@@ -1098,6 +1110,7 @@ enum EnvGrouping {
     Split {
         used_align: bool,
     },
+    Equation,
 }
 
 #[derive(Debug, Clone, PartialEq)]
