@@ -461,13 +461,17 @@ where
                 spacing,
                 horizontal_lines,
             })) => {
-                *self.state_stack.last_mut().expect("state stack is empty") = State::default();
+                *self.state_stack.last_mut().expect("state stack should not be empty") = State::default();
                 self.previous_atom = None;
 
                 if let Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) =
                     self.env_stack.last()
                 {
                     array_close_line(&mut self.writer, &cols[*cols_index..])?;
+                } else if let Some(Environment::Group(EnvGrouping::Equation { .. })) = self.env_stack.last() {
+                    // LaTeX does _nothing_ when a newline is encountered in an eqution, we do the
+                    // same thing.
+                    return Ok(());
                 } else {
                     self.writer.write_all(b"</mtd></mtr><mtr")?;
                 }
@@ -513,10 +517,6 @@ where
                         *columns_used = 0;
                         self.writer.write_all(b"><mtd>")
                     }
-
-                    // LaTeX does _nothing_ when a newline is encountered in an eqution, we do the
-                    // same thing.
-                    Some(Environment::Group(EnvGrouping::Equation)) => Ok(()),
 
                     _ => panic!("newline not allowed in current environment"),
                 }
