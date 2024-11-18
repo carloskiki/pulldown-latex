@@ -313,7 +313,14 @@ where
                         self.writer.write_all(b"><mtd>")?;
                         EnvGrouping::Split { used_align: false }
                     }
-                    Grouping::Equation { .. } => todo!(),
+                    Grouping::Equation { eq_numbers } => {
+                        self.writer.write_all(b"<mtable")?;
+                        if eq_numbers {
+                            self.writer.write_all(b" class=\"menv-with-eqn\"")?;
+                        }
+                        self.writer.write_all(b"><mtr><mtd>")?;
+                        EnvGrouping::Equation
+                    }
                 };
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
@@ -349,6 +356,7 @@ where
                     | EnvGrouping::SubArray
                     | EnvGrouping::Gather
                     | EnvGrouping::Multline
+                    | EnvGrouping::Equation
                     | EnvGrouping::Split { .. }
                     | EnvGrouping::Alignat { .. } => {
                         self.writer.write_all(b"</mtd></mtr></mtable>")
@@ -453,13 +461,22 @@ where
                 spacing,
                 horizontal_lines,
             })) => {
-                *self.state_stack.last_mut().expect("state stack is empty") = State::default();
+                *self
+                    .state_stack
+                    .last_mut()
+                    .expect("state stack should not be empty") = State::default();
                 self.previous_atom = None;
 
                 if let Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) =
                     self.env_stack.last()
                 {
                     array_close_line(&mut self.writer, &cols[*cols_index..])?;
+                } else if let Some(Environment::Group(EnvGrouping::Equation { .. })) =
+                    self.env_stack.last()
+                {
+                    // LaTeX does _nothing_ when a newline is encountered in an eqution, we do the
+                    // same thing.
+                    return Ok(());
                 } else {
                     self.writer.write_all(b"</mtd></mtr><mtr")?;
                 }
@@ -1098,6 +1115,7 @@ enum EnvGrouping {
     Split {
         used_align: bool,
     },
+    Equation,
 }
 
 #[derive(Debug, Clone, PartialEq)]
