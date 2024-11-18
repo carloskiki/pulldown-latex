@@ -320,7 +320,7 @@ where
                         }
                         self.writer.write_all(b"><mtr><mtd>")?;
                         EnvGrouping::Equation
-                    },
+                    }
                 };
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
@@ -461,14 +461,19 @@ where
                 spacing,
                 horizontal_lines,
             })) => {
-                *self.state_stack.last_mut().expect("state stack should not be empty") = State::default();
+                *self
+                    .state_stack
+                    .last_mut()
+                    .expect("state stack should not be empty") = State::default();
                 self.previous_atom = None;
 
                 if let Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) =
                     self.env_stack.last()
                 {
                     array_close_line(&mut self.writer, &cols[*cols_index..])?;
-                } else if let Some(Environment::Group(EnvGrouping::Equation { .. })) = self.env_stack.last() {
+                } else if let Some(Environment::Group(EnvGrouping::Equation { .. })) =
+                    self.env_stack.last()
+                {
                     // LaTeX does _nothing_ when a newline is encountered in an eqution, we do the
                     // same thing.
                     return Ok(());

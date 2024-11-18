@@ -131,17 +131,16 @@ round_trip! {
     d + e + f
 \end{split}"#,
 }
+round_trip! {
+    equation,
+r#"\begin{equation}
+    a = b + c
+\end{equation}"#,
+r#"\begin{equation*}
+    a = b + c
+\end{equation*}"#,
+}
 round_trip_display! {
     colors,
     r"\fcolorbox{red}{blue}{\textcolor{white}{a + b = c}}"
-}
-
-round_trip! {
-    align,
-r#"\begin{equation}
-    a &= b + c
-\end{equation}"#,
-r#"\begin{equation*}
-    a &= b + c
-\end{equation*}"#,
 }
