@@ -34,6 +34,11 @@ should_error! {
     r"a_b^c_d^e",
 }
 
+should_error! {
+    invalid_escape_sequence,
+    "5\\\u{6eb}%"
+}
+
 #[test]
 fn comments() {
     let s = r#"{%"#;
