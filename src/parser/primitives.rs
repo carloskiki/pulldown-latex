@@ -545,10 +545,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             // TODO: Check the conditions for this op. Does it need to be
             // within a left-right group?
             "middle" => {
-                let delimiter = lex::delimiter(&mut self.content)?;
+                let (content, _) = lex::delimiter(&mut self.content)?;
                 E::Content(C::Delimiter {
-                    content: delimiter.0,
-                    size: Some(DelimiterSize::Big),
+                    content,
+                    size: None,
                     ty: DelimiterType::Fence,
                 })
             }
