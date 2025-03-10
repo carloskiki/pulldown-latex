@@ -24,6 +24,14 @@ fn error_rendering() {
     push_mathml(&mut out, parser, Default::default()).unwrap();
 }
 
+#[test]
+fn error_rendering_unclosed_environment() {
+    let storage = pulldown_latex::Storage::new();
+    let mut out = String::new();
+    let parser = pulldown_latex::parser::Parser::new("\\symit\\\0D", &storage);
+    push_mathml(&mut out, parser, Default::default()).unwrap();
+}
+
 should_error! {
     double_scripts,
     r"a^b^c",

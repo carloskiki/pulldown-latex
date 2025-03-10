@@ -24,6 +24,7 @@ struct MathmlWriter<'a, I: Iterator, W> {
     env_stack: Vec<Environment>,
     state_stack: Vec<State>,
     previous_atom: Option<Atom>,
+    error_recovery: bool,
 }
 
 impl<'a, I, W, E> MathmlWriter<'a, I, W>
@@ -50,6 +51,7 @@ where
             env_stack,
             state_stack,
             previous_atom: None,
+            error_recovery: false,
         }
     }
 
@@ -558,6 +560,7 @@ where
             }
 
             Err(e) => {
+                self.error_recovery = true;
                 let error_color = self.config.error_color;
                 write!(
                     self.writer,
@@ -906,6 +909,28 @@ where
                         }
                     }
                 }
+            }
+        }
+
+        if self.error_recovery {
+            // In error recovery scenario, a tag might not be closed.
+            while let Some(env) = self.env_stack.pop() {
+                let tag = match env {
+                    Environment::Group(_) => {
+                        let _ = self.state_stack.pop();
+                        continue;
+                    },
+                    Environment::Visual { ty, count: _ } => visual_tag( ty),
+                    Environment::Script {
+                        ty,
+                        above_below,
+                        count: _,
+                        fn_application: _,
+                    } => script_tag(ty, above_below),
+                };
+                self.writer.write_all(b"</")?;
+                self.writer.write_all(tag.as_bytes())?;
+                self.writer.write_all(b">")?;
             }
         }
 
