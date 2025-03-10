@@ -209,15 +209,17 @@ pub fn limit_modifiers(input: &mut &str) -> Option<bool> {
 ///
 /// A control sequence can be of the form `\controlsequence`, or `\#` (control symbol).
 pub fn rhs_control_sequence<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
-    if input.is_empty() {
-        return Err(ErrorKind::EmptyControlSequence);
-    }
+    let first_char_byte_count = input
+        .chars()
+        .next()
+        .ok_or(ErrorKind::EmptyControlSequence)?
+        .len_utf8();
 
     let len = input
         .chars()
         .take_while(|c| c.is_ascii_alphabetic())
         .count()
-        .max(1);
+        .max(first_char_byte_count);
 
     let (control_sequence, rest) = input.split_at(len);
     *input = rest.trim_start();
