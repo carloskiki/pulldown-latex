@@ -919,8 +919,8 @@ where
                     Environment::Group(_) => {
                         let _ = self.state_stack.pop();
                         continue;
-                    },
-                    Environment::Visual { ty, count: _ } => visual_tag( ty),
+                    }
+                    Environment::Visual { ty, count: _ } => visual_tag(ty),
                     Environment::Script {
                         ty,
                         above_below,
