@@ -1,6 +1,6 @@
 # pulldown-latex
 
-A pull parser for $\LaTeX$ parsing and `mathml` rendering.
+A pull parser for $\LaTeX$ parsing and `mathml` rendering. 
 
 [__Try it out!__](https://carloskiki.github.io/pulldown-latex/)
 
