@@ -49,9 +49,14 @@ impl ParserError {
                 .unwrap_or(span_stack.input);
 
             if lower_bound > expansion.expansion_length {
-                lower_bound += expansion.call_site_in_origin.start;
-                upper_bound =
-                    (expansion.call_site_in_origin.end + upper_bound).min(next_string.len());
+                lower_bound = floor_char_boundary(
+                    next_string,
+                    lower_bound + expansion.call_site_in_origin.start,
+                );
+                upper_bound = floor_char_boundary(
+                    next_string,
+                    (expansion.call_site_in_origin.end + upper_bound).min(next_string.len()),
+                );
 
                 continue;
             }
