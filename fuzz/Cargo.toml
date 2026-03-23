@@ -19,6 +19,27 @@ tokio = { version = "1", features = ["test-util", "rt-multi-thread", "process", 
 path = ".."
 
 [[bin]]
+name = "parse"
+path = "fuzz_targets/parse.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mathml"
+path = "fuzz_targets/mathml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "quadratic"
+path = "fuzz_targets/quadratic.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
 name = "vs_katex"
 path = "fuzz_targets/vs_katex.rs"
 test = false
