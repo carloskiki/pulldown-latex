@@ -176,6 +176,7 @@ pub(crate) enum ErrorKind {
     NewLine,
     ArrayNoColumns,
     MissingExpansion,
+    MacroRecursionLimit,
     Token,
 }
 
@@ -228,6 +229,7 @@ impl Display for ErrorKind {
             ErrorKind::NewLine => f.write_str("new line command not allowed in current environment"),
             ErrorKind::ArrayNoColumns => f.write_str("array must have at least one column of the type `c`, `l` or `r`"),
             ErrorKind::MissingExpansion => f.write_str("The macro definition is missing an expansion"),
+            ErrorKind::MacroRecursionLimit => f.write_str("macro expansion depth limit exceeded (possible infinite recursion)"),
             ErrorKind::Token => f.write_str("expected a token"),
         }
     }
