@@ -60,3 +60,58 @@ fn comments() {
         Err(e) => eprintln!("Error while rendering: {}", e),
     }
 }
+
+// Regression tests from fuzzing
+
+#[test]
+fn fuzz_macro_param_overflow() {
+    // Issue #44: `then_some` eagerly evaluates `c as u8 - b'0'` causing overflow
+    // when the character after '#' is not an ASCII digit.
+    let storage = Storage::new();
+    let parser = Parser::new("\\def\\]#\x1d{}", &storage);
+    for _ in parser {}
+}
+
+#[test]
+fn fuzz_newline_in_unexpected_env() {
+    // Newline event in an environment that doesn't support it should not panic.
+    let storage = Storage::new();
+    let parser = Parser::new(
+        "\\begin{matrix} \\\x1d\\\\\\frac}1\\\\]\\\\\\\\\\]\\end{matrix}",
+        &storage,
+    );
+    let mut out = String::new();
+    let _ = push_mathml(&mut out, parser, Default::default());
+}
+
+#[test]
+fn fuzz_error_context_char_boundary() {
+    // Error context slicing must respect char boundaries in multi-byte input
+    // with macro expansions.
+    let storage = Storage::new();
+    let parser = Parser::new(
+        "\\newcommand{\\foo}[1]{#1}\\foo{x}\\foo}[1]{#1}\\foo{x}^]_\u{8df7}:",
+        &storage,
+    );
+    for _ in parser {}
+}
+
+#[test]
+fn fuzz_macro_recursion_limit() {
+    // Recursive macro expansion should hit depth limit and error.
+    let storage = Storage::new();
+    let parser = Parser::new(
+        "~zU\\newcommand{\\foo}[2]{#1]\\foo{x}\0#1}\\foo{}}",
+        &storage,
+    );
+    let mut out = String::new();
+    let _ = push_mathml(&mut out, parser, Default::default());
+}
+
+#[test]
+fn fuzz_suffix_bounds_check() {
+    // content_with_suffix must check bounds before accessing the slice.
+    let storage = Storage::new();
+    let parser = Parser::new("\0\\def\\]a#1  {}f\\]ar3c%\\", &storage);
+    for _ in parser {}
+}
