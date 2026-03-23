@@ -58,7 +58,7 @@ impl<'input> MacroContext<'input> {
                 let mut chars = arg.chars();
                 let param_index = chars
                     .next()
-                    .and_then(|c| c.is_ascii_digit().then_some(c as u8 - b'0'))
+                    .and_then(|c| c.is_ascii_digit().then(|| c as u8 - b'0'))
                     .ok_or(ErrorKind::StandaloneHashSign)?;
                 if param_index != i as u8 {
                     return Err(ErrorKind::IncorrectMacroParams(param_index, i as u8));
