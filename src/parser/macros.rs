@@ -235,7 +235,7 @@ impl<'input> MacroContext<'input> {
 fn parse_replacement_text(
     replacement_text: &str,
     parameter_count: u8,
-) -> InnerResult<Vec<ReplacementToken>> {
+) -> InnerResult<Vec<ReplacementToken<'_>>> {
     let mut replacement_splits = replacement_text.split_inclusive('#').peekable();
     let mut replacement_tokens: Vec<ReplacementToken> = Vec::new();
 
