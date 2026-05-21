@@ -49,9 +49,14 @@ impl ParserError {
                 .unwrap_or(span_stack.input);
 
             if lower_bound > expansion.expansion_length {
-                lower_bound += expansion.call_site_in_origin.start;
-                upper_bound =
-                    (expansion.call_site_in_origin.end + upper_bound).min(next_string.len());
+                lower_bound = floor_char_boundary(
+                    next_string,
+                    lower_bound + expansion.call_site_in_origin.start,
+                );
+                upper_bound = floor_char_boundary(
+                    next_string,
+                    (expansion.call_site_in_origin.end + upper_bound).min(next_string.len()),
+                );
 
                 continue;
             }
@@ -176,6 +181,7 @@ pub(crate) enum ErrorKind {
     NewLine,
     ArrayNoColumns,
     MissingExpansion,
+    MacroRecursionLimit,
     Token,
 }
 
@@ -228,6 +234,7 @@ impl Display for ErrorKind {
             ErrorKind::NewLine => f.write_str("new line command not allowed in current environment"),
             ErrorKind::ArrayNoColumns => f.write_str("array must have at least one column of the type `c`, `l` or `r`"),
             ErrorKind::MissingExpansion => f.write_str("The macro definition is missing an expansion"),
+            ErrorKind::MacroRecursionLimit => f.write_str("macro expansion depth limit exceeded (possible infinite recursion)"),
             ErrorKind::Token => f.write_str("expected a token"),
         }
     }

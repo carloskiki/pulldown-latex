@@ -23,6 +23,13 @@ use self::{state::ParserState, storage::Storage};
 
 pub(crate) use error::{ErrorKind, InnerResult, ParserError};
 
+// Guard against infinite macro recursion and excessive
+// expansion. Each expansion allocates in the bump arena
+// which is never freed, so we limit both depth and total
+// expansion bytes to prevent OOM.
+const MAX_EXPANSION_DEPTH: usize = 64;
+const MAX_EXPANSION_BYTES: usize = 1024 * 1024; // 1 MB
+
 /// The parser completes the task of transforming the input `LaTeX` into a symbolic representation,
 /// namely a stream of [`Event`]s.
 ///
@@ -234,7 +241,15 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     self.macro_context
                         .try_expand_in(cs, self.content, self.storage)
                 {
+                    if self.span_stack.expansions.len() >= MAX_EXPANSION_DEPTH
+                        || self.span_stack.total_expansion_bytes >= MAX_EXPANSION_BYTES
+                    {
+                        return Err(ErrorKind::MacroRecursionLimit);
+                    }
+
                     let (new_content, arguments_consumed_length) = result?;
+                    self.span_stack.total_expansion_bytes += new_content.len();
+
                     let call_site_length = cs.len() + arguments_consumed_length + 1;
                     self.span_stack
                         .add(new_content, original_content, call_site_length);
@@ -439,6 +454,8 @@ struct SpanStack<'store> {
     input: &'store str,
     /// Expansions of macros.
     expansions: Vec<ExpansionSpan<'store>>,
+    /// Total bytes allocated by macro expansions (never decremented).
+    total_expansion_bytes: usize,
 }
 
 impl<'store> SpanStack<'store> {
@@ -446,6 +463,7 @@ impl<'store> SpanStack<'store> {
         Self {
             input,
             expansions: Vec::new(),
+            total_expansion_bytes: 0,
         }
     }
 

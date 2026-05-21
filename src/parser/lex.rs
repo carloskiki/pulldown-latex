@@ -109,11 +109,13 @@ pub fn content_with_suffix<'a>(input: &mut &'a str, suffix: &str) -> InnerResult
     let mut escaped = false;
     let mut index = 0;
     let bytes = input.as_bytes();
-    while escaped || !bytes[index..].starts_with(suffix.as_bytes()) {
+    while escaped || {
         if index + suffix.len() > input.len() {
             *input = &input[input.len()..];
             return Err(ErrorKind::MacroSuffixNotFound);
         }
+        !bytes[index..].starts_with(suffix.as_bytes())
+    } {
         match bytes[index] {
             b'\\' => escaped = !escaped,
             b'%' if !escaped => {

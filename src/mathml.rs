@@ -328,12 +328,14 @@ where
                 Ok(())
             }
             Ok(Event::End) => {
-                let env = self
-                    .env_stack
-                    .pop()
-                    .expect("cannot pop an environment in group end");
+                let Some(env) = self.env_stack.pop() else {
+                    self.error_recovery = true;
+                    return Ok(());
+                };
                 let Environment::Group(grouping) = env else {
-                    panic!("unexpected environment in group end");
+                    self.env_stack.push(env);
+                    self.error_recovery = true;
+                    return Ok(());
                 };
                 self.state_stack
                     .pop()
@@ -525,7 +527,10 @@ where
                         self.writer.write_all(b"><mtd>")
                     }
 
-                    _ => panic!("newline not allowed in current environment"),
+                    _ => {
+                        self.error_recovery = true;
+                        Ok(())
+                    }
                 }
             }
             Ok(Event::EnvironmentFlow(EnvironmentFlow::Alignment)) => {
@@ -551,12 +556,16 @@ where
                     Some(Environment::Group(EnvGrouping::Array { cols, cols_index })) => {
                         array_align(&mut self.writer, cols, cols_index)
                     }
-                    _ => panic!("alignment not allowed in current environment"),
+                    _ => {
+                        self.error_recovery = true;
+                        Ok(())
+                    }
                 }
             }
 
             Ok(Event::EnvironmentFlow(EnvironmentFlow::StartLines { .. })) => {
-                panic!("unexpected StartLines event found")
+                self.error_recovery = true;
+                Ok(())
             }
 
             Err(e) => {
@@ -934,8 +943,28 @@ where
             }
         }
 
+        // Clean up any remaining unbalanced state rather than panicking.
+        // This can happen with malformed input that confuses the environment tracking.
         if !self.env_stack.is_empty() || self.state_stack.len() != 1 {
-            panic!("unbalanced environment stack or state stack");
+            while let Some(env) = self.env_stack.pop() {
+                let tag = match env {
+                    Environment::Group(_) => {
+                        let _ = self.state_stack.pop();
+                        continue;
+                    }
+                    Environment::Visual { ty, count: _ } => visual_tag(ty),
+                    Environment::Script {
+                        ty,
+                        above_below,
+                        count: _,
+                        fn_application: _,
+                    } => script_tag(ty, above_below),
+                };
+                self.writer.write_all(b"</")?;
+                self.writer.write_all(tag.as_bytes())?;
+                self.writer.write_all(b">")?;
+            }
+            self.state_stack.truncate(1);
         }
 
         if let Some(annotation) = self.config.annotation {

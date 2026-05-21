@@ -58,7 +58,7 @@ impl<'input> MacroContext<'input> {
                 let mut chars = arg.chars();
                 let param_index = chars
                     .next()
-                    .and_then(|c| c.is_ascii_digit().then_some(c as u8 - b'0'))
+                    .and_then(|c| c.is_ascii_digit().then(|| c as u8 - b'0'))
                     .ok_or(ErrorKind::StandaloneHashSign)?;
                 if param_index != i as u8 {
                     return Err(ErrorKind::IncorrectMacroParams(param_index, i as u8));
@@ -235,7 +235,7 @@ impl<'input> MacroContext<'input> {
 fn parse_replacement_text(
     replacement_text: &str,
     parameter_count: u8,
-) -> InnerResult<Vec<ReplacementToken>> {
+) -> InnerResult<Vec<ReplacementToken<'_>>> {
     let mut replacement_splits = replacement_text.split_inclusive('#').peekable();
     let mut replacement_tokens: Vec<ReplacementToken> = Vec::new();
 
