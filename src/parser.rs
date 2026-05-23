@@ -289,6 +289,21 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         let first_script_start = self.buffer.len();
         let arg = lex::argument(&mut self.content)?;
         self.handle_argument(arg)?;
+
+        // `\limits` / `\nolimits` may also appear between two scripts, e.g.
+        // `\sum^x\limits_y`. Per amsmath, repeated limit modifiers are allowed and
+        // the last one wins; the modifier applies to the operator as a whole,
+        // regardless of its position relative to the scripts.
+        if self.state.allow_script_modifiers {
+            if let Some(limits) = lex::limit_modifiers(&mut self.content) {
+                if limits {
+                    self.state.script_position = ScriptPosition::AboveBelow;
+                } else {
+                    self.state.script_position = ScriptPosition::Right;
+                }
+            }
+        }
+
         let second_script_start = self.buffer.len();
         let next_char = self.content.chars().next();
         if (next_char == Some('_') && !subscript_first)
@@ -297,6 +312,18 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             self.content = &self.content[1..];
             let arg = lex::argument(&mut self.content)?;
             self.handle_argument(arg)?;
+
+            // A trailing `\limits` / `\nolimits` after the second script is also
+            // tolerated and applies to the operator as a whole.
+            if self.state.allow_script_modifiers {
+                if let Some(limits) = lex::limit_modifiers(&mut self.content) {
+                    if limits {
+                        self.state.script_position = ScriptPosition::AboveBelow;
+                    } else {
+                        self.state.script_position = ScriptPosition::Right;
+                    }
+                }
+            }
 
             match self.content.chars().next() {
                 Some('_') => return Err(ErrorKind::DoubleSubscript),
@@ -779,6 +806,110 @@ mod tests {
                 }),
             ]
         );
+    }
+
+    #[test]
+    fn limits_on_int() {
+        // `\int` defaults to `Right`-positioned scripts; `\limits` should force
+        // them above/below.
+        let store = Storage::new();
+        let parser = Parser::new(r"\int\limits_a^b", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::AboveBelow,
+        });
+    }
+
+    #[test]
+    fn nolimits_on_int() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\int\nolimits_a^b", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::Right,
+        });
+    }
+
+    #[test]
+    fn limits_between_scripts() {
+        // `\sum^x\limits_y`: limit modifier appears after the first script. Per
+        // amsmath, it applies to the operator as a whole.
+        let store = Storage::new();
+        let parser = Parser::new(r"\sum^x\limits_y", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::AboveBelow,
+        });
+    }
+
+    #[test]
+    fn nolimits_between_scripts_on_sum() {
+        // `\sum` defaults to `Movable`; `\nolimits` between the scripts must
+        // force `Right`.
+        let store = Storage::new();
+        let parser = Parser::new(r"\sum^x\nolimits_y", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::Right,
+        });
+    }
+
+    #[test]
+    fn limits_repeated_last_wins() {
+        // Multiple modifiers — the last one wins (amsmath §7.3).
+        let store = Storage::new();
+        let parser = Parser::new(r"\sum\nolimits\limits\nolimits_a^b", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::Right,
+        });
+    }
+
+    #[test]
+    fn limits_on_oint() {
+        // `\oint` is a non-`\sum` big operator that defaults to `Right`.
+        let store = Storage::new();
+        let parser = Parser::new(r"\oint\limits_C f", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::Subscript,
+            position: ScriptPosition::AboveBelow,
+        });
+    }
+
+    #[test]
+    fn nolimits_on_underbrace() {
+        // KaTeX/MathJax tolerate `\nolimits` after `\underbrace`, downgrading
+        // its default `AboveBelow` position to `Right`. Without this fix the
+        // parser errored with `unknown primitive command found`.
+        let store = Storage::new();
+        let parser = Parser::new(r"\underbrace{ab}\nolimits_x", &store);
+        let events = parser
+            .collect::<Result<Vec<_>, ParserError>>()
+            .expect("should parse cleanly");
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::Subscript,
+            position: ScriptPosition::Right,
+        });
+    }
+
+    #[test]
+    fn injlim_and_friends_parse() {
+        let store = Storage::new();
+        for src in &[
+            r"\injlim", r"\projlim", r"\varinjlim", r"\varliminf",
+            r"\varlimsup", r"\varprojlim",
+        ] {
+            let parser = Parser::new(src, &store);
+            parser
+                .collect::<Result<Vec<_>, ParserError>>()
+                .unwrap_or_else(|e| panic!("`{}` should parse, but got: {}", src, e));
+        }
     }
 
     #[test]

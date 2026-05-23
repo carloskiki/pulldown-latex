@@ -147,6 +147,36 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.state.script_position = SP::Movable;
                 E::Content(C::Function("lim sup"))
             }
+            "injlim" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("inj lim"))
+            }
+            "projlim" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("proj lim"))
+            }
+            "varliminf" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("lim"))
+            }
+            "varlimsup" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("lim"))
+            }
+            "varinjlim" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("lim"))
+            }
+            "varprojlim" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                E::Content(C::Function("lim"))
+            }
 
             "operatorname" => {
                 self.state.allow_script_modifiers = true;
@@ -641,22 +671,27 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             // Groups
             "overgroup" => {
                 self.state.script_position = SP::AboveBelow;
+                self.state.allow_script_modifiers = true;
                 return self.accent('⏠', true);
             }
             "undergroup" => {
                 self.state.script_position = SP::AboveBelow;
+                self.state.allow_script_modifiers = true;
                 return self.underscript('⏡');
             }
             "overbrace" => {
                 self.state.script_position = SP::AboveBelow;
+                self.state.allow_script_modifiers = true;
                 return self.accent('⏞', true);
             }
             "underbrace" => {
                 self.state.script_position = SP::AboveBelow;
+                self.state.allow_script_modifiers = true;
                 return self.underscript('⏟');
             }
             "underparen" => {
                 self.state.script_position = SP::AboveBelow;
+                self.state.allow_script_modifiers = true;
                 return self.underscript('⏝');
             }
 
