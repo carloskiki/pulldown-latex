@@ -230,6 +230,10 @@ pub enum Font {
     BoldItalic,
     /// The bold font-face.
     Bold,
+    /// The `\boldsymbol` font-face: bold italic for characters that are italic
+    /// by default (Latin letters, lowercase Greek), bold upright for characters
+    /// that are upright by default (capital Greek, digits).
+    BoldSymbol,
     /// The fraktur font-face.
     Fraktur,
     /// The calligraphic font-face.

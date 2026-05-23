@@ -1314,6 +1314,26 @@ impl Font {
             (Font::BoldItalic, '\u{03F1}') => c as u32 + 0x1D363,
             (Font::BoldItalic, '\u{03D6}') => c as u32 + 0x1D37F,
 
+            // Bold Symbol mappings (for \boldsymbol):
+            // Italic-by-default characters become bold italic; upright-by-default
+            // characters (capital Greek, digits) become bold upright.
+            (Font::BoldSymbol, 'A'..='Z') => c as u32 + 0x1D427,
+            (Font::BoldSymbol, 'a'..='z') => c as u32 + 0x1D421,
+            (Font::BoldSymbol, '\u{0391}'..='\u{03A1}' | '\u{03A3}'..='\u{03A9}') => {
+                c as u32 + 0x1D317
+            }
+            (Font::BoldSymbol, '\u{03F4}') => c as u32 + 0x1D2C5,
+            (Font::BoldSymbol, '\u{2207}') => c as u32 + 0x1B52E,
+            (Font::BoldSymbol, '\u{03B1}'..='\u{03C9}') => c as u32 + 0x1D385,
+            (Font::BoldSymbol, '\u{2202}') => c as u32 + 0x1B54D,
+            (Font::BoldSymbol, '\u{03F5}') => c as u32 + 0x1D35B,
+            (Font::BoldSymbol, '\u{03D1}') => c as u32 + 0x1D380,
+            (Font::BoldSymbol, '\u{03F0}') => c as u32 + 0x1D362,
+            (Font::BoldSymbol, '\u{03D5}') => c as u32 + 0x1D37E,
+            (Font::BoldSymbol, '\u{03F1}') => c as u32 + 0x1D363,
+            (Font::BoldSymbol, '\u{03D6}') => c as u32 + 0x1D37F,
+            (Font::BoldSymbol, '0'..='9') => c as u32 + 0x1D79E,
+
             // Bold mappings
             (Font::Bold, 'A'..='Z') => c as u32 + 0x1D3BF,
             (Font::Bold, 'a'..='z') => c as u32 + 0x1D3B9,
@@ -1472,4 +1492,56 @@ where
     E: std::error::Error,
 {
     MathmlWriter::new(parser, writer, config).write()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{parser::Parser, Storage};
+
+    fn render(input: &str) -> String {
+        let storage = Storage::new();
+        let parser = Parser::new(input, &storage);
+        let mut out = String::new();
+        push_mathml(&mut out, parser, RenderConfig::default()).unwrap();
+        out
+    }
+
+    #[test]
+    fn boldsymbol_latin_letters_are_bold_italic() {
+        assert!(render(r"\boldsymbol{a}").contains('\u{1D482}'));
+        assert!(render(r"\boldsymbol{A}").contains('\u{1D468}'));
+    }
+
+    #[test]
+    fn boldsymbol_lowercase_greek_is_bold_italic() {
+        assert!(render(r"\boldsymbol{\alpha}").contains('\u{1D736}'));
+    }
+
+    #[test]
+    fn boldsymbol_capital_greek_is_bold_upright_not_italic() {
+        let out = render(r"\boldsymbol{\Gamma}");
+        assert!(
+            out.contains('\u{1D6AA}'),
+            "expected bold upright Gamma (U+1D6AA), got: {out}"
+        );
+        assert!(
+            !out.contains('\u{1D6E4}'),
+            "must not emit bold italic Gamma (U+1D6E4): {out}"
+        );
+    }
+
+    #[test]
+    fn boldsymbol_digits_are_bold() {
+        assert!(render(r"\boldsymbol{0}").contains('\u{1D7CE}'));
+    }
+
+    #[test]
+    fn boldsymbol_is_distinct_from_mathbf_for_lowercase() {
+        let boldsym = render(r"\boldsymbol{a}");
+        let mathbf = render(r"\mathbf{a}");
+        assert!(boldsym.contains('\u{1D482}'));
+        assert!(mathbf.contains('\u{1D41A}'));
+        assert_ne!(boldsym, mathbf);
+    }
 }

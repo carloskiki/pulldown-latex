@@ -396,9 +396,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" | "boldsymbol" => {
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => {
                 return self.font_group(Some(Font::Bold))
             }
+            "boldsymbol" => return self.font_group(Some(Font::BoldSymbol)),
             "mathcal" | "symcal" | "mathup" | "symup" => {
                 return self.font_group(Some(Font::Script))
             }
