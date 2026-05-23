@@ -707,10 +707,7 @@ round_trip_display!(
 );
 
 // Text-mode logos usable inside math mode.
-round_trip_display!(
-    text_mode_logos,
-    r"\TeX \quad \LaTeX",
-);
+round_trip_display!(text_mode_logos, r"\TeX \quad \LaTeX",);
 
 // `\text{...}` inheriting math-mode font state covers the remaining `mathvariant`
 // branches in the MathML renderer.
