@@ -587,6 +587,9 @@ where
         match content {
             Content::Text(text) => {
                 self.open_tag("mtext", None)?;
+                if let Some(variant) = self.state().font.and_then(font_mathvariant_attr) {
+                    write!(self.writer, " mathvariant=\"{}\"", variant)?;
+                }
                 self.writer.write_all(b">")?;
                 let trimmed = text.trim();
                 if text.starts_with(char::is_whitespace) {
@@ -1287,6 +1290,29 @@ impl<I: Iterator> Iterator for ManyPeek<I> {
     fn next(&mut self) -> Option<Self::Item> {
         self.peeked.pop_front().or_else(|| self.iter.next())
     }
+}
+
+/// MathML 3 `mathvariant` attribute string for a given LaTeX font, used for elements
+/// (like `mtext`) where the variant cannot be encoded by character substitution.
+///
+/// Returns `None` for `Font::UpRight`, since the default `mtext` rendering is upright.
+fn font_mathvariant_attr(font: Font) -> Option<&'static str> {
+    Some(match font {
+        Font::Bold => "bold",
+        Font::Italic => "italic",
+        Font::BoldItalic => "bold-italic",
+        Font::SansSerif => "sans-serif",
+        Font::BoldSansSerif => "bold-sans-serif",
+        Font::SansSerifItalic => "sans-serif-italic",
+        Font::SansSerifBoldItalic => "sans-serif-bold-italic",
+        Font::Monospace => "monospace",
+        Font::Script => "script",
+        Font::BoldScript => "bold-script",
+        Font::Fraktur => "fraktur",
+        Font::BoldFraktur => "bold-fraktur",
+        Font::DoubleStruck => "double-struck",
+        Font::UpRight => return None,
+    })
 }
 
 impl Font {

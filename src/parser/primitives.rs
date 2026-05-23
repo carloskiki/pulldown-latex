@@ -473,7 +473,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                         target: CT::Background,
                     }))),
                 ]);
-                self.text_argument()?;
+                self.text_argument(None)?;
                 E::End
             }
             "fcolorbox" => {
@@ -499,7 +499,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                         target: CT::Background,
                     }))),
                 ]);
-                self.text_argument()?;
+                self.text_argument(None)?;
                 E::End
             }
 
@@ -1395,7 +1395,23 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     .expect("the control sequence contains one of the matched characters"),
             ),
             "|" => ordinary('∥'),
-            "text" => return self.text_argument(),
+            "text" => return self.text_argument(None),
+            // Text-mode font selectors usable inside math mode (KaTeX/MathJax compatibility).
+            // These behave like `\text{…}` but apply the corresponding font to the inner content.
+            "textrm" => return self.text_argument(Some(Font::UpRight)),
+            "textbf" => return self.text_argument(Some(Font::Bold)),
+            "textit" => return self.text_argument(Some(Font::Italic)),
+            "textsf" => return self.text_argument(Some(Font::SansSerif)),
+            "texttt" => return self.text_argument(Some(Font::Monospace)),
+            // Text-mode logos usable inside math mode.
+            "TeX" => {
+                self.buffer.push(I::Event(E::Content(C::Text("TeX"))));
+                return Ok(());
+            }
+            "LaTeX" => {
+                self.buffer.push(I::Event(E::Content(C::Text("LaTeX"))));
+                return Ok(());
+            }
             "not" | "cancel" => {
                 self.buffer.push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
@@ -1936,14 +1952,23 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         E::StateChange(SC::Style(style))
     }
 
-    fn text_argument(&mut self) -> InnerResult<()> {
+    fn text_argument(&mut self, font: Option<Font>) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
-        self.buffer
-            .push(I::Event(E::Content(C::Text(match argument {
-                Argument::Token(Token::Character(c)) => c.as_str(),
-                Argument::Group(inner) => inner,
-                _ => return Err(ErrorKind::ControlSequenceAsArgument),
-            }))));
+        let text = match argument {
+            Argument::Token(Token::Character(c)) => c.as_str(),
+            Argument::Group(inner) => inner,
+            _ => return Err(ErrorKind::ControlSequenceAsArgument),
+        };
+        if let Some(font) = font {
+            self.buffer.extend([
+                I::Event(E::Begin(G::Normal)),
+                I::Event(E::StateChange(SC::Font(Some(font)))),
+                I::Event(E::Content(C::Text(text))),
+                I::Event(E::End),
+            ]);
+        } else {
+            self.buffer.push(I::Event(E::Content(C::Text(text))));
+        }
         Ok(())
     }
 
