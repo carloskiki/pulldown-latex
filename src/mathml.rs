@@ -1398,6 +1398,11 @@ impl Font {
             (Font::DoubleStruck, 'a'..='z') => c as u32 + 0x1D4F1,
             (Font::DoubleStruck, '0'..='9') => c as u32 + 0x1D7A8,
 
+            // Double Struck Italic mappings (U+2145–U+2149): only D, d, e, i, j exist.
+            (Font::DoubleStruckItalic, 'D') => c as u32 + 0x2101,
+            (Font::DoubleStruckItalic, 'd' | 'e') => c as u32 + 0x20E2,
+            (Font::DoubleStruckItalic, 'i' | 'j') => c as u32 + 0x20DF,
+
             // Italic mappings
             (Font::Italic, 'A'..='Z') => c as u32 + 0x1D3F3,
             (Font::Italic, 'a'..='g' | 'i'..='z') => c as u32 + 0x1D3ED,
@@ -1564,5 +1569,34 @@ mod tests {
         assert!(boldsym.contains('\u{1D482}'));
         assert!(mathbf.contains('\u{1D41A}'));
         assert_ne!(boldsym, mathbf);
+    }
+
+    #[test]
+    fn double_struck_italic_maps_the_five_supported_letters() {
+        for (input, expected) in [
+            ('D', '\u{2145}'),
+            ('d', '\u{2146}'),
+            ('e', '\u{2147}'),
+            ('i', '\u{2148}'),
+            ('j', '\u{2149}'),
+        ] {
+            assert_eq!(
+                Font::DoubleStruckItalic.map_char(input),
+                expected,
+                "DoubleStruckItalic should map {input:?} to U+{:04X}",
+                expected as u32
+            );
+        }
+    }
+
+    #[test]
+    fn double_struck_italic_passes_unmapped_chars_through() {
+        for input in ['A', 'B', 'a', 'b', 'k', '0', '\u{03B1}'] {
+            assert_eq!(
+                Font::DoubleStruckItalic.map_char(input),
+                input,
+                "DoubleStruckItalic has no codepoint for {input:?}; expected passthrough"
+            );
+        }
     }
 }
