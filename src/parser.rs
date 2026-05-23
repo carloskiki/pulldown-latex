@@ -849,6 +849,18 @@ mod tests {
     }
 
     #[test]
+    fn font_group_with_nonalpha_first_char_falls_back() {
+        // Exercises the early-return path when the first char is not alphabetic.
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathit{+x}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, Event::Content(Content::Identifier(_)))));
+    }
+
+    #[test]
     fn expansions_in_groups() {
         let store = Storage::new();
         let mut parser = Parser::new(
