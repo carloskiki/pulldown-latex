@@ -1537,6 +1537,27 @@ mod tests {
     }
 
     #[test]
+    fn boldsymbol_covers_nabla_partial_and_greek_variants() {
+        for (input, expected) in [
+            (r"\boldsymbol{\nabla}", '\u{1D735}'),
+            (r"\boldsymbol{\partial}", '\u{1D74F}'),
+            (r"\boldsymbol{\epsilon}", '\u{1D750}'),
+            (r"\boldsymbol{\vartheta}", '\u{1D751}'),
+            (r"\boldsymbol{\varkappa}", '\u{1D752}'),
+            (r"\boldsymbol{\phi}", '\u{1D753}'),
+            (r"\boldsymbol{\varrho}", '\u{1D754}'),
+            (r"\boldsymbol{\varpi}", '\u{1D755}'),
+        ] {
+            let out = render(input);
+            assert!(
+                out.contains(expected),
+                "{input} should contain U+{:04X}, got: {out}",
+                expected as u32
+            );
+        }
+    }
+
+    #[test]
     fn boldsymbol_is_distinct_from_mathbf_for_lowercase() {
         let boldsym = render(r"\boldsymbol{a}");
         let mathbf = render(r"\mathbf{a}");
