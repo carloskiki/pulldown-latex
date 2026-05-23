@@ -191,6 +191,24 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
             // TODO: Operators with '*', for operatorname* and friends
 
+            ////////////////////////////////
+            // Atom-type (\math*) commands //
+            ////////////////////////////////
+            // These commands set the math class of their argument, which
+            // influences spacing in MathML output.
+            "mathord" => return self.atom_group(AtomClass::Ord),
+            "mathop" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                return self.atom_group(AtomClass::Op);
+            }
+            "mathbin" => return self.atom_group(AtomClass::Bin),
+            "mathrel" => return self.atom_group(AtomClass::Rel),
+            "mathopen" => return self.atom_group(AtomClass::Open),
+            "mathclose" => return self.atom_group(AtomClass::Close),
+            "mathpunct" => return self.atom_group(AtomClass::Punct),
+            "mathinner" => return self.atom_group(AtomClass::Inner),
+
             /////////////////////////
             // Non-Latin Alphabets //
             /////////////////////////
@@ -1861,6 +1879,87 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         Ok(())
     }
 
+    /// Implementation of the `\math<class>` atom-type commands (e.g. `\mathord`,
+    /// `\mathrel`, `\mathbin`, `\mathop`, `\mathopen`, `\mathclose`, `\mathpunct`,
+    /// `\mathinner`).
+    ///
+    /// These commands set the math class of their argument, which determines
+    /// spacing in the rendered MathML output. When the argument is a single
+    /// character, it is emitted as the matching [`Content`] variant. When the
+    /// argument is a group, its contents are parsed normally and wrapped in
+    /// an [`Event::Begin`]/[`Event::End`] pair so that the surrounding
+    /// spacing is governed by the requested atom class.
+    ///
+    /// [`Content`]: crate::event::Content
+    /// [`Event::Begin`]: crate::event::Event::Begin
+    /// [`Event::End`]: crate::event::Event::End
+    fn atom_group(&mut self, class: AtomClass) -> InnerResult<()> {
+        let argument = lex::argument(&mut self.content)?;
+
+        // Try to extract a single ASCII/Unicode character so we can emit a
+        // directly-classified Content variant. This gives the most faithful
+        // spacing for the common case (e.g. `\mathbin{+}`).
+        let single_char: Option<char> = match argument {
+            Argument::Token(Token::Character(char_)) => Some(char_.into()),
+            Argument::Group(s) => {
+                let s = s.trim();
+                let mut chars = s.chars();
+                let first = chars.next();
+                match (first, chars.next()) {
+                    (Some(c), None) => Some(c),
+                    _ => None,
+                }
+            }
+            Argument::Token(Token::ControlSequence(_)) => None,
+        };
+
+        if let Some(c) = single_char {
+            let event = match class {
+                AtomClass::Ord => ordinary(c),
+                AtomClass::Op => E::Content(C::LargeOp {
+                    content: c,
+                    small: false,
+                }),
+                AtomClass::Bin => binary(c),
+                AtomClass::Rel => relation(c),
+                AtomClass::Open => E::Content(C::Delimiter {
+                    content: c,
+                    size: None,
+                    ty: DelimiterType::Open,
+                }),
+                AtomClass::Close => E::Content(C::Delimiter {
+                    content: c,
+                    size: None,
+                    ty: DelimiterType::Close,
+                }),
+                AtomClass::Punct => E::Content(C::Punctuation(c)),
+                AtomClass::Inner => ordinary(c),
+            };
+            self.buffer.push(I::Event(event));
+            return Ok(());
+        }
+
+        // Multi-character group (or a control sequence). For \mathop with a
+        // textual group, emit it as a `Function` so it renders as a
+        // multi-letter operator (mirroring `\operatorname`). Otherwise wrap
+        // the parsed argument in a normal group; the inner content keeps its
+        // own atom classes, but the whole construct presents as an
+        // `Atom::Inner` for spacing purposes — which is what TeX does for
+        // `\mathinner`, and is a reasonable approximation for the other
+        // classes when given multi-token arguments.
+        if matches!(class, AtomClass::Op) {
+            if let Argument::Group(content) = argument {
+                self.buffer.push(I::Event(E::Content(C::Function(content))));
+                return Ok(());
+            }
+        }
+
+        self.buffer.push(I::Event(E::Begin(G::Normal)));
+        self.handle_argument(argument)?;
+        self.buffer.push(I::Event(E::End));
+        Ok(())
+    }
+
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
@@ -2095,12 +2194,30 @@ fn binary(op: char) -> E<'static> {
     })
 }
 
+/// Math atom classes used by the `\math<class>` family of commands.
+///
+/// These mirror the TeXbook's eight atom classes and are used by
+/// [`InnerParser::atom_group`] to pick an appropriate [`Content`] variant
+/// for the argument.
+///
+/// [`Content`]: crate::event::Content
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AtomClass {
+    Ord,
+    Op,
+    Bin,
+    Rel,
+    Open,
+    Close,
+    Punct,
+    Inner,
+}
+
 // TODO implementations:
 // - `raise`, `lower`
 // - `hbox`, `mbox`?
 // - `vcenter`
 // - `rule`
-// - `math_` atoms
 // - `mathchoice` (TeXbook p. 151)
 
 // Unimplemented primitives:
