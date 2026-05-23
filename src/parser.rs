@@ -827,19 +827,6 @@ mod tests {
             );
         }
     }
-
-    #[test]
-    fn tex_and_latex_logos_in_math() {
-        let store = Storage::new();
-        let parser = Parser::new(r"\TeX", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events, vec![Event::Content(Content::Text("TeX"))]);
-
-        let store = Storage::new();
-        let parser = Parser::new(r"\LaTeX", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events, vec![Event::Content(Content::Text("LaTeX"))]);
-    }
 }
 
 // Token parsing procedure, as per TeXbook p. 46-47.

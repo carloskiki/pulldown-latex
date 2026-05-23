@@ -1403,15 +1403,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "textit" => return self.text_argument(Some(Font::Italic)),
             "textsf" => return self.text_argument(Some(Font::SansSerif)),
             "texttt" => return self.text_argument(Some(Font::Monospace)),
-            // Text-mode logos usable inside math mode.
-            "TeX" => {
-                self.buffer.push(I::Event(E::Content(C::Text("TeX"))));
-                return Ok(());
-            }
-            "LaTeX" => {
-                self.buffer.push(I::Event(E::Content(C::Text("LaTeX"))));
-                return Ok(());
-            }
+
             "not" | "cancel" => {
                 self.buffer.push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
