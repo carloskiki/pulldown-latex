@@ -730,3 +730,11 @@ round_trip_display!(
     r"\colorbox{yellow}{hi}",
     r"\fcolorbox{red}{blue}{ok}",
 );
+
+// Unbraced single-character argument to `\text` exercises the `Token::Character`
+// arm of `text_argument`.
+round_trip_display!(text_single_char_argument, r"\text x");
+
+// A control sequence as the argument to `\text` must error out
+// (`ControlSequenceAsArgument`), covering the fallback arm of `text_argument`.
+round_trip_display!(should_panic, text_control_sequence_argument, r"\text\alpha");
