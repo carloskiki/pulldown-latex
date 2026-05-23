@@ -1800,7 +1800,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 if let Some(style) = style {
                     self.buffer.push(I::Event(E::StateChange(SC::Style(style))));
                 }
-                if horizontal_lines.len() > 0 {
+                if !horizontal_lines.is_empty() {
                     self.buffer
                         .push(I::Event(E::EnvironmentFlow(EnvironmentFlow::StartLines {
                             lines: horizontal_lines,

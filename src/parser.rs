@@ -815,10 +815,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\int\limits_a^b", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::AboveBelow,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::AboveBelow,
+            }
+        );
     }
 
     #[test]
@@ -826,10 +829,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\int\nolimits_a^b", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::Right,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::Right,
+            }
+        );
     }
 
     #[test]
@@ -839,10 +845,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\sum^x\limits_y", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::AboveBelow,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::AboveBelow,
+            }
+        );
     }
 
     #[test]
@@ -852,10 +861,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\sum^x\nolimits_y", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::Right,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::Right,
+            }
+        );
     }
 
     #[test]
@@ -864,10 +876,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\sum\nolimits\limits\nolimits_a^b", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::Right,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::Right,
+            }
+        );
     }
 
     #[test]
@@ -876,10 +891,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\oint\limits_C f", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::Subscript,
-            position: ScriptPosition::AboveBelow,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::Subscript,
+                position: ScriptPosition::AboveBelow,
+            }
+        );
     }
 
     #[test]
@@ -892,10 +910,13 @@ mod tests {
         let events = parser
             .collect::<Result<Vec<_>, ParserError>>()
             .expect("should parse cleanly");
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::Subscript,
-            position: ScriptPosition::Right,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::Subscript,
+                position: ScriptPosition::Right,
+            }
+        );
     }
 
     #[test]
@@ -905,10 +926,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\int_a^b\limits", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::AboveBelow,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::AboveBelow,
+            }
+        );
     }
 
     #[test]
@@ -918,10 +942,13 @@ mod tests {
         let store = Storage::new();
         let parser = Parser::new(r"\sum_a^b\nolimits", &store);
         let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(events[0], Event::Script {
-            ty: ScriptType::SubSuperscript,
-            position: ScriptPosition::Right,
-        });
+        assert_eq!(
+            events[0],
+            Event::Script {
+                ty: ScriptType::SubSuperscript,
+                position: ScriptPosition::Right,
+            }
+        );
     }
 
     #[test]
@@ -955,8 +982,12 @@ mod tests {
     fn injlim_and_friends_parse() {
         let store = Storage::new();
         for src in &[
-            r"\injlim", r"\projlim", r"\varinjlim", r"\varliminf",
-            r"\varlimsup", r"\varprojlim",
+            r"\injlim",
+            r"\projlim",
+            r"\varinjlim",
+            r"\varliminf",
+            r"\varlimsup",
+            r"\varprojlim",
         ] {
             let parser = Parser::new(src, &store);
             parser
