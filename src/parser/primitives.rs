@@ -1369,11 +1369,6 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let before_over_index = self.buffer.len();
                 let over = lex::argument(&mut over_content)?;
                 self.handle_argument(over)?;
-                // Consume any remaining tokens in the over-content (e.g. trailing whitespace).
-                while !over_content.trim_start().is_empty() {
-                    let arg = lex::argument(&mut over_content)?;
-                    self.handle_argument(arg)?;
-                }
                 let over_events = self.buffer.split_off(before_over_index);
                 let base = lex::argument(&mut self.content)?;
                 self.handle_argument(base)?;
