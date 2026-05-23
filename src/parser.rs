@@ -899,6 +899,59 @@ mod tests {
     }
 
     #[test]
+    fn limits_after_both_scripts_on_int() {
+        // Trailing modifier after both scripts: `\int_a^b\limits` is a real
+        // LaTeX form. The modifier applies to the operator as a whole.
+        let store = Storage::new();
+        let parser = Parser::new(r"\int_a^b\limits", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::AboveBelow,
+        });
+    }
+
+    #[test]
+    fn nolimits_after_both_scripts_on_sum() {
+        // `\sum` defaults to `Movable`; a trailing `\nolimits` after both
+        // scripts must downgrade it to `Right`.
+        let store = Storage::new();
+        let parser = Parser::new(r"\sum_a^b\nolimits", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events[0], Event::Script {
+            ty: ScriptType::SubSuperscript,
+            position: ScriptPosition::Right,
+        });
+    }
+
+    #[test]
+    fn nolimits_on_over_under_groups_and_brace() {
+        // `\overgroup`/`\undergroup`/`\underparen`/`\overbrace` all default to
+        // `AboveBelow`; a trailing `\nolimits` downgrades them to `Right`.
+        let store = Storage::new();
+        for src in &[
+            r"\overgroup{ab}\nolimits_x",
+            r"\undergroup{ab}\nolimits_x",
+            r"\underparen{ab}\nolimits_x",
+            r"\overbrace{ab}\nolimits_x",
+        ] {
+            let parser = Parser::new(src, &store);
+            let events = parser
+                .collect::<Result<Vec<_>, ParserError>>()
+                .unwrap_or_else(|e| panic!("`{}` should parse, but got: {}", src, e));
+            assert_eq!(
+                events[0],
+                Event::Script {
+                    ty: ScriptType::Subscript,
+                    position: ScriptPosition::Right,
+                },
+                "wrong script position for `{}`",
+                src,
+            );
+        }
+    }
+
+    #[test]
     fn injlim_and_friends_parse() {
         let store = Storage::new();
         for src in &[
