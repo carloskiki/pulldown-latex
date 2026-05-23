@@ -643,6 +643,18 @@ where
 
                 Ok(())
             }
+            Content::Identifier(s) => {
+                self.open_tag("mi", None)?;
+                self.writer.write_all(b">")?;
+                let font = self.state().font;
+                let buf = &mut [0u8; 4];
+                s.chars().try_for_each(|c| {
+                    let mapped = font.map_or(c, |v| v.map_char(c));
+                    self.writer.write_all(mapped.encode_utf8(buf).as_bytes())
+                })?;
+                self.set_previous_atom(Atom::Ord);
+                self.writer.write_all(b"</mi>")
+            }
             Content::Ordinary { content, stretchy } => {
                 if stretchy {
                     self.writer.write_all(b"<mo stretchy=\"true\">")?;

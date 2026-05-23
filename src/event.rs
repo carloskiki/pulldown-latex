@@ -105,6 +105,9 @@ pub enum Content<'a> {
     /// A function identifier, such as `sin`, `lim`, or a custom function with
     /// `\operatorname{arccotan}`.
     Function(&'a str),
+    /// A multi-character variable identifier, e.g., the contents of `\mathrm{total}` or
+    /// `\mathit{example}` when the argument is a run of alphabetic characters.
+    Identifier(&'a str),
     /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and other stuff that do not have
     /// any spacing around them. This includes things that normally go in under and overscripts
     /// which may be stretchy, e.g., `→`, `‾`, etc.
