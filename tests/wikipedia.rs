@@ -695,3 +695,41 @@ round_trip_display!(
     v & = \tfrac{1}{\sqrt{2}}(x-y) \qquad & y &= \tfrac{1}{\sqrt{2}}(u-v)
     \end{align}"
 );
+
+// Text-mode font selectors usable inside math mode (KaTeX/MathJax compatibility).
+round_trip_display!(
+    text_font_selectors,
+    r"a + \textrm{plain} + b",
+    r"a + \textbf{bold} + b",
+    r"a + \textit{italic} + b",
+    r"a + \textsf{sans} + b",
+    r"a + \texttt{mono} + b",
+);
+
+// Text-mode logos usable inside math mode.
+round_trip_display!(
+    text_mode_logos,
+    r"\TeX \quad \LaTeX",
+);
+
+// `\text{...}` inheriting math-mode font state covers the remaining `mathvariant`
+// branches in the MathML renderer.
+round_trip_display!(
+    text_under_math_fonts,
+    r"\mathbb{\text{N}}",
+    r"\mathfrak{\text{g}}",
+    r"\mathbfcal{\text{S}}",
+    r"\mathbfit{\text{v}}",
+    r"\mathsfit{\text{x}}",
+    r"\mathbffrak{\text{F}}",
+    r"\mathbfsfup{\text{B}}",
+    r"\mathbfsfit{\text{X}}",
+    r"{\cal \text{C}}",
+);
+
+// `\colorbox`/`\fcolorbox` still parse a text argument after the refactor.
+round_trip_display!(
+    colorbox_text_argument,
+    r"\colorbox{yellow}{hi}",
+    r"\fcolorbox{red}{blue}{ok}",
+);
