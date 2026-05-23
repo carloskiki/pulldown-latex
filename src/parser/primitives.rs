@@ -659,6 +659,14 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.state.script_position = SP::AboveBelow;
                 return self.underscript('⏝');
             }
+            "overbracket" => {
+                self.state.script_position = SP::AboveBelow;
+                return self.accent('⎴', true);
+            }
+            "underbracket" => {
+                self.state.script_position = SP::AboveBelow;
+                return self.underscript('⎵');
+            }
 
             // Primes
             "prime" => ordinary('′'),
@@ -1350,6 +1358,45 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let base = lex::argument(&mut self.content)?;
                 self.handle_argument(base)?;
                 self.buffer.extend(under_events);
+                return Ok(());
+            }
+            "buildrel" => {
+                let mut over_content = lex::content_with_suffix(&mut self.content, r"\over")?;
+                self.buffer.push(I::Event(E::Script {
+                    ty: ST::Superscript,
+                    position: SP::AboveBelow,
+                }));
+                let before_over_index = self.buffer.len();
+                let over = lex::argument(&mut over_content)?;
+                self.handle_argument(over)?;
+                // Consume any remaining tokens in the over-content (e.g. trailing whitespace).
+                while !over_content.trim_start().is_empty() {
+                    let arg = lex::argument(&mut over_content)?;
+                    self.handle_argument(arg)?;
+                }
+                let over_events = self.buffer.split_off(before_over_index);
+                let base = lex::argument(&mut self.content)?;
+                self.handle_argument(base)?;
+                self.buffer.extend(over_events);
+                return Ok(());
+            }
+            "substack" => {
+                let content = lex::brace_argument(&mut self.content)?;
+                self.buffer.push(I::Event(E::Begin(G::SubArray {
+                    alignment: ColumnAlignment::Center,
+                })));
+                self.buffer.push(I::SubGroup {
+                    content,
+                    allowed_alignment_count: Some(AlignmentCount::new(0)),
+                });
+                self.buffer.push(I::Event(E::End));
+                return Ok(());
+            }
+            "sideset" => {
+                let _left = lex::argument(&mut self.content)?;
+                let _right = lex::argument(&mut self.content)?;
+                let base = lex::argument(&mut self.content)?;
+                self.handle_argument(base)?;
                 return Ok(());
             }
 
