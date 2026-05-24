@@ -37,7 +37,6 @@ the `mathml` output may be tweaked to make it resemble what `pdflatex`, `KaTeX` 
 ### TODO's/Known Bugs
 - [ ] raise and lower boxes.
 - [ ] `\sideset`
-- [ ] `\mathop`, `\mathbin`, etc.
 - [ ] Correctly use the `accent` attribute: https://w3c.github.io/mathml-core/#dfn-accent
 - [ ] Match the `mathml` API to `pulldown-cmark`s API.
 - [ ] Square bracket matrices do not have equal spacing on the left and the right in Chromium.
