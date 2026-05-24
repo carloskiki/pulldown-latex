@@ -86,15 +86,20 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
             '0'..='9' => {
                 let content = token.as_str();
-                let mut len = content
-                    .chars()
-                    .skip(1)
-                    .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
-                    .count()
-                    + 1;
-                if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                    len -= 1;
-                }
+                let len = if self.state.handling_argument {
+                    1
+                } else {
+                    let mut len = content
+                        .chars()
+                        .skip(1)
+                        .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
+                        .count()
+                        + 1;
+                    if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                        len -= 1;
+                    }
+                    len
+                };
                 let (number, rest) = content.split_at(len);
                 self.content = rest;
                 self.buffer
