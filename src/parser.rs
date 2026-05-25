@@ -791,6 +791,42 @@ mod tests {
         assert!(parser.by_ref().collect::<Result<Vec<_>, _>>().is_err());
         assert!(parser.span_stack.expansions.is_empty());
     }
+
+    #[test]
+    fn text_font_selectors_in_math() {
+        use crate::event::{Font, StateChange};
+
+        // Plain `\text` still emits a single Text content event (no wrapping group).
+        let store = Storage::new();
+        let parser = Parser::new(r"\text{foo}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(events, vec![Event::Content(Content::Text("foo"))]);
+
+        // Each text-mode font selector wraps the text in a group with a Font state change,
+        // so that the renderer can attach the corresponding `mathvariant` to the `mtext`.
+        let cases: &[(&str, Font, &str)] = &[
+            (r"\textrm{foo}", Font::UpRight, "foo"),
+            (r"\textbf{foo}", Font::Bold, "foo"),
+            (r"\textit{foo}", Font::Italic, "foo"),
+            (r"\textsf{foo}", Font::SansSerif, "foo"),
+            (r"\texttt{foo}", Font::Monospace, "foo"),
+        ];
+        for (input, font, text) in cases {
+            let store = Storage::new();
+            let parser = Parser::new(input, &store);
+            let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+            assert_eq!(
+                events,
+                vec![
+                    Event::Begin(Grouping::Normal),
+                    Event::StateChange(StateChange::Font(Some(*font))),
+                    Event::Content(Content::Text(text)),
+                    Event::End,
+                ],
+                "input: {input}"
+            );
+        }
+    }
 }
 
 // Token parsing procedure, as per TeXbook p. 46-47.
