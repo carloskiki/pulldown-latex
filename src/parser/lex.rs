@@ -14,7 +14,7 @@ pub fn definition<'a>(input: &mut &'a str) -> InnerResult<(&'a str, &'a str, &'a
     let control_sequence = control_sequence(input)?;
     let (parameter_text, rest) = input.split_once('{').ok_or(ErrorKind::MissingExpansion)?;
 
-    if let Some(idx) = parameter_text.find(|c: char| c == '%' || c == '}') {
+    if let Some(idx) = parameter_text.find(['%', '}']) {
         return Err(if parameter_text.as_bytes()[idx] == b'%' {
             ErrorKind::CommentInParamText
         } else {
