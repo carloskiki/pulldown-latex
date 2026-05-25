@@ -1314,6 +1314,26 @@ impl Font {
             (Font::BoldItalic, '\u{03F1}') => c as u32 + 0x1D363,
             (Font::BoldItalic, '\u{03D6}') => c as u32 + 0x1D37F,
 
+            // Bold Symbol mappings (for \boldsymbol):
+            // Italic-by-default characters become bold italic; upright-by-default
+            // characters (capital Greek, digits) become bold upright.
+            (Font::BoldSymbol, 'A'..='Z') => c as u32 + 0x1D427,
+            (Font::BoldSymbol, 'a'..='z') => c as u32 + 0x1D421,
+            (Font::BoldSymbol, '\u{0391}'..='\u{03A1}' | '\u{03A3}'..='\u{03A9}') => {
+                c as u32 + 0x1D317
+            }
+            (Font::BoldSymbol, '\u{03F4}') => c as u32 + 0x1D2C5,
+            (Font::BoldSymbol, '\u{2207}') => c as u32 + 0x1B52E,
+            (Font::BoldSymbol, '\u{03B1}'..='\u{03C9}') => c as u32 + 0x1D385,
+            (Font::BoldSymbol, '\u{2202}') => c as u32 + 0x1B54D,
+            (Font::BoldSymbol, '\u{03F5}') => c as u32 + 0x1D35B,
+            (Font::BoldSymbol, '\u{03D1}') => c as u32 + 0x1D380,
+            (Font::BoldSymbol, '\u{03F0}') => c as u32 + 0x1D362,
+            (Font::BoldSymbol, '\u{03D5}') => c as u32 + 0x1D37E,
+            (Font::BoldSymbol, '\u{03F1}') => c as u32 + 0x1D363,
+            (Font::BoldSymbol, '\u{03D6}') => c as u32 + 0x1D37F,
+            (Font::BoldSymbol, '0'..='9') => c as u32 + 0x1D79E,
+
             // Bold mappings
             (Font::Bold, 'A'..='Z') => c as u32 + 0x1D3BF,
             (Font::Bold, 'a'..='z') => c as u32 + 0x1D3B9,
@@ -1377,6 +1397,11 @@ impl Font {
             (Font::DoubleStruck, 'Z') => c as u32 + 0x20CA,
             (Font::DoubleStruck, 'a'..='z') => c as u32 + 0x1D4F1,
             (Font::DoubleStruck, '0'..='9') => c as u32 + 0x1D7A8,
+
+            // Double Struck Italic mappings (U+2145–U+2149): only D, d, e, i, j exist.
+            (Font::DoubleStruckItalic, 'D') => c as u32 + 0x2101,
+            (Font::DoubleStruckItalic, 'd' | 'e') => c as u32 + 0x20E2,
+            (Font::DoubleStruckItalic, 'i' | 'j') => c as u32 + 0x20DF,
 
             // Italic mappings
             (Font::Italic, 'A'..='Z') => c as u32 + 0x1D3F3,

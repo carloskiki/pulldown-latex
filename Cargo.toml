@@ -38,6 +38,11 @@ path = "tests/wikipedia.rs"
 harness = false
 
 [[test]]
+name = "fonts"
+path = "tests/fonts.rs"
+harness = false
+
+[[test]]
 name = "mozilla"
 path = "tests/mozilla.rs"
 harness = false
