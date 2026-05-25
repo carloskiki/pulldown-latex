@@ -1,7 +1,7 @@
 use crate::event::{DelimiterType, Dimension, DimensionUnit, Glue, GroupingKind, Line};
 
 use super::{
-    tables::{primitive_color, token_to_delim},
+    tables::{dvipsnames_color, primitive_color, token_to_delim},
     Argument, CharToken, ErrorKind, InnerResult, Token,
 };
 
@@ -456,7 +456,10 @@ pub fn color(color: &str) -> Option<(u8, u8, u8)> {
             let b = u8::from_str_radix(&color[4..], 16).ok()?;
             Some((r, g, b))
         }
-        None => primitive_color(color),
+        // dvipsnames are case-sensitive (e.g. `Blue` vs CSS `blue`), so try
+        // the exact-case lookup before falling back to the case-insensitive
+        // CSS named-color table.
+        None => dvipsnames_color(color).or_else(|| primitive_color(color)),
         _ => None,
     }
 }
@@ -580,6 +583,26 @@ mod tests {
         assert_eq!(lex::integer(&mut input).unwrap(), 97);
         assert_eq!(lex::floating_point(&mut input).unwrap(), -0.47);
         assert_eq!(input, "");
+    }
+
+    #[test]
+    fn dvipsnames_colors() {
+        // Case-sensitive: dvipsnames `Apricot` returns the xcolor hex.
+        assert_eq!(lex::color("Apricot"), Some((0xFB, 0xB9, 0x82)));
+        assert_eq!(lex::color("Bittersweet"), Some((0xC0, 0x4F, 0x17)));
+        assert_eq!(lex::color("BlueGreen"), Some((0x00, 0xB3, 0xB8)));
+        assert_eq!(lex::color("WildStrawberry"), Some((0xEE, 0x29, 0x67)));
+        assert_eq!(lex::color("YellowOrange"), Some((0xFA, 0xA2, 0x1A)));
+
+        // `Blue` (dvipsnames) and `blue` (CSS) should resolve differently.
+        assert_eq!(lex::color("Blue"), Some((0x2D, 0x2F, 0x92)));
+        assert_eq!(lex::color("blue"), Some((0, 0, 255)));
+
+        // Hex passthrough still works.
+        assert_eq!(lex::color("#FBB982"), Some((0xFB, 0xB9, 0x82)));
+
+        // Unknown names still fail.
+        assert_eq!(lex::color("NotARealColor"), None);
     }
 
     #[test]

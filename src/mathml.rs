@@ -592,7 +592,7 @@ where
                 if text.starts_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
-                self.writer.write_all(trimmed.as_bytes())?;
+                write_escaped(&mut self.writer, trimmed)?;
                 if text.ends_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
@@ -1499,3 +1499,24 @@ where
     MathmlWriter::new(parser, writer, config).write()
 }
 
+fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {
+    let bytes = s.as_bytes();
+    let mut start = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        let replacement: &[u8] = match b {
+            b'&' => b"&amp;",
+            b'<' => b"&lt;",
+            b'>' => b"&gt;",
+            _ => continue,
+        };
+        if start < i {
+            writer.write_all(&bytes[start..i])?;
+        }
+        writer.write_all(replacement)?;
+        start = i + 1;
+    }
+    if start < bytes.len() {
+        writer.write_all(&bytes[start..])?;
+    }
+    Ok(())
+}
