@@ -410,6 +410,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             }
             "mathtt" | "symtt" => return self.font_group(Some(Font::Monospace)),
             "mathbb" | "symbb" => return self.font_group(Some(Font::DoubleStruck)),
+            "mathbbit" | "symbbit" => return self.font_group(Some(Font::DoubleStruckItalic)),
             "mathfrak" | "symfrak" => return self.font_group(Some(Font::Fraktur)),
             "mathbfcal" | "symbfcal" => return self.font_group(Some(Font::BoldScript)),
             "mathsfit" | "symsfit" => return self.font_group(Some(Font::SansSerifItalic)),
