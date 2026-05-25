@@ -223,6 +223,17 @@ round_trip_display!(
 );
 
 round_trip_display!(
+    stacking_amsmath,
+    r"\overbrace{a+b+c}^{n}",
+    r"\underbrace{a+b+c}_{m}",
+    r"\overbracket{x+y}",
+    r"\underbracket{p+q}",
+    r"\buildrel ! \over =",
+    r"\sum_{\substack{i<n \\ j<m}} a_{ij}",
+    r"\sideset{_a^b}{_c^d}\sum"
+);
+
+round_trip_display!(
     derivatives,
     r"x', y'', f', f''",
     r"x^\prime, y^{\prime\prime}"

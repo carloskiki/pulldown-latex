@@ -115,3 +115,22 @@ fn fuzz_suffix_bounds_check() {
     let parser = Parser::new("\0\\def\\]a#1  {}f\\]ar3c%\\", &storage);
     for _ in parser {}
 }
+
+#[test]
+fn text_escapes_html_special_chars() {
+    for (input, expected) in [
+        (r"\text{a < b > c & d}", "a &lt; b &gt; c &amp; d"),
+        (r"\text{<>&}", "&lt;&gt;&amp;"),
+        (r"\text{<<&&>>}", "&lt;&lt;&amp;&amp;&gt;&gt;"),
+        (r"\text{plain}", "plain"),
+    ] {
+        let storage = Storage::new();
+        let parser = Parser::new(input, &storage);
+        let mut out = String::new();
+        push_mathml(&mut out, parser, Default::default()).unwrap();
+        assert!(
+            out.contains(expected),
+            "expected {expected:?} in output for {input:?}, got {out}"
+        );
+    }
+}
