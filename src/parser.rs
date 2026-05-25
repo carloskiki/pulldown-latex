@@ -808,191 +808,119 @@ mod tests {
         );
     }
 
+    fn render(input: &str) -> String {
+        let storage = Storage::new();
+        let parser = Parser::new(input, &storage);
+        let mut out = String::new();
+        crate::push_mathml(&mut out, parser, crate::RenderConfig::default()).unwrap();
+        out
+    }
+
+    fn assert_contains_tag(input: &str, tag: &str) {
+        let out = render(input);
+        assert!(
+            out.contains(tag),
+            "expected `{tag}` in rendered output for `{input}`, got: {out}"
+        );
+    }
+
     #[test]
     fn limits_on_int() {
-        // `\int` defaults to `Right`-positioned scripts; `\limits` should force
-        // them above/below.
-        let store = Storage::new();
-        let parser = Parser::new(r"\int\limits_a^b", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::AboveBelow,
-            }
-        );
+        // `\int` defaults to right-positioned scripts; `\limits` should force
+        // them above/below, which renders as `<munderover>`.
+        assert_contains_tag(r"\int\limits_a^b", "<munderover");
     }
 
     #[test]
     fn nolimits_on_int() {
-        let store = Storage::new();
-        let parser = Parser::new(r"\int\nolimits_a^b", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::Right,
-            }
-        );
+        // `\int\nolimits_a^b` keeps scripts right-positioned: `<msubsup>`.
+        assert_contains_tag(r"\int\nolimits_a^b", "<msubsup");
     }
 
     #[test]
     fn limits_between_scripts() {
-        // `\sum^x\limits_y`: limit modifier appears after the first script. Per
-        // amsmath, it applies to the operator as a whole.
-        let store = Storage::new();
-        let parser = Parser::new(r"\sum^x\limits_y", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::AboveBelow,
-            }
-        );
+        // `\sum^x\limits_y`: limit modifier appears between the two scripts.
+        // Per amsmath, it applies to the operator as a whole, so the rendered
+        // MathML wraps in `<munderover>`.
+        assert_contains_tag(r"\sum^x\limits_y", "<munderover");
     }
 
     #[test]
     fn nolimits_between_scripts_on_sum() {
-        // `\sum` defaults to `Movable`; `\nolimits` between the scripts must
-        // force `Right`.
-        let store = Storage::new();
-        let parser = Parser::new(r"\sum^x\nolimits_y", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::Right,
-            }
-        );
+        // `\sum` defaults to movable; `\nolimits` between the scripts must
+        // force right-positioned `<msubsup>`.
+        assert_contains_tag(r"\sum^x\nolimits_y", "<msubsup");
     }
 
     #[test]
     fn limits_repeated_last_wins() {
         // Multiple modifiers — the last one wins (amsmath §7.3).
-        let store = Storage::new();
-        let parser = Parser::new(r"\sum\nolimits\limits\nolimits_a^b", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::Right,
-            }
-        );
+        assert_contains_tag(r"\sum\nolimits\limits\nolimits_a^b", "<msubsup");
     }
 
     #[test]
     fn limits_on_oint() {
-        // `\oint` is a non-`\sum` big operator that defaults to `Right`.
-        let store = Storage::new();
-        let parser = Parser::new(r"\oint\limits_C f", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::Subscript,
-                position: ScriptPosition::AboveBelow,
-            }
-        );
+        // `\oint` is a non-`\sum` big operator that defaults to right. With
+        // only a subscript and `\limits`, it renders as `<munder>`.
+        assert_contains_tag(r"\oint\limits_C f", "<munder");
     }
 
     #[test]
     fn nolimits_on_underbrace() {
         // KaTeX/MathJax tolerate `\nolimits` after `\underbrace`, downgrading
-        // its default `AboveBelow` position to `Right`. Without this fix the
-        // parser errored with `unknown primitive command found`.
-        let store = Storage::new();
-        let parser = Parser::new(r"\underbrace{ab}\nolimits_x", &store);
-        let events = parser
-            .collect::<Result<Vec<_>, ParserError>>()
-            .expect("should parse cleanly");
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::Subscript,
-                position: ScriptPosition::Right,
-            }
-        );
+        // its default above/below placement to a right-positioned `<msub>`.
+        // Without this fix the parser errored with `unknown primitive command
+        // found`.
+        assert_contains_tag(r"\underbrace{ab}\nolimits_x", "<msub");
     }
 
     #[test]
     fn limits_after_both_scripts_on_int() {
         // Trailing modifier after both scripts: `\int_a^b\limits` is a real
-        // LaTeX form. The modifier applies to the operator as a whole.
-        let store = Storage::new();
-        let parser = Parser::new(r"\int_a^b\limits", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::AboveBelow,
-            }
-        );
+        // LaTeX form. The modifier applies to the operator as a whole, so the
+        // rendered MathML uses `<munderover>`.
+        assert_contains_tag(r"\int_a^b\limits", "<munderover");
     }
 
     #[test]
     fn nolimits_after_both_scripts_on_sum() {
-        // `\sum` defaults to `Movable`; a trailing `\nolimits` after both
-        // scripts must downgrade it to `Right`.
-        let store = Storage::new();
-        let parser = Parser::new(r"\sum_a^b\nolimits", &store);
-        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
-        assert_eq!(
-            events[0],
-            Event::Script {
-                ty: ScriptType::SubSuperscript,
-                position: ScriptPosition::Right,
-            }
-        );
+        // `\sum` defaults to movable; a trailing `\nolimits` after both scripts
+        // must downgrade it to right-positioned `<msubsup>`.
+        assert_contains_tag(r"\sum_a^b\nolimits", "<msubsup");
     }
 
     #[test]
     fn nolimits_on_over_under_groups_and_brace() {
         // `\overgroup`/`\undergroup`/`\underparen`/`\overbrace` all default to
-        // `AboveBelow`; a trailing `\nolimits` downgrades them to `Right`.
-        let store = Storage::new();
+        // above/below; a trailing `\nolimits` downgrades them to a right-
+        // positioned `<msub>`.
         for src in &[
             r"\overgroup{ab}\nolimits_x",
             r"\undergroup{ab}\nolimits_x",
             r"\underparen{ab}\nolimits_x",
             r"\overbrace{ab}\nolimits_x",
         ] {
-            let parser = Parser::new(src, &store);
-            let events = parser
-                .collect::<Result<Vec<_>, ParserError>>()
-                .unwrap_or_else(|e| panic!("`{}` should parse, but got: {}", src, e));
-            assert_eq!(
-                events[0],
-                Event::Script {
-                    ty: ScriptType::Subscript,
-                    position: ScriptPosition::Right,
-                },
-                "wrong script position for `{}`",
-                src,
-            );
+            assert_contains_tag(src, "<msub");
         }
     }
 
     #[test]
-    fn injlim_and_friends_parse() {
-        let store = Storage::new();
-        for src in &[
-            r"\injlim",
-            r"\projlim",
-            r"\varinjlim",
-            r"\varliminf",
-            r"\varlimsup",
-            r"\varprojlim",
+    fn injlim_and_friends_render() {
+        // Each operator must reach the renderer and emit its function name.
+        // The `var*` forms collapse to plain `lim` per amsmath.
+        for (src, expected) in &[
+            (r"\injlim", "inj lim"),
+            (r"\projlim", "proj lim"),
+            (r"\varinjlim", "lim"),
+            (r"\varliminf", "lim"),
+            (r"\varlimsup", "lim"),
+            (r"\varprojlim", "lim"),
         ] {
-            let parser = Parser::new(src, &store);
-            parser
-                .collect::<Result<Vec<_>, ParserError>>()
-                .unwrap_or_else(|e| panic!("`{}` should parse, but got: {}", src, e));
+            let out = render(src);
+            assert!(
+                out.contains(expected),
+                "`{src}` should render with `{expected}`, got: {out}"
+            );
         }
     }
 
