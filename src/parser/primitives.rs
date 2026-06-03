@@ -422,11 +422,9 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "mathbf" | "symbf" | "mathbfup" | "symbfup" | "boldsymbol" => {
                 return self.font_group(Some(Font::Bold))
             }
-            "mathcal" | "symcal" | "mathup" | "symup" => {
-                return self.font_group(Some(Font::Script))
-            }
+            "mathcal" | "symcal" => return self.font_group(Some(Font::Script)),
             "mathit" | "symit" => return self.font_group(Some(Font::Italic)),
-            "mathrm" | "symrm" => return self.font_group(Some(Font::UpRight)),
+            "mathrm" | "symrm" | "mathup" | "symup" => return self.font_group(Some(Font::UpRight)),
             "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
                 return self.font_group(Some(Font::SansSerif))
             }
