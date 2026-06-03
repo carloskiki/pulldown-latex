@@ -1,6 +1,6 @@
 use std::{fs::File, path::Path};
 
-use crate::common::{OUTPUT_DIR, html_template, tabled};
+use crate::common::{html_template, tabled, OUTPUT_DIR};
 
 mod common;
 
@@ -25,4 +25,3 @@ round_trip_display!(
     r"\sum_{\substack{i<n \\ j<m}} a_{ij}",
     r"\sideset{_a^b}{_c^d}\sum"
 );
-

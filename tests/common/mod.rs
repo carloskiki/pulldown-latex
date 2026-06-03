@@ -1,8 +1,8 @@
-use std::{io::Write, sync::Mutex};
 use heck::ToTitleCase;
 use inventory::collect;
 use libtest_mimic::{Arguments, Conclusion, Failed, Trial};
 use pulldown_latex::{config::RenderConfig, mathml::push_mathml, Parser, Storage};
+use std::{io::Write, sync::Mutex};
 
 #[allow(clippy::type_complexity)]
 pub static RENDERED: Mutex<Vec<(&str, Vec<(&str, String)>)>> = Mutex::new(Vec::new());
