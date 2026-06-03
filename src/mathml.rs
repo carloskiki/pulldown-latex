@@ -475,7 +475,7 @@ where
                     self.env_stack.last()
                 {
                     array_close_line(&mut self.writer, &cols[*cols_index..])?;
-                } else if let Some(Environment::Group(EnvGrouping::Equation { .. })) =
+                } else if let Some(Environment::Group(EnvGrouping::Equation)) =
                     self.env_stack.last()
                 {
                     // LaTeX does _nothing_ when a newline is encountered in an eqution, we do the
