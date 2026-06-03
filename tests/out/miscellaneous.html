@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Miscellaneous Tests</title>
+<link rel="stylesheet" type="text/css" href="/Users/charles/Code/pulldown-latex/styles.css">
+<meta charset="UTF-8">
+</head>
+<body>
+<table style="max-width: 60vw; margin: auto;"><tr><th colspan="2">Stacking Amsmath</th></tr><tr><td>\overbrace{a+b+c}^{n}</td><td style="position: relative"><math display="block"><mover><mover><mrow><mi>a</mi><mo>+</mo><mi>b</mi><mo>+</mo><mi>c</mi></mrow><mo stretchy="true">⏞</mo></mover><mrow><mi>n</mi></mrow></mover></math></td></tr><tr><td>\underbrace{a+b+c}_{m}</td><td style="position: relative"><math display="block"><munder><munder><mrow><mi>a</mi><mo>+</mo><mi>b</mi><mo>+</mo><mi>c</mi></mrow><mo stretchy="true">⏟</mo></munder><mrow><mi>m</mi></mrow></munder></math></td></tr><tr><td>\overbracket{x+y}</td><td style="position: relative"><math display="block"><mover><mrow><mi>x</mi><mo>+</mo><mi>y</mi></mrow><mo stretchy="true">⎴</mo></mover></math></td></tr><tr><td>\underbracket{p+q}</td><td style="position: relative"><math display="block"><munder><mrow><mi>p</mi><mo>+</mo><mi>q</mi></mrow><mo stretchy="true">⎵</mo></munder></math></td></tr><tr><td>\sum_{\substack{i<n \\ j<m}} a_{ij}</td><td style="position: relative"><math display="block"><munder><mo movablelimits="false">∑</mo><mrow><mtable><mtr><mtd><mi>i</mi><mo><</mo><mi>n</mi></mtd></mtr><mtr><mtd><mi>j</mi><mo><</mo><mi>m</mi></mtd></mtr></mtable></mrow></munder><msub><mi>a</mi><mrow><mi>i</mi><mi>j</mi></mrow></msub></math></td></tr><tr><td>\sideset{_a^b}{_c^d}\sum</td><td style="position: relative"><math display="block"><mo movablelimits="false">∑</mo></math></td></tr></table></body>
+</html>
