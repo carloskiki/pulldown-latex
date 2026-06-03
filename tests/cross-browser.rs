@@ -12,9 +12,9 @@ mod common;
 
 fn main() {
     let concl = common::test();
-    // if std::env::var("RENDER").as_deref() != Ok("true") {
-    //     concl.exit()
-    // }
+    if std::env::var("RENDER").as_deref() != Ok("true") {
+        concl.exit()
+    }
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(cross_browser()).unwrap();
