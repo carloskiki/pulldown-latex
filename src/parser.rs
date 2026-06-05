@@ -724,6 +724,68 @@ mod tests {
     }
 
     #[test]
+    fn non_greedy_number_argument() {
+        // arguments to commands without braces should only consume
+        // a single token, not greedily consume multiple digits. `\frac12`
+        // must parse as `\frac{1}{2}`, not `\frac{12}{}`.
+        let store = Storage::new();
+        let parser = Parser::new(r"\frac12", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::Fraction(None)),
+                Event::Content(Content::Number("1")),
+                Event::Content(Content::Number("2")),
+            ]
+        );
+    }
+
+    #[test]
+    fn non_greedy_number_argument_sqrt() {
+        // `\sqrt12` must parse as `\sqrt{1}` followed by `2`, not `\sqrt{12}`.
+        let store = Storage::new();
+        let parser = Parser::new(r"\sqrt12", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::SquareRoot),
+                Event::Content(Content::Number("1")),
+                Event::Content(Content::Number("2")),
+            ]
+        );
+    }
+
+    #[test]
+    fn non_greedy_decimal_argument() {
+        // The greedy-digit path also consumed `.` and `,`. As an argument,
+        // only the first digit should be taken; the `.` and following digits
+        // remain in the outer stream.
+        let store = Storage::new();
+        let parser = Parser::new(r"\frac1.5{x}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::Fraction(None)),
+                Event::Content(Content::Number("1")),
+                Event::Content(Content::Punctuation('.')),
+                Event::Content(Content::Number("5")),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Ordinary {
+                    content: 'x',
+                    stretchy: false
+                }),
+                Event::End,
+            ]
+        );
+    }
+
+    #[test]
     fn error() {
         let store = Storage::new();
         let parser = Parser::new(
