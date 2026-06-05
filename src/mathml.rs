@@ -592,7 +592,21 @@ where
                 if text.starts_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
-                write_escaped(&mut self.writer, trimmed)?;
+                match self.state().font {
+                    None => write_escaped(&mut self.writer, trimmed)?,
+                    Some(font) => {
+                        for c in trimmed.chars() {
+                            match font.map_char(c) {
+                                '&' => self.writer.write_all(b"&amp;")?,
+                                '<' => self.writer.write_all(b"&lt;")?,
+                                '>' => self.writer.write_all(b"&gt;")?,
+                                mapped => self
+                                    .writer
+                                    .write_all(mapped.encode_utf8(&mut buf).as_bytes())?,
+                            }
+                        }
+                    }
+                }
                 if text.ends_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
