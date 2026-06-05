@@ -604,7 +604,13 @@ where
                 self.writer.write_all(b">")?;
                 let buf = &mut [0u8; 4];
                 number.chars().try_for_each(|c| {
-                    let content = self.state().font.map_or(c, |v| v.map_char(c));
+                    // `BoldSymbol` collapses to `Bold` for digits, since no italic
+                    // Unicode math variant exists for digits.
+                    let font = match self.state().font {
+                        Some(Font::BoldSymbol) => Some(Font::Bold),
+                        other => other,
+                    };
+                    let content = font.map_or(c, |v| v.map_char(c));
                     let bytes = content.encode_utf8(buf);
                     self.writer.write_all(bytes.as_bytes())
                 })?;
@@ -660,8 +666,17 @@ where
                             self.writer.write_all(b" mathvariant=\"normal\">")?;
                             content
                         }
-                        (Some(font), _) => {
+                        (Some(font), should_be_upright) => {
                             self.writer.write_all(b">")?;
+                            let font = if font == Font::BoldSymbol {
+                                if should_be_upright {
+                                    Font::Bold
+                                } else {
+                                    Font::BoldItalic
+                                }
+                            } else {
+                                font
+                            };
                             font.map_char(content)
                         }
                         _ => {
@@ -1313,26 +1328,6 @@ impl Font {
             (Font::BoldItalic, '\u{03D5}') => c as u32 + 0x1D37E,
             (Font::BoldItalic, '\u{03F1}') => c as u32 + 0x1D363,
             (Font::BoldItalic, '\u{03D6}') => c as u32 + 0x1D37F,
-
-            // Bold Symbol mappings (for \boldsymbol):
-            // Italic-by-default characters become bold italic; upright-by-default
-            // characters (capital Greek, digits) become bold upright.
-            (Font::BoldSymbol, 'A'..='Z') => c as u32 + 0x1D427,
-            (Font::BoldSymbol, 'a'..='z') => c as u32 + 0x1D421,
-            (Font::BoldSymbol, '\u{0391}'..='\u{03A1}' | '\u{03A3}'..='\u{03A9}') => {
-                c as u32 + 0x1D317
-            }
-            (Font::BoldSymbol, '\u{03F4}') => c as u32 + 0x1D2C5,
-            (Font::BoldSymbol, '\u{2207}') => c as u32 + 0x1B52E,
-            (Font::BoldSymbol, '\u{03B1}'..='\u{03C9}') => c as u32 + 0x1D385,
-            (Font::BoldSymbol, '\u{2202}') => c as u32 + 0x1B54D,
-            (Font::BoldSymbol, '\u{03F5}') => c as u32 + 0x1D35B,
-            (Font::BoldSymbol, '\u{03D1}') => c as u32 + 0x1D380,
-            (Font::BoldSymbol, '\u{03F0}') => c as u32 + 0x1D362,
-            (Font::BoldSymbol, '\u{03D5}') => c as u32 + 0x1D37E,
-            (Font::BoldSymbol, '\u{03F1}') => c as u32 + 0x1D363,
-            (Font::BoldSymbol, '\u{03D6}') => c as u32 + 0x1D37F,
-            (Font::BoldSymbol, '0'..='9') => c as u32 + 0x1D79E,
 
             // Bold mappings
             (Font::Bold, 'A'..='Z') => c as u32 + 0x1D3BF,
