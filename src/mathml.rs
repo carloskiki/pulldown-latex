@@ -592,8 +592,21 @@ where
                 if text.starts_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
-                let font = self.state().font;
-                write_escaped_with_font(&mut self.writer, trimmed, font)?;
+                match self.state().font {
+                    None => write_escaped(&mut self.writer, trimmed)?,
+                    Some(font) => {
+                        for c in trimmed.chars() {
+                            match font.map_char(c) {
+                                '&' => self.writer.write_all(b"&amp;")?,
+                                '<' => self.writer.write_all(b"&lt;")?,
+                                '>' => self.writer.write_all(b"&gt;")?,
+                                mapped => self
+                                    .writer
+                                    .write_all(mapped.encode_utf8(&mut buf).as_bytes())?,
+                            }
+                        }
+                    }
+                }
                 if text.ends_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
@@ -1497,22 +1510,3 @@ fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {
     Ok(())
 }
 
-fn write_escaped_with_font<W: io::Write>(
-    writer: &mut W,
-    s: &str,
-    font: Option<Font>,
-) -> io::Result<()> {
-    let Some(font) = font else {
-        return write_escaped(writer, s);
-    };
-    let mut buf = [0u8; 4];
-    for c in s.chars() {
-        match font.map_char(c) {
-            '&' => writer.write_all(b"&amp;")?,
-            '<' => writer.write_all(b"&lt;")?,
-            '>' => writer.write_all(b"&gt;")?,
-            mapped => writer.write_all(mapped.encode_utf8(&mut buf).as_bytes())?,
-        }
-    }
-    Ok(())
-}
