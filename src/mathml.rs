@@ -1509,4 +1509,3 @@ fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {
     }
     Ok(())
 }
-
