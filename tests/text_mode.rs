@@ -420,7 +420,10 @@ fn percent_comment_inside_text_is_skipped() {
     let joined: String = texts.join("");
     assert!(joined.contains("before"), "missing before in {joined:?}");
     assert!(joined.contains("after"), "missing after in {joined:?}");
-    assert!(!joined.contains("comment"), "comment leaked into {joined:?}");
+    assert!(
+        !joined.contains("comment"),
+        "comment leaked into {joined:?}"
+    );
 }
 
 #[test]
