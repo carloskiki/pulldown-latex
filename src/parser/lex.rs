@@ -448,6 +448,47 @@ pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
     }
 }
 
+/// Consume input up to (and past) the next unescaped `$` and return the prefix
+/// without the trailing `$`. Brace-balanced regions and `\$` escapes are
+/// honored; comments (`%...\n`) are skipped over.
+pub fn until_unescaped_dollar<'a>(input: &mut &'a str) -> InnerResult<&'a str> {
+    let mut escaped = false;
+    let mut index = 0;
+    let bytes = input.as_bytes();
+    while index < bytes.len() {
+        match bytes[index] {
+            b'\\' if !escaped => {
+                escaped = true;
+                index += 1;
+                continue;
+            }
+            b'$' if !escaped => break,
+            b'%' if !escaped => {
+                let rest_pos = bytes[index..]
+                    .iter()
+                    .position(|&c| c == b'\n')
+                    .unwrap_or(bytes.len() - index);
+                index += rest_pos;
+            }
+            b'{' if !escaped => {
+                let inner = group_content(&mut &input[index + 1..], GroupingKind::Normal)?;
+                index += inner.len() + 2;
+                escaped = false;
+                continue;
+            }
+            _ => {}
+        }
+        escaped = false;
+        index += 1;
+    }
+    if index >= bytes.len() {
+        return Err(ErrorKind::MathShift);
+    }
+    let (argument, rest) = input.split_at(index);
+    *input = &rest[1..];
+    Ok(argument)
+}
+
 pub fn color(color: &str) -> Option<(u8, u8, u8)> {
     match color.strip_prefix('#') {
         Some(color) if color.len() == 6 => {

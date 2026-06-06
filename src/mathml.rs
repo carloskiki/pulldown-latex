@@ -323,6 +323,7 @@ where
                         self.writer.write_all(b"><mtr><mtd>")?;
                         EnvGrouping::Equation
                     }
+                    Grouping::Text | Grouping::InlineMath => EnvGrouping::Normal,
                 };
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
@@ -587,6 +588,9 @@ where
         match content {
             Content::Text(text) => {
                 self.open_tag("mtext", None)?;
+                if let Some(mathvariant) = self.state().font.and_then(font_mathvariant) {
+                    write!(self.writer, " mathvariant=\"{}\"", mathvariant)?;
+                }
                 self.writer.write_all(b">")?;
                 let trimmed = text.trim();
                 if text.starts_with(char::is_whitespace) {
@@ -1472,6 +1476,30 @@ where
     E: std::error::Error,
 {
     MathmlWriter::new(parser, writer, config).write()
+}
+
+/// Map a [`Font`] to a MathML `mathvariant` value suitable for `<mtext>`.
+///
+/// Returns `None` for fonts that have no direct `mathvariant` equivalent (or
+/// for the default upright text font), in which case the renderer should not
+/// emit a `mathvariant` attribute.
+fn font_mathvariant(font: Font) -> Option<&'static str> {
+    Some(match font {
+        Font::Bold => "bold",
+        Font::Italic => "italic",
+        Font::BoldItalic => "bold-italic",
+        Font::Script => "script",
+        Font::BoldScript => "bold-script",
+        Font::Fraktur => "fraktur",
+        Font::BoldFraktur => "bold-fraktur",
+        Font::DoubleStruck => "double-struck",
+        Font::SansSerif => "sans-serif",
+        Font::BoldSansSerif => "bold-sans-serif",
+        Font::SansSerifItalic => "sans-serif-italic",
+        Font::SansSerifBoldItalic => "sans-serif-bold-italic",
+        Font::Monospace => "monospace",
+        Font::UpRight => return None,
+    })
 }
 
 fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {
