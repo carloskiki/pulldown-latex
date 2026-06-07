@@ -170,6 +170,23 @@ pub enum Visual {
     /// generates an akward looking negation across the next element, when it does not correspond
     /// to a commonly negated element.
     Negation,
+    /// The following element is rendered with its vertical extent (height, depth, or both)
+    /// collapsed to zero. Produced by `\smash`, `\smash[t]`, and `\smash[b]`.
+    Smash(SmashMode),
+    /// The following element is rendered with zero apparent width, centered horizontally.
+    /// Produced by `\mathclap` and `\clap`.
+    Clap,
+}
+
+/// Which dimension(s) `\smash` should collapse.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SmashMode {
+    /// Collapse both height and depth (default `\smash{X}`).
+    Both,
+    /// Collapse only the height (top), as in `\smash[t]{X}`.
+    Top,
+    /// Collapse only the depth (bottom), as in `\smash[b]{X}`.
+    Bottom,
 }
 
 /// Logical type of the script. This is used to determine how to render the scripts.
