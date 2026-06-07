@@ -173,6 +173,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::Event(E::Space {
                         width: Some(Dimension::new(1., DimensionUnit::Em)),
                         height: None,
+                        depth: None,
                     }),
                     I::Event(E::Begin(G::Normal)),
                     I::Event(E::Content(C::Delimiter {
@@ -704,60 +705,70 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "," | "thinspace" => E::Space {
                 width: Some(Dimension::new(3. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             ">" | ":" | "medspace" => E::Space {
                 width: Some(Dimension::new(4. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             ";" | "thickspace" => E::Space {
                 width: Some(Dimension::new(5. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "enspace" => E::Space {
                 width: Some(Dimension::new(0.5, DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "quad" => E::Space {
                 width: Some(Dimension::new(1., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "qquad" => E::Space {
                 width: Some(Dimension::new(2., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "mathstrut" => E::Space {
                 width: None,
                 height: Some(Dimension::new(0.7, DimensionUnit::Em)),
+                depth: None,
             },
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
-                let dimension = lex::dimension(&mut self.content)?;
+                let dimension = lex::dimension_or_braced(&mut self.content)?;
                 E::Space {
                     width: Some(dimension),
                     height: None,
+                    depth: None,
                 }
             }
             "hskip" => {
-                let glue = lex::glue(&mut self.content)?;
+                let glue = lex::glue_or_braced(&mut self.content)?;
                 E::Space {
                     width: Some(glue.0),
                     height: None,
+                    depth: None,
                 }
             }
             "mkern" => {
-                let dimension = lex::dimension(&mut self.content)?;
+                let dimension = lex::dimension_or_braced(&mut self.content)?;
                 if dimension.unit == DimensionUnit::Mu {
                     E::Space {
                         width: Some(dimension),
                         height: None,
+                        depth: None,
                     }
                 } else {
                     return Err(ErrorKind::MathUnit);
                 }
             }
             "mskip" => {
-                let glue = lex::glue(&mut self.content)?;
+                let glue = lex::glue_or_braced(&mut self.content)?;
                 if glue.0.unit == DimensionUnit::Mu
                     && glue
                         .1
@@ -769,6 +780,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     E::Space {
                         width: Some(glue.0),
                         height: None,
+                        depth: None,
                     }
                 } else {
                     return Err(ErrorKind::MathUnit);
@@ -782,20 +794,44 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 E::Space {
                     width: Some(glue.0),
                     height: None,
+                    depth: None,
+                }
+            }
+            // MathJax extension: `\Space{width}{height}{depth}`.
+            "Space" => {
+                let Argument::Group(mut width_arg) = lex::argument(&mut self.content)? else {
+                    return Err(ErrorKind::DimensionArgument);
+                };
+                let width = lex::dimension(&mut width_arg)?;
+                let Argument::Group(mut height_arg) = lex::argument(&mut self.content)? else {
+                    return Err(ErrorKind::DimensionArgument);
+                };
+                let height = lex::dimension(&mut height_arg)?;
+                let Argument::Group(mut depth_arg) = lex::argument(&mut self.content)? else {
+                    return Err(ErrorKind::DimensionArgument);
+                };
+                let depth = lex::dimension(&mut depth_arg)?;
+                E::Space {
+                    width: Some(width),
+                    height: Some(height),
+                    depth: Some(depth),
                 }
             }
             // Negative spacing
             "!" | "negthinspace" => E::Space {
                 width: Some(Dimension::new(-3. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "negmedspace" => E::Space {
                 width: Some(Dimension::new(-4. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "negthickspace" => E::Space {
                 width: Some(Dimension::new(-5. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
 
             ////////////////////////
@@ -1441,6 +1477,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::Event(E::Space {
                         width: Some(Dimension::new(0., DimensionUnit::Em)),
                         height: Some(Dimension::new(0.7, DimensionUnit::Em)),
+                        depth: None,
                     }),
                 ]);
                 return Ok(());

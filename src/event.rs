@@ -84,6 +84,8 @@ pub enum Event<'a> {
         width: Option<Dimension>,
         /// The amount of space to add after the element.
         height: Option<Dimension>,
+        /// The amount of depth (space below the baseline) to add.
+        depth: Option<Dimension>,
     },
     /// This event specifies a state change in the renderer.
     ///
