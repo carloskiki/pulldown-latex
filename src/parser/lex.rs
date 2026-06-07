@@ -242,11 +242,46 @@ pub fn glue(input: &mut &str) -> InnerResult<Glue> {
     Ok(dimen)
 }
 
+/// Parse a glue, accepting a single `{...}` group around it as KaTeX/MathJax do.
+///
+/// Plain TeX requires the bare form (e.g. `\hskip 1em`), but KaTeX and MathJax also
+/// tolerate `\hskip{1em}`. This wrapper transparently unwraps a single brace group.
+pub fn glue_or_braced(input: &mut &str) -> InnerResult<Glue> {
+    if input.trim_start().starts_with('{') {
+        let mut inner = brace_argument(input)?;
+        let result = glue(&mut inner)?;
+        // Allow any trailing whitespace inside the group.
+        if !inner.trim_start().is_empty() {
+            return Err(ErrorKind::DimensionArgument);
+        }
+        Ok(result)
+    } else {
+        glue(input)
+    }
+}
+
 /// Parse a dimension (TeXBook p. 266).
 pub fn dimension(input: &mut &str) -> InnerResult<Dimension> {
     let number = floating_point(input)?;
     let unit = dimension_unit(input)?;
     Ok(Dimension::new(number, unit))
+}
+
+/// Parse a dimension, accepting a single `{...}` group around it as KaTeX/MathJax do.
+///
+/// Plain TeX requires the bare form (e.g. `\kern 1em`), but KaTeX and MathJax also
+/// tolerate `\kern{1em}`. This wrapper transparently unwraps a single brace group.
+pub fn dimension_or_braced(input: &mut &str) -> InnerResult<Dimension> {
+    if input.trim_start().starts_with('{') {
+        let mut inner = brace_argument(input)?;
+        let result = dimension(&mut inner)?;
+        if !inner.trim_start().is_empty() {
+            return Err(ErrorKind::DimensionArgument);
+        }
+        Ok(result)
+    } else {
+        dimension(input)
+    }
 }
 
 /// Parse a dimension unit (TeXBook p. 266).
@@ -569,6 +604,37 @@ mod tests {
             )
         );
         assert_eq!(input, "nope");
+    }
+
+    #[test]
+    fn dimension_or_braced_bare() {
+        let mut input = "1em rest";
+        let dim = lex::dimension_or_braced(&mut input).unwrap();
+        assert_eq!(dim, Dimension::new(1.0, DimensionUnit::Em));
+        assert_eq!(input, "rest");
+    }
+
+    #[test]
+    fn dimension_or_braced_with_braces() {
+        let mut input = "{1em} rest";
+        let dim = lex::dimension_or_braced(&mut input).unwrap();
+        assert_eq!(dim, Dimension::new(1.0, DimensionUnit::Em));
+        assert_eq!(input, " rest");
+    }
+
+    #[test]
+    fn glue_or_braced_with_braces() {
+        let mut input = "{1.2pt plus 3pt minus 1pt} rest";
+        let glue = lex::glue_or_braced(&mut input).unwrap();
+        assert_eq!(
+            glue,
+            (
+                Dimension::new(1.2, DimensionUnit::Pt),
+                Some(Dimension::new(3.0, DimensionUnit::Pt)),
+                Some(Dimension::new(1.0, DimensionUnit::Pt))
+            )
+        );
+        assert_eq!(input, " rest");
     }
 
     #[test]

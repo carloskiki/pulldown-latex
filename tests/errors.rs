@@ -61,6 +61,34 @@ fn comments() {
     }
 }
 
+// KaTeX/MathJax compatibility: braced dimension arguments for spacing primitives.
+
+#[test]
+fn braced_dimension_arguments_accepted() {
+    let storage = Storage::new();
+    let inputs = [
+        r"\hskip{1em}",
+        r"\hskip 1em",
+        r"\kern{1em}",
+        r"\kern 1em",
+        r"\mkern{3mu}",
+        r"\mkern 3mu",
+        r"\mskip{3mu plus 1mu}",
+        r"\mskip 3mu plus 1mu",
+        r"\Space{1em}{2ex}{0pt}",
+    ];
+    for input in inputs {
+        let parser = Parser::new(input, &storage);
+        let result: Result<Vec<_>, _> = parser.collect();
+        assert!(
+            result.is_ok(),
+            "expected braced/bare spacing input to parse: {:?} (err: {:?})",
+            input,
+            result.err()
+        );
+    }
+}
+
 // Regression tests from fuzzing
 
 #[test]
