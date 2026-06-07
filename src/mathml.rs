@@ -1480,26 +1480,18 @@ where
 
 /// Map a [`Font`] to a MathML `mathvariant` value suitable for `<mtext>`.
 ///
-/// Returns `None` for fonts that have no direct `mathvariant` equivalent (or
-/// for the default upright text font), in which case the renderer should not
-/// emit a `mathvariant` attribute.
+/// Only the variants reachable from a text-mode font command (`\textbf`,
+/// `\textit`/`\emph`/`\textsl`, `\textsf`, `\texttt`) need a direct mapping;
+/// other variants fall back to no `mathvariant` attribute. `UpRight` matches
+/// `<mtext>`'s default rendering, so it is also `None`.
 fn font_mathvariant(font: Font) -> Option<&'static str> {
-    Some(match font {
-        Font::Bold => "bold",
-        Font::Italic => "italic",
-        Font::BoldItalic => "bold-italic",
-        Font::Script => "script",
-        Font::BoldScript => "bold-script",
-        Font::Fraktur => "fraktur",
-        Font::BoldFraktur => "bold-fraktur",
-        Font::DoubleStruck => "double-struck",
-        Font::SansSerif => "sans-serif",
-        Font::BoldSansSerif => "bold-sans-serif",
-        Font::SansSerifItalic => "sans-serif-italic",
-        Font::SansSerifBoldItalic => "sans-serif-bold-italic",
-        Font::Monospace => "monospace",
-        Font::UpRight => return None,
-    })
+    match font {
+        Font::Bold => Some("bold"),
+        Font::Italic => Some("italic"),
+        Font::SansSerif => Some("sans-serif"),
+        Font::Monospace => Some("monospace"),
+        _ => None,
+    }
 }
 
 fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {

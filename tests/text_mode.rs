@@ -174,8 +174,10 @@ fn unbalanced_inline_math_in_text_errors() {
     // `$...` without a matching `$` inside a text mode argument should be
     // reported as an error rather than silently consuming the rest of the input.
     let storage = Storage::new();
-    let parser = Parser::new(r"\text{oops $x", &storage);
-    let has_error = parser.into_iter().any(|e| e.is_err());
+    // The outer `\text{...}` braces are balanced; the inner `$x` has no
+    // closing `$`, which forces the `until_unescaped_dollar` lexer's
+    // `MathShift` error path.
+    let has_error = Parser::new(r"\text{x$y}", &storage).any(|e| e.is_err());
     assert!(has_error, "expected a parse error for unmatched $");
 }
 
@@ -519,4 +521,58 @@ fn comment_inside_inline_math_lexer() {
     let storage = Storage::new();
     let events = parse("\\text{$a%hidden $\nb$ tail}", &storage);
     assert!(events.contains(&Event::Begin(Grouping::InlineMath)));
+}
+
+#[test]
+fn text_with_control_sequence_argument_errors() {
+    // `\text` with an unbraced control-sequence argument is a parser error,
+    // exercising the `ControlSequenceAsArgument` branch of `text_argument`.
+    let storage = Storage::new();
+    let has_error = Parser::new(r"\text\foo", &storage).any(|e| e.is_err());
+    assert!(has_error, "expected ControlSequenceAsArgument");
+}
+
+#[test]
+fn textbf_with_control_sequence_argument_errors() {
+    // Same fallback path inside `text_argument_with_font`.
+    let storage = Storage::new();
+    let has_error = Parser::new(r"\textbf\foo", &storage).any(|e| e.is_err());
+    assert!(has_error, "expected ControlSequenceAsArgument");
+}
+
+#[test]
+fn nested_textbf_with_control_sequence_argument_errors() {
+    // Same fallback path inside `text_font_group` (text-mode dispatch).
+    let storage = Storage::new();
+    let has_error = Parser::new(r"\text{\textbf\foo}", &storage).any(|e| e.is_err());
+    assert!(has_error, "expected ControlSequenceAsArgument");
+}
+
+#[test]
+fn renderer_emits_mathvariant_for_sans_serif_text() {
+    let out = render(r"\text{\textsf{x}}");
+    assert!(
+        out.contains("mathvariant=\"sans-serif\""),
+        "expected sans-serif mathvariant in {out}",
+    );
+}
+
+#[test]
+fn renderer_emits_mathvariant_for_monospace_text() {
+    let out = render(r"\text{\texttt{x}}");
+    assert!(
+        out.contains("mathvariant=\"monospace\""),
+        "expected monospace mathvariant in {out}",
+    );
+}
+
+#[test]
+fn renderer_omits_mathvariant_for_upright_text() {
+    // `\textrm` sets the font to `UpRight`, which has no `mathvariant` mapping
+    // (it matches the default rendering of `<mtext>`).
+    let out = render(r"\text{\textrm{x}}");
+    assert!(
+        !out.contains("mathvariant="),
+        "expected no mathvariant in {out}",
+    );
 }
