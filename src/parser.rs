@@ -528,7 +528,7 @@ struct ExpansionSpan<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Content, DelimiterType, RelationContent, Visual};
+    use crate::event::{Content, DelimiterType, Dimension, DimensionUnit, RelationContent, Visual};
 
     use super::*;
 
@@ -778,6 +778,36 @@ mod tests {
                     ty: DelimiterType::Close
                 }),
             ]
+        );
+    }
+
+    #[test]
+    fn mathstrut() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathstrut", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![Event::Space {
+                width: None,
+                height: Some(Dimension::new(0.7, DimensionUnit::Em)),
+            }]
+        );
+    }
+
+    #[test]
+    fn strut() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\strut", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![Event::Space {
+                width: None,
+                height: Some(Dimension::new(1.0, DimensionUnit::Em)),
+            },]
         );
     }
 
