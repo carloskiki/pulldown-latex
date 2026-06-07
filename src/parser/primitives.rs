@@ -7,7 +7,7 @@ use crate::event::{
     ArrayColumn as AC, ColorChange as CC, ColorTarget as CT, ColumnAlignment, Content as C,
     DelimiterSize, DelimiterType, Dimension, DimensionUnit, EnvironmentFlow, Event as E, Font,
     Grouping as G, GroupingKind, Line, MatrixType, RelationContent, ScriptPosition as SP,
-    ScriptType as ST, StateChange as SC, Style as S, Visual as V,
+    ScriptType as ST, SmashMode, StateChange as SC, Style as S, Visual as V,
 };
 
 use super::{
@@ -1398,6 +1398,29 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "text" => return self.text_argument(),
             "not" | "cancel" => {
                 self.buffer.push(I::Event(E::Visual(V::Negation)));
+                let argument = lex::argument(&mut self.content)?;
+                self.handle_argument(argument)?;
+                return Ok(());
+            }
+            "smash" => {
+                // Optional [t] or [b] argument; defaults to collapsing both.
+                let mode = if let Some(opt) = lex::optional_argument(&mut self.content) {
+                    match opt.trim() {
+                        "t" => SmashMode::Top,
+                        "b" => SmashMode::Bottom,
+                        // Anything else (including "tb"/"bt") collapses both, matching KaTeX.
+                        _ => SmashMode::Both,
+                    }
+                } else {
+                    SmashMode::Both
+                };
+                self.buffer.push(I::Event(E::Visual(V::Smash(mode))));
+                let argument = lex::argument(&mut self.content)?;
+                self.handle_argument(argument)?;
+                return Ok(());
+            }
+            "mathclap" | "clap" => {
+                self.buffer.push(I::Event(E::Visual(V::Clap)));
                 let argument = lex::argument(&mut self.content)?;
                 self.handle_argument(argument)?;
                 return Ok(());

@@ -528,7 +528,7 @@ struct ExpansionSpan<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Content, DelimiterType, RelationContent, Visual};
+    use crate::event::{Content, DelimiterType, RelationContent, SmashMode, Visual};
 
     use super::*;
 
@@ -710,6 +710,77 @@ mod tests {
                 Event::End,
                 Event::Content(Content::Number("2")),
                 Event::Content(Content::Number("4")),
+            ]
+        );
+    }
+
+    #[test]
+    fn smash_default_collapses_both() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\smash{y}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::Smash(SmashMode::Both)),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Ordinary {
+                    content: 'y',
+                    stretchy: false
+                }),
+                Event::End,
+            ]
+        );
+    }
+
+    #[test]
+    fn smash_optional_top_and_bottom() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\smash[t]{a}\smash[b]{b}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::Smash(SmashMode::Top)),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Ordinary {
+                    content: 'a',
+                    stretchy: false
+                }),
+                Event::End,
+                Event::Visual(Visual::Smash(SmashMode::Bottom)),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Ordinary {
+                    content: 'b',
+                    stretchy: false
+                }),
+                Event::End,
+            ]
+        );
+    }
+
+    #[test]
+    fn mathclap_and_clap_emit_clap_visual() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathclap{=}\clap{x}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+        assert_eq!(
+            events,
+            vec![
+                Event::Visual(Visual::Clap),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Relation {
+                    content: RelationContent::single_char('='),
+                    small: false,
+                }),
+                Event::End,
+                Event::Visual(Visual::Clap),
+                Event::Begin(Grouping::Normal),
+                Event::Content(Content::Ordinary {
+                    content: 'x',
+                    stretchy: false
+                }),
+                Event::End,
             ]
         );
     }
