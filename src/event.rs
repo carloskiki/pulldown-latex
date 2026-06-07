@@ -33,8 +33,12 @@ use std::fmt::Display;
 ///
 /// __Input__: `\text{Hello, world!}`
 /// ```
-/// # use pulldown_latex::event::{Event, Content};
-/// [Event::Content(Content::Text("Hello, world!"))];
+/// # use pulldown_latex::event::{Event, Content, Grouping};
+/// [
+///     Event::Begin(Grouping::Text),
+///     Event::Content(Content::Text("Hello, world!")),
+///     Event::End,
+/// ];
 /// ```
 ///
 /// __Input__: `x^2_{\text{max}}`
@@ -46,7 +50,9 @@ use std::fmt::Display;
 ///         position: ScriptPosition::Right,
 ///     },
 ///     Event::Begin(Grouping::Normal),
+///     Event::Begin(Grouping::Text),
 ///     Event::Content(Content::Text("max")),
+///     Event::End,
 ///     Event::End,
 ///     Event::Content(Content::Ordinary {
 ///         content: 'x',
@@ -378,11 +384,27 @@ pub enum Grouping {
     Multline,
     /// The `split` environment of `LaTeX`.
     Split,
+    /// A grouping induced by `\text{...}` (or other text-mode commands).
+    ///
+    /// Inside this grouping, the content is parsed in text mode rather than math mode:
+    /// literal characters are coalesced into [`Content::Text`] runs, font commands like
+    /// `\textbf`, `\textit`, and `\emph` apply via [`StateChange::Font`], and a
+    /// whitelist of text-mode commands (`\LaTeX`, escaped specials, spacing, etc.) is
+    /// supported. Embedded `$...$` switches back into math mode via [`Grouping::InlineMath`].
+    Text,
+    /// A grouping induced by `$...$` appearing inside a [`Grouping::Text`].
+    ///
+    /// This signals to the renderer that math-mode content follows, so it should drop
+    /// out of `<mtext>` and back into the normal math path.
+    InlineMath,
 }
 
 impl Grouping {
     pub(crate) fn is_math_env(&self) -> bool {
-        !matches!(self, Self::Normal | Self::LeftRight(_, _))
+        !matches!(
+            self,
+            Self::Normal | Self::LeftRight(_, _) | Self::Text | Self::InlineMath
+        )
     }
 }
 

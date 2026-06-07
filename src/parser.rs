@@ -77,6 +77,7 @@ impl<'store> Parser<'store> {
         instruction_stack.push(Instruction::SubGroup {
             content: input,
             allowed_alignment_count: None,
+            text_mode: false,
         });
         let buffer = Vec::with_capacity(16);
         Self {
@@ -102,17 +103,26 @@ impl<'store> Iterator for Parser<'store> {
                     _ => None,
                 })
                 .expect("there is something in the stack"))),
-            Some(Instruction::SubGroup { content, .. }) if content.trim_start().is_empty() => {
+            Some(Instruction::SubGroup {
+                content, text_mode, ..
+            }) if !*text_mode && content.trim_start().is_empty() => {
+                self.instruction_stack.pop();
+                self.next()
+            }
+            Some(Instruction::SubGroup {
+                content, text_mode, ..
+            }) if *text_mode && content.is_empty() => {
                 self.instruction_stack.pop();
                 self.next()
             }
             Some(Instruction::SubGroup {
                 content,
                 allowed_alignment_count,
-                ..
+                text_mode,
             }) => {
                 let state = ParserState {
                     allowed_alignment_count: allowed_alignment_count.as_mut(),
+                    text_mode: *text_mode,
                     ..Default::default()
                 };
 
@@ -211,6 +221,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     Instruction::SubGroup {
                         content: group,
                         allowed_alignment_count: None,
+                        text_mode: self.state.text_mode,
                     },
                     Instruction::Event(Event::End),
                 ]);
@@ -228,6 +239,11 @@ impl<'b, 'store> InnerParser<'b, 'store> {
     ///
     /// [amsdocs]: https://mirror.its.dal.ca/ctan/macros/latex/required/amsmath/amsldoc.pdf
     fn parse(&mut self) -> InnerResult<Option<(Event<'store>, ScriptDescriptor)>> {
+        if self.state.text_mode {
+            self.parse_text_element()?;
+            return Ok(None);
+        }
+
         // 1. Parse the next token and output everything to the staging stack.
         let original_content = self.content.trim_start();
         let token = match lex::token(&mut self.content) {
@@ -418,6 +434,8 @@ enum Instruction<'a> {
     SubGroup {
         content: &'a str,
         allowed_alignment_count: Option<AlignmentCount>,
+        /// Whether the substring should be parsed in text mode.
+        text_mode: bool,
     },
 }
 

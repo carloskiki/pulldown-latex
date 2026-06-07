@@ -24,6 +24,13 @@ pub struct ParserState<'a> {
     /// If `None`, then we are in a group where both `\\` (newlines) and `&` (alignments) are disallowed.
     /// Otherwise, this is the number of `&` characters allowed in the current line.
     pub allowed_alignment_count: Option<&'a mut AlignmentCount>,
+    /// Whether the parser is currently inside text mode (e.g., inside `\text{...}`).
+    ///
+    /// In text mode, the parser coalesces runs of literal characters into [`Content::Text`]
+    /// events and dispatches a limited set of commands through the text-mode handler.
+    ///
+    /// [`Content::Text`]: crate::event::Content::Text
+    pub text_mode: bool,
 }
 
 impl<'a> Default for ParserState<'a> {
@@ -34,6 +41,7 @@ impl<'a> Default for ParserState<'a> {
             skip_scripts: false,
             handling_argument: false,
             allowed_alignment_count: None,
+            text_mode: false,
         }
     }
 }
