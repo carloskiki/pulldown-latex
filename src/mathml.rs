@@ -445,7 +445,11 @@ where
                 self.writer.write_all(b">")
             }
 
-            Ok(Event::Space { width, height, depth }) => {
+            Ok(Event::Space {
+                width,
+                height,
+                depth,
+            }) => {
                 if let Some(width) = width {
                     write!(self.writer, "<mspace width=\"{}\"", width)?;
                     if width.value < 0. {

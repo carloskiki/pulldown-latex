@@ -76,14 +76,42 @@ fn braced_dimension_arguments_accepted() {
     ];
     for input in inputs {
         let parser = Parser::new(input, &storage);
-        let result: Result<Vec<_>, _> = parser.collect();
-        assert!(
-            result.is_ok(),
-            "expected braced/bare spacing input to parse: {:?} (err: {:?})",
-            input,
-            result.err()
-        );
+        let mut mathml = String::new();
+        push_mathml(&mut mathml, parser, Default::default()).unwrap_or_else(|e| {
+            panic!("expected braced/bare spacing input to render: {input:?} (err: {e:?})")
+        });
     }
+}
+
+#[test]
+fn space_depth_renders_in_mathml() {
+    let storage = Storage::new();
+    let parser = Parser::new(r"\Space{1em}{2ex}{3pt}", &storage);
+    let mut mathml = String::new();
+    push_mathml(&mut mathml, parser, Default::default()).unwrap();
+    assert!(
+        mathml.contains("depth=\""),
+        "expected depth attribute in: {mathml}"
+    );
+}
+
+should_error! {
+    space_missing_groups,
+    r"\Space 1em{2ex}{0pt}",
+    r"\Space{1em} 2ex{0pt}",
+    r"\Space{1em}{2ex} 0pt",
+}
+
+should_error! {
+    braced_dimension_trailing_garbage,
+    r"\kern{1em foo}",
+    r"\hskip{1em garbage}",
+}
+
+should_error! {
+    mkern_mskip_non_mu_units,
+    r"\mkern{1em}",
+    r"\mskip{1em plus 1em}",
 }
 
 #[test]
