@@ -14,7 +14,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Zip font files
         run: |
           zip -r font.zip font
@@ -45,7 +45,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       - name: Install rust with wasm
         uses: dtolnay/rust-toolchain@stable
         with:

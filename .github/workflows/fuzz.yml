@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     name: fuzz / build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           submodules: true
       - name: Install nightly
