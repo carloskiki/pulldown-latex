@@ -53,6 +53,11 @@ path = "tests/latexml.rs"
 harness = false
 
 [[test]]
+name = "miscellaneous"
+path = "tests/miscellaneous.rs"
+harness = false
+
+[[test]]
 name = "cross-browser"
 path = "tests/cross-browser.rs"
 harness = false

@@ -86,15 +86,20 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
             '0'..='9' => {
                 let content = token.as_str();
-                let mut len = content
-                    .chars()
-                    .skip(1)
-                    .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
-                    .count()
-                    + 1;
-                if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                    len -= 1;
-                }
+                let len = if self.state.handling_argument {
+                    1
+                } else {
+                    let mut len = content
+                        .chars()
+                        .skip(1)
+                        .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
+                        .count()
+                        + 1;
+                    if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                        len -= 1;
+                    }
+                    len
+                };
                 let (number, rest) = content.split_at(len);
                 self.content = rest;
                 self.buffer
@@ -414,19 +419,19 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" | "boldsymbol" => {
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => {
                 return self.font_group(Some(Font::Bold))
             }
-            "mathcal" | "symcal" | "mathup" | "symup" => {
-                return self.font_group(Some(Font::Script))
-            }
+            "boldsymbol" => return self.font_group(Some(Font::BoldSymbol)),
+            "mathcal" | "symcal" => return self.font_group(Some(Font::Script)),
             "mathit" | "symit" => return self.font_group(Some(Font::Italic)),
-            "mathrm" | "symrm" => return self.font_group(Some(Font::UpRight)),
+            "mathrm" | "symrm" | "mathup" | "symup" => return self.font_group(Some(Font::UpRight)),
             "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
                 return self.font_group(Some(Font::SansSerif))
             }
             "mathtt" | "symtt" => return self.font_group(Some(Font::Monospace)),
             "mathbb" | "symbb" => return self.font_group(Some(Font::DoubleStruck)),
+            "mathbbit" | "symbbit" => return self.font_group(Some(Font::DoubleStruckItalic)),
             "mathfrak" | "symfrak" => return self.font_group(Some(Font::Fraktur)),
             "mathbfcal" | "symbfcal" => return self.font_group(Some(Font::BoldScript)),
             "mathsfit" | "symsfit" => return self.font_group(Some(Font::SansSerifItalic)),
