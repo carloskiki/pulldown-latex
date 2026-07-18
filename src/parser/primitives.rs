@@ -71,7 +71,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 let group = lex::group_content(str, GroupingKind::Normal)?;
                 self.buffer.extend([
                     I::Event(E::Begin(G::Normal)),
-                    I::SubGroup { content: group, allowed_alignment_count: None },
+                    I::SubGroup { content: group, allowed_alignment_count: None, text_mode: self.state.text_mode },
                     I::Event(E::End)
                 ]);
                 return Ok(())
@@ -559,6 +559,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::SubGroup {
                         content: group_content,
                         allowed_alignment_count: None,
+                        text_mode: false,
                     },
                     I::Event(E::End),
                 ]);
@@ -1406,6 +1407,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.buffer.push(I::SubGroup {
                     content,
                     allowed_alignment_count: Some(AlignmentCount::new(0)),
+                    text_mode: false,
                 });
                 self.buffer.push(I::Event(E::End));
                 return Ok(());
@@ -1429,6 +1431,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     self.buffer.push(I::SubGroup {
                         content: index,
                         allowed_alignment_count: None,
+                        text_mode: false,
                     });
                 } else {
                     self.buffer.push(I::Event(E::Visual(V::SquareRoot)));
@@ -1460,7 +1463,13 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     .expect("the control sequence contains one of the matched characters"),
             ),
             "|" => ordinary('∥'),
-            "text" => return self.text_argument(),
+            "text" | "mbox" | "hbox" => return self.text_argument(),
+            "textbf" => return self.text_argument_with_font(Some(Font::Bold)),
+            "textit" | "emph" => return self.text_argument_with_font(Some(Font::Italic)),
+            "textrm" | "textnormal" => return self.text_argument_with_font(Some(Font::UpRight)),
+            "textsf" => return self.text_argument_with_font(Some(Font::SansSerif)),
+            "texttt" => return self.text_argument_with_font(Some(Font::Monospace)),
+            "textsl" => return self.text_argument_with_font(Some(Font::Italic)),
             "not" | "cancel" => {
                 self.buffer.push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
@@ -1493,6 +1502,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::SubGroup {
                         content: group,
                         allowed_alignment_count: None,
+                        text_mode: self.state.text_mode,
                     },
                     I::Event(E::End),
                 ]);
@@ -1840,6 +1850,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::SubGroup {
                         content,
                         allowed_alignment_count: Some(AlignmentCount::new(align_count)),
+                        text_mode: false,
                     },
                     I::Event(E::End),
                 ]);
@@ -2025,6 +2036,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.buffer.push(I::SubGroup {
                     content: group,
                     allowed_alignment_count: None,
+                    text_mode: self.state.text_mode,
                 });
             }
         };
@@ -2082,14 +2094,209 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         E::StateChange(SC::Style(style))
     }
 
+    /// Like [`text_argument`], but wraps the text-mode content in a font state
+    /// change. Used for `\textbf`, `\textit`, etc. when encountered in math mode.
+    fn text_argument_with_font(&mut self, font: Option<Font>) -> InnerResult<()> {
+        let argument = lex::argument(&mut self.content)?;
+        let content = match argument {
+            Argument::Token(Token::Character(c)) => c.as_str(),
+            Argument::Group(inner) => inner,
+            _ => return Err(ErrorKind::ControlSequenceAsArgument),
+        };
+        self.buffer.extend([
+            I::Event(E::Begin(G::Text)),
+            I::Event(E::StateChange(SC::Font(font))),
+            I::SubGroup {
+                content,
+                allowed_alignment_count: None,
+                text_mode: true,
+            },
+            I::Event(E::End),
+        ]);
+        Ok(())
+    }
+
+    /// Parse the argument to `\text{...}` (or another text-mode command), and
+    /// emit a [`Grouping::Text`] enclosing a text-mode parse of its contents.
     fn text_argument(&mut self) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
-        self.buffer
-            .push(I::Event(E::Content(C::Text(match argument {
-                Argument::Token(Token::Character(c)) => c.as_str(),
-                Argument::Group(inner) => inner,
-                _ => return Err(ErrorKind::ControlSequenceAsArgument),
-            }))));
+        let content = match argument {
+            Argument::Token(Token::Character(c)) => c.as_str(),
+            Argument::Group(inner) => inner,
+            _ => return Err(ErrorKind::ControlSequenceAsArgument),
+        };
+        self.buffer.extend([
+            I::Event(E::Begin(G::Text)),
+            I::SubGroup {
+                content,
+                allowed_alignment_count: None,
+                text_mode: true,
+            },
+            I::Event(E::End),
+        ]);
+        Ok(())
+    }
+
+    /// Parse a single element while in text mode and push its events to the buffer.
+    ///
+    /// In text mode, runs of literal characters are coalesced into a single
+    /// [`Content::Text`] event. The `\` character starts a control sequence,
+    /// `$` introduces an embedded math-mode group via [`Grouping::InlineMath`],
+    /// and `~` produces a non-breaking space.
+    pub(super) fn parse_text_element(&mut self) -> InnerResult<()> {
+        if self.content.is_empty() {
+            return Ok(());
+        }
+
+        let bytes = self.content.as_bytes();
+        let first = bytes[0];
+
+        // A run of literal characters is consumed up to the next special byte.
+        // `{` and `}` also terminate a run because they begin/end a sub-group.
+        if !matches!(first, b'\\' | b'$' | b'~' | b'{' | b'}' | b'%') {
+            let mut idx = 1;
+            while idx < bytes.len()
+                && !matches!(bytes[idx], b'\\' | b'$' | b'~' | b'{' | b'}' | b'%')
+            {
+                idx += 1;
+            }
+            let (run, rest) = self.content.split_at(idx);
+            self.content = rest;
+            self.buffer.push(I::Event(E::Content(C::Text(run))));
+            return Ok(());
+        }
+
+        match first {
+            b'\\' => {
+                self.content = &self.content[1..];
+                let cs = lex::rhs_control_sequence(&mut self.content)?;
+                self.handle_text_primitive(cs)?;
+            }
+            b'$' => {
+                self.content = &self.content[1..];
+                let math_content = lex::until_unescaped_dollar(&mut self.content)?;
+                self.buffer.extend([
+                    I::Event(E::Begin(G::InlineMath)),
+                    I::SubGroup {
+                        content: math_content,
+                        allowed_alignment_count: None,
+                        text_mode: false,
+                    },
+                    I::Event(E::End),
+                ]);
+            }
+            b'{' => {
+                self.content = &self.content[1..];
+                let group = lex::group_content(&mut self.content, GroupingKind::Normal)?;
+                self.buffer.extend([
+                    I::Event(E::Begin(G::Normal)),
+                    I::SubGroup {
+                        content: group,
+                        allowed_alignment_count: None,
+                        text_mode: true,
+                    },
+                    I::Event(E::End),
+                ]);
+            }
+            b'}' => return Err(ErrorKind::UnbalancedGroup(None)),
+            b'~' => {
+                self.content = &self.content[1..];
+                self.buffer.push(I::Event(E::Content(C::Text("&nbsp;"))));
+            }
+            b'%' => {
+                // A comment runs to the end of the line; skip it.
+                let bytes = self.content.as_bytes();
+                let after = bytes
+                    .iter()
+                    .position(|&c| c == b'\n')
+                    .map(|i| i + 1)
+                    .unwrap_or(bytes.len());
+                self.content = &self.content[after..];
+            }
+            _ => unreachable!(),
+        }
+        Ok(())
+    }
+
+    /// Handle a control sequence that appears in text mode. Falls back to a
+    /// literal text rendering for unknown commands rather than erroring.
+    fn handle_text_primitive(&mut self, cs: &'store str) -> InnerResult<()> {
+        match cs {
+            // Font-changing commands. They are scoped to their argument by
+            // wrapping a font state change inside a `Grouping::Normal`.
+            "textbf" => return self.text_font_group(Some(Font::Bold)),
+            "textit" | "emph" => return self.text_font_group(Some(Font::Italic)),
+            "textrm" | "textnormal" => return self.text_font_group(Some(Font::UpRight)),
+            "textsf" => return self.text_font_group(Some(Font::SansSerif)),
+            "texttt" => return self.text_font_group(Some(Font::Monospace)),
+            "textsl" => return self.text_font_group(Some(Font::Italic)),
+
+            // Escaped specials: emit the literal character.
+            "#" | "$" | "&" | "%" | "_" | "{" | "}" => {
+                self.buffer.push(I::Event(E::Content(C::Text(cs))));
+            }
+            "textbackslash" => {
+                self.buffer.push(I::Event(E::Content(C::Text("\\"))));
+            }
+
+            // Brand commands.
+            "LaTeX" => self.buffer.push(I::Event(E::Content(C::Text("LaTeX")))),
+            "TeX" => self.buffer.push(I::Event(E::Content(C::Text("TeX")))),
+
+            // Spacing commands.
+            "," => self.buffer.push(I::Event(E::Space {
+                width: Some(Dimension::new(3.0 / 18.0, DimensionUnit::Em)),
+                height: None,
+            })),
+            ":" | ">" => self.buffer.push(I::Event(E::Space {
+                width: Some(Dimension::new(4.0 / 18.0, DimensionUnit::Em)),
+                height: None,
+            })),
+            ";" => self.buffer.push(I::Event(E::Space {
+                width: Some(Dimension::new(5.0 / 18.0, DimensionUnit::Em)),
+                height: None,
+            })),
+            "!" => self.buffer.push(I::Event(E::Space {
+                width: Some(Dimension::new(-3.0 / 18.0, DimensionUnit::Em)),
+                height: None,
+            })),
+            " " => self.buffer.push(I::Event(E::Content(C::Text(" ")))),
+
+            // Symbols.
+            "dag" | "dagger" => self.buffer.push(I::Event(E::Content(C::Text("\u{2020}")))),
+            "ddag" | "ddagger" => self.buffer.push(I::Event(E::Content(C::Text("\u{2021}")))),
+            "S" => self.buffer.push(I::Event(E::Content(C::Text("\u{00A7}")))),
+            "P" => self.buffer.push(I::Event(E::Content(C::Text("\u{00B6}")))),
+            "copyright" => self.buffer.push(I::Event(E::Content(C::Text("\u{00A9}")))),
+            "pounds" => self.buffer.push(I::Event(E::Content(C::Text("\u{00A3}")))),
+
+            // Unknown control sequence: emit it as literal text so the renderer
+            // does not silently lose the input.
+            _ => {
+                self.buffer.push(I::Event(E::Content(C::Text(cs))));
+            }
+        }
+        Ok(())
+    }
+
+    /// Wrap a text-mode argument in a `Grouping::Normal` scoped font change.
+    fn text_font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
+        let argument = lex::argument(&mut self.content)?;
+        self.buffer.extend([
+            I::Event(E::Begin(G::Normal)),
+            I::Event(E::StateChange(SC::Font(font))),
+        ]);
+        let content = match argument {
+            Argument::Token(Token::Character(c)) => c.as_str(),
+            Argument::Group(inner) => inner,
+            _ => return Err(ErrorKind::ControlSequenceAsArgument),
+        };
+        self.buffer.push(I::SubGroup {
+            content,
+            allowed_alignment_count: None,
+            text_mode: true,
+        });
+        self.buffer.push(I::Event(E::End));
         Ok(())
     }
 

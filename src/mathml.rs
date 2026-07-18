@@ -323,6 +323,7 @@ where
                         self.writer.write_all(b"><mtr><mtd>")?;
                         EnvGrouping::Equation
                     }
+                    Grouping::Text | Grouping::InlineMath => EnvGrouping::Normal,
                 };
                 self.env_stack.push(Environment::from(env_group));
                 Ok(())
@@ -587,6 +588,9 @@ where
         match content {
             Content::Text(text) => {
                 self.open_tag("mtext", None)?;
+                if let Some(mathvariant) = self.state().font.and_then(font_mathvariant) {
+                    write!(self.writer, " mathvariant=\"{}\"", mathvariant)?;
+                }
                 self.writer.write_all(b">")?;
                 let trimmed = text.trim();
                 if text.starts_with(char::is_whitespace) {
@@ -1492,6 +1496,22 @@ where
     E: std::error::Error,
 {
     MathmlWriter::new(parser, writer, config).write()
+}
+
+/// Map a [`Font`] to a MathML `mathvariant` value suitable for `<mtext>`.
+///
+/// Only the variants reachable from a text-mode font command (`\textbf`,
+/// `\textit`/`\emph`/`\textsl`, `\textsf`, `\texttt`) need a direct mapping;
+/// other variants fall back to no `mathvariant` attribute. `UpRight` matches
+/// `<mtext>`'s default rendering, so it is also `None`.
+fn font_mathvariant(font: Font) -> Option<&'static str> {
+    match font {
+        Font::Bold => Some("bold"),
+        Font::Italic => Some("italic"),
+        Font::SansSerif => Some("sans-serif"),
+        Font::Monospace => Some("monospace"),
+        _ => None,
+    }
 }
 
 fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {
