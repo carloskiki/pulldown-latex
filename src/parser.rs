@@ -528,7 +528,7 @@ struct ExpansionSpan<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Content, DelimiterType, RelationContent, Visual};
+    use crate::event::{Content, DelimiterType, Dimension, DimensionUnit, RelationContent, Visual};
 
     use super::*;
 

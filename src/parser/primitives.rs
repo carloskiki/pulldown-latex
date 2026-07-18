@@ -731,6 +731,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 width: None,
                 height: Some(Dimension::new(0.7, DimensionUnit::Em)),
             },
+            "strut" => E::Space {
+                width: None,
+                height: Some(Dimension::new(1.0, DimensionUnit::Em)),
+            },
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
