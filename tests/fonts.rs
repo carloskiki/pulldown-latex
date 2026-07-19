@@ -16,6 +16,39 @@ fn main() {
     concl.exit();
 }
 
+// Text-mode font selectors usable inside math mode (KaTeX/MathJax compatibility).
+round_trip_display!(
+    text_font_selectors,
+    r"a + \textrm{plain} + b",
+    r"a + \textbf{bold} + b",
+    r"a + \textit{italic} + b",
+    r"a + \textsf{sans} + b",
+    r"a + \texttt{mono} + b",
+);
+
+// `\text{...}` inheriting math-mode font state covers the remaining `mathvariant`
+// branches in the MathML renderer.
+round_trip_display!(
+    text_under_math_fonts,
+    r"\mathbb{\text{N}}",
+    r"\mathfrak{\text{g}}",
+    r"\mathbfcal{\text{S}}",
+    r"\mathbfit{\text{v}}",
+    r"\mathsfit{\text{x}}",
+    r"\mathbffrak{\text{F}}",
+    r"\mathbfsfup{\text{B}}",
+    r"\mathbfsfit{\text{X}}",
+    r"{\cal \text{C}}",
+);
+
+// Unbraced single-character argument to `\text` exercises the `Token::Character`
+// arm of `text_argument`.
+round_trip_display!(text_single_char_argument, r"\text x");
+
+// A control sequence as the argument to `\text` must error out
+// (`ControlSequenceAsArgument`), covering the fallback arm of `text_argument`.
+round_trip_display!(should_panic, text_control_sequence_argument, r"\text\alpha");
+
 round_trip_display!(
     boldsymbol_latin_letters,
     r"\boldsymbol{ABCDEFGHIJKLMNOPQRSTUVWXYZ}",
