@@ -528,7 +528,7 @@ struct ExpansionSpan<'a> {
 
 #[cfg(test)]
 mod tests {
-    use crate::event::{Content, DelimiterType, Dimension, DimensionUnit, RelationContent, Visual};
+    use crate::event::{Content, DelimiterType, Font, RelationContent, StateChange, Visual};
 
     use super::*;
 
@@ -841,6 +841,85 @@ mod tests {
                 }),
             ]
         );
+    }
+
+    #[test]
+    fn multi_letter_identifier_in_font_group() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathit{example}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Begin(Grouping::Normal),
+                Event::StateChange(StateChange::Font(Some(Font::Italic))),
+                Event::Content(Content::Identifier("example")),
+                Event::End,
+            ]
+        );
+    }
+
+    #[test]
+    fn multi_letter_identifier_in_mathrm() {
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathrm{total}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Begin(Grouping::Normal),
+                Event::StateChange(StateChange::Font(Some(Font::UpRight))),
+                Event::Content(Content::Identifier("total")),
+                Event::End,
+            ]
+        );
+    }
+
+    #[test]
+    fn single_letter_font_group_unchanged() {
+        // A single-character argument should still go through the per-char path.
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathit{x}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert_eq!(
+            events,
+            vec![
+                Event::Begin(Grouping::Normal),
+                Event::StateChange(StateChange::Font(Some(Font::Italic))),
+                Event::Content(Content::Ordinary {
+                    content: 'x',
+                    stretchy: false,
+                }),
+                Event::End,
+            ]
+        );
+    }
+
+    #[test]
+    fn font_group_with_nonalpha_falls_back() {
+        // A group with non-alphabetic chars must not be collapsed into an Identifier.
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathit{x+y}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, Event::Content(Content::Identifier(_)))));
+    }
+
+    #[test]
+    fn font_group_with_nonalpha_first_char_falls_back() {
+        // Exercises the early-return path when the first char is not alphabetic.
+        let store = Storage::new();
+        let parser = Parser::new(r"\mathit{+x}", &store);
+        let events = parser.collect::<Result<Vec<_>, ParserError>>().unwrap();
+
+        assert!(!events
+            .iter()
+            .any(|e| matches!(e, Event::Content(Content::Identifier(_)))));
     }
 
     #[test]

@@ -670,6 +670,33 @@ where
 
                 Ok(())
             }
+            Content::Identifier(s) => {
+                self.open_tag("mi", None)?;
+                self.writer.write_all(b">")?;
+                let font = self.state().font;
+                let math_style = self.config.math_style;
+                let buf = &mut [0u8; 4];
+                s.chars().try_for_each(|c| {
+                    let mapped = match font {
+                        // `BoldSymbol` resolves per-character to `Bold` for
+                        // upright glyphs and to `BoldItalic` otherwise, matching
+                        // the dispatch performed on the `Ordinary` path.
+                        Some(Font::BoldSymbol) => {
+                            let resolved = if math_style.should_be_upright(c) {
+                                Font::Bold
+                            } else {
+                                Font::BoldItalic
+                            };
+                            resolved.map_char(c)
+                        }
+                        Some(font) => font.map_char(c),
+                        None => c,
+                    };
+                    self.writer.write_all(mapped.encode_utf8(buf).as_bytes())
+                })?;
+                self.set_previous_atom(Atom::Ord);
+                self.writer.write_all(b"</mi>")
+            }
             Content::Ordinary { content, stretchy } => {
                 if stretchy {
                     self.writer.write_all(b"<mo stretchy=\"true\">")?;

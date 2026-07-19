@@ -24,8 +24,8 @@ use std::fmt::Display;
 /// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element,
 /// an [`Event::Space`], or an [`Event::StateChange`].
 ///
-/// [`Event::Alignment`]s, and [`Event::NewLine`]s are not considered elements, and must never
-/// occur when an element is expected.
+/// [`EnvironmentFlow::Alignment`]s, and [`EnvironmentFlow::NewLine`]s are not considered elements,
+/// and must never occur when an element is expected.
 ///
 /// ### Examples
 ///
@@ -107,6 +107,9 @@ pub enum Content<'a> {
     /// A function identifier, such as `sin`, `lim`, or a custom function with
     /// `\operatorname{arccotan}`.
     Function(&'a str),
+    /// A multi-character variable identifier, e.g., the contents of `\mathrm{total}` or
+    /// `\mathit{example}` when the argument is a run of alphabetic characters.
+    Identifier(&'a str),
     /// A variable identifier, such as `x`, `\theta`, `\aleph`, etc., and other stuff that do not have
     /// any spacing around them. This includes things that normally go in under and overscripts
     /// which may be stretchy, e.g., `→`, `‾`, etc.

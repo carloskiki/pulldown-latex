@@ -742,6 +742,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "strut" => E::Space {
                 width: None,
                 height: Some(Dimension::new(1.0, DimensionUnit::Em)),
+                depth: None,
             },
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
@@ -2070,6 +2071,9 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     Token::Character(c) => self.handle_char_token(c)?,
                 };
             }
+            Argument::Group(group) if is_alphabetic_identifier(group) => {
+                self.buffer.push(I::Event(E::Content(C::Identifier(group))));
+            }
             Argument::Group(group) => {
                 self.buffer.push(I::SubGroup {
                     content: group,
@@ -2297,6 +2301,23 @@ fn binary(op: char) -> E<'static> {
         content: op,
         small: false,
     })
+}
+
+/// Whether the contents of a font-modifier group should be treated as a single
+/// multi-letter identifier. Requires at least two ASCII alphabetic characters
+/// and nothing else.
+fn is_alphabetic_identifier(s: &str) -> bool {
+    let mut chars = s.chars();
+    let Some(first) = chars.next() else {
+        return false;
+    };
+    if !first.is_ascii_alphabetic() {
+        return false;
+    }
+    let Some(second) = chars.next() else {
+        return false;
+    };
+    second.is_ascii_alphabetic() && chars.all(|c| c.is_ascii_alphabetic())
 }
 
 /// Math atom classes used by the `\math<class>` family of commands.
