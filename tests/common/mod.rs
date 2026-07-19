@@ -1,13 +1,8 @@
-#![allow(clippy::await_holding_lock)]
-
-use std::{io::Write, mem::MaybeUninit, process::Stdio, sync::Mutex, time::Duration};
-
-use fantoccini::{Client, ClientBuilder, Locator};
 use heck::ToTitleCase;
 use inventory::collect;
 use libtest_mimic::{Arguments, Conclusion, Failed, Trial};
 use pulldown_latex::{config::RenderConfig, mathml::push_mathml, Parser, Storage};
-use tokio::process::Command;
+use std::{io::Write, sync::Mutex};
 
 #[allow(clippy::type_complexity)]
 pub static RENDERED: Mutex<Vec<(&str, Vec<(&str, String)>)>> = Mutex::new(Vec::new());
@@ -124,131 +119,6 @@ pub fn html_template(
         r#"</body>
 </html>"#
     ))?;
-    Ok(())
-}
-
-pub async fn cross_browser() -> anyhow::Result<()> {
-    let mut tmp = tempfile::Builder::new().suffix(".html").tempfile()?;
-    let path = format!("file://{}", tmp.path().to_str().unwrap());
-    let driver_processes = [
-        {
-            let port = 4444;
-            let process = Command::new("chromedriver")
-                .arg(format!("--port={port}"))
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .kill_on_drop(true)
-                .spawn()?;
-            (process, "chrome", port)
-        },
-        {
-            let port = 4445;
-            let process = Command::new("geckodriver")
-                .args(["--port", port.to_string().as_str()])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .kill_on_drop(true)
-                .spawn()?;
-            (process, "firefox", 4445)
-        },
-        {
-            let port = 4446;
-            let process = Command::new("safaridriver")
-                .args(["--port", port.to_string().as_str()])
-                .stdout(Stdio::null())
-                .stderr(Stdio::null())
-                .kill_on_drop(true)
-                .spawn()?;
-            (process, "safari", 4446)
-        },
-    ];
-    // Wait for processes to start, otherwise the clients will fail to connect
-    tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
-    // Safety: This is safe because all elements of the array do not need to be initialized.
-    let mut clients: [MaybeUninit<Client>; 3] = unsafe { MaybeUninit::uninit().assume_init() };
-    for (i, (_, _, port)) in driver_processes.iter().enumerate() {
-        let client = ClientBuilder::native()
-            .connect(&format!("http://localhost:{}", port))
-            .await?;
-        clients[i].write(client);
-    }
-    // Safety: The clients are initialized
-    let clients = unsafe { std::mem::transmute::<[MaybeUninit<Client>; 3], [Client; 3]>(clients) };
-
-    let rendered = &*RENDERED.lock().unwrap();
-    for (table_name, rows) in rendered {
-        for (_input, output) in rows {
-            html_template(
-                tmp.as_file_mut(),
-                "",
-                Some("cross-browser-render.css"),
-                |file: &mut std::fs::File| -> anyhow::Result<()> {
-                    file.write_all(output.as_bytes())?;
-                    Ok(())
-                },
-            )?;
-
-            for (name, client) in driver_processes.iter().map(|t| t.1).zip(&clients) {
-                client.goto(&path).await?;
-                let elem = client
-                    .wait()
-                    .at_most(Duration::from_secs(10))
-                    .for_element(Locator::XPath("/html/body"))
-                    .await?;
-
-                let screenshot = elem.screenshot().await?;
-
-                tokio::fs::write(
-                    format!("{OUTPUT_DIR}/screenshots/{name}/{table_name}.png"),
-                    screenshot,
-                )
-                .await?;
-            }
-
-            tmp.as_file_mut().set_len(0)?;
-        }
-    }
-
-    for (mut process, _, _) in driver_processes {
-        process.kill().await?;
-    }
-    for client in clients {
-        client.close().await?;
-    }
-
-    Ok(())
-}
-
-pub fn cross_browser_tabled(file: &mut std::fs::File) -> anyhow::Result<()> {
-    file.write_all(br#"<table style="margin: auto;">"#)?;
-    file.write_all(br#"<tr><th>Input</th><th>Chrome</th><th>Firefox</th><th>Safari</th></tr>"#)?;
-    let mut rendered = RENDERED.lock().unwrap();
-    rendered.sort();
-    rendered
-        .iter()
-        .try_for_each(|(table_name, rows)| -> std::io::Result<()> {
-            file.write_fmt(format_args!(
-                r#"<tr><th colspan="4">{table_name}</th></tr>"#,
-                table_name = table_name.to_title_case()
-            ))?;
-
-            file.write_all(br#"<tr><td class="input">"#)?;
-            rows.iter()
-                .try_for_each(|(input, _)| -> std::io::Result<()> {
-                    file.write_all(input.as_bytes())?;
-                    file.write_all(b"\n")?;
-                    Ok(())
-                })?;
-            file.write_all(b"</td>")?;
-            for browser in ["chrome", "firefox", "safari"] {
-                file.write_fmt(
-                    format_args!(r#"<td class="image-container"><img class="{browser}-img" src="{OUTPUT_DIR}/screenshots/{browser}/{table_name}.png"></td>"#)
-                )?;
-            }
-            file.write_all(b"</tr>")?;
-            Ok(())
-        })?;
-    file.write_all(b"</table>")?;
     Ok(())
 }
 
