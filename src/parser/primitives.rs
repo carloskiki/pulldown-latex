@@ -173,6 +173,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::Event(E::Space {
                         width: Some(Dimension::new(1., DimensionUnit::Em)),
                         height: None,
+                        depth: None,
                     }),
                     I::Event(E::Begin(G::Normal)),
                     I::Event(E::Content(C::Delimiter {
@@ -496,7 +497,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                         target: CT::Background,
                     }))),
                 ]);
-                self.text_argument()?;
+                self.text_argument(None)?;
                 E::End
             }
             "fcolorbox" => {
@@ -522,7 +523,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                         target: CT::Background,
                     }))),
                 ]);
-                self.text_argument()?;
+                self.text_argument(None)?;
                 E::End
             }
 
@@ -706,64 +707,75 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "," | "thinspace" => E::Space {
                 width: Some(Dimension::new(3. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             ">" | ":" | "medspace" => E::Space {
                 width: Some(Dimension::new(4. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             ";" | "thickspace" => E::Space {
                 width: Some(Dimension::new(5. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "enspace" => E::Space {
                 width: Some(Dimension::new(0.5, DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "quad" => E::Space {
                 width: Some(Dimension::new(1., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "qquad" => E::Space {
                 width: Some(Dimension::new(2., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "mathstrut" => E::Space {
                 width: None,
                 height: Some(Dimension::new(0.7, DimensionUnit::Em)),
+                depth: None,
             },
             "strut" => E::Space {
                 width: None,
                 height: Some(Dimension::new(1.0, DimensionUnit::Em)),
+                depth: None,
             },
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
             "kern" => {
-                let dimension = lex::dimension(&mut self.content)?;
+                let dimension = lex::dimension_or_braced(&mut self.content)?;
                 E::Space {
                     width: Some(dimension),
                     height: None,
+                    depth: None,
                 }
             }
             "hskip" => {
-                let glue = lex::glue(&mut self.content)?;
+                let glue = lex::glue_or_braced(&mut self.content)?;
                 E::Space {
                     width: Some(glue.0),
                     height: None,
+                    depth: None,
                 }
             }
             "mkern" => {
-                let dimension = lex::dimension(&mut self.content)?;
+                let dimension = lex::dimension_or_braced(&mut self.content)?;
                 if dimension.unit == DimensionUnit::Mu {
                     E::Space {
                         width: Some(dimension),
                         height: None,
+                        depth: None,
                     }
                 } else {
                     return Err(ErrorKind::MathUnit);
                 }
             }
             "mskip" => {
-                let glue = lex::glue(&mut self.content)?;
+                let glue = lex::glue_or_braced(&mut self.content)?;
                 if glue.0.unit == DimensionUnit::Mu
                     && glue
                         .1
@@ -775,6 +787,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     E::Space {
                         width: Some(glue.0),
                         height: None,
+                        depth: None,
                     }
                 } else {
                     return Err(ErrorKind::MathUnit);
@@ -788,20 +801,44 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 E::Space {
                     width: Some(glue.0),
                     height: None,
+                    depth: None,
+                }
+            }
+            // MathJax extension: `\Space{width}{height}{depth}`.
+            "Space" => {
+                let Argument::Group(mut width_arg) = lex::argument(&mut self.content)? else {
+                    return Err(ErrorKind::DimensionArgument);
+                };
+                let width = lex::dimension(&mut width_arg)?;
+                let Argument::Group(mut height_arg) = lex::argument(&mut self.content)? else {
+                    return Err(ErrorKind::DimensionArgument);
+                };
+                let height = lex::dimension(&mut height_arg)?;
+                let Argument::Group(mut depth_arg) = lex::argument(&mut self.content)? else {
+                    return Err(ErrorKind::DimensionArgument);
+                };
+                let depth = lex::dimension(&mut depth_arg)?;
+                E::Space {
+                    width: Some(width),
+                    height: Some(height),
+                    depth: Some(depth),
                 }
             }
             // Negative spacing
             "!" | "negthinspace" => E::Space {
                 width: Some(Dimension::new(-3. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "negmedspace" => E::Space {
                 width: Some(Dimension::new(-4. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
             "negthickspace" => E::Space {
                 width: Some(Dimension::new(-5. / 18., DimensionUnit::Em)),
                 height: None,
+                depth: None,
             },
 
             ////////////////////////
@@ -1447,6 +1484,7 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     I::Event(E::Space {
                         width: Some(Dimension::new(0., DimensionUnit::Em)),
                         height: Some(Dimension::new(0.7, DimensionUnit::Em)),
+                        depth: None,
                     }),
                 ]);
                 return Ok(());
@@ -1464,7 +1502,15 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     .expect("the control sequence contains one of the matched characters"),
             ),
             "|" => ordinary('∥'),
-            "text" => return self.text_argument(),
+            "text" => return self.text_argument(None),
+            // Text-mode font selectors usable inside math mode (KaTeX/MathJax compatibility).
+            // These behave like `\text{…}` but apply the corresponding font to the inner content.
+            "textrm" => return self.text_argument(Some(Font::UpRight)),
+            "textbf" => return self.text_argument(Some(Font::Bold)),
+            "textit" => return self.text_argument(Some(Font::Italic)),
+            "textsf" => return self.text_argument(Some(Font::SansSerif)),
+            "texttt" => return self.text_argument(Some(Font::Monospace)),
+
             "not" | "cancel" => {
                 self.buffer.push(I::Event(E::Visual(V::Negation)));
                 let argument = lex::argument(&mut self.content)?;
@@ -2089,14 +2135,23 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         E::StateChange(SC::Style(style))
     }
 
-    fn text_argument(&mut self) -> InnerResult<()> {
+    fn text_argument(&mut self, font: Option<Font>) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
-        self.buffer
-            .push(I::Event(E::Content(C::Text(match argument {
-                Argument::Token(Token::Character(c)) => c.as_str(),
-                Argument::Group(inner) => inner,
-                _ => return Err(ErrorKind::ControlSequenceAsArgument),
-            }))));
+        let text = match argument {
+            Argument::Token(Token::Character(c)) => c.as_str(),
+            Argument::Group(inner) => inner,
+            _ => return Err(ErrorKind::ControlSequenceAsArgument),
+        };
+        if let Some(font) = font {
+            self.buffer.extend([
+                I::Event(E::Begin(G::Normal)),
+                I::Event(E::StateChange(SC::Font(Some(font)))),
+                I::Event(E::Content(C::Text(text))),
+                I::Event(E::End),
+            ]);
+        } else {
+            self.buffer.push(I::Event(E::Content(C::Text(text))));
+        }
         Ok(())
     }
 

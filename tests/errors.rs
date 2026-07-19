@@ -58,6 +58,25 @@ fn comments() {
     push_mathml(&mut mathml, parser, config).unwrap();
 }
 
+should_error! {
+    space_missing_groups,
+    r"\Space 1em{2ex}{0pt}",
+    r"\Space{1em} 2ex{0pt}",
+    r"\Space{1em}{2ex} 0pt",
+}
+
+should_error! {
+    braced_dimension_trailing_garbage,
+    r"\kern{1em foo}",
+    r"\hskip{1em garbage}",
+}
+
+should_error! {
+    mkern_mskip_non_mu_units,
+    r"\mkern{1em}",
+    r"\mskip{1em plus 1em}",
+}
+
 #[test]
 fn macro_param_overflow() {
     // Issue #44: `then_some` eagerly evaluates `c as u8 - b'0'` causing overflow

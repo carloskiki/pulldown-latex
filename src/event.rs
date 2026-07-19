@@ -24,8 +24,8 @@ use std::fmt::Display;
 /// by [`Event::Begin`] and [`Event::End`], an [`Event::Visual`] or an [`Event::Script`] element,
 /// an [`Event::Space`], or an [`Event::StateChange`].
 ///
-/// [`Event::Alignment`]s, and [`Event::NewLine`]s are not considered elements, and must never
-/// occur when an element is expected.
+/// [`EnvironmentFlow::Alignment`]s, and [`EnvironmentFlow::NewLine`]s are not considered elements,
+/// and must never occur when an element is expected.
 ///
 /// ### Examples
 ///
@@ -84,6 +84,8 @@ pub enum Event<'a> {
         width: Option<Dimension>,
         /// The amount of space to add after the element.
         height: Option<Dimension>,
+        /// The amount of depth (space below the baseline) to add.
+        depth: Option<Dimension>,
     },
     /// This event specifies a state change in the renderer.
     ///
