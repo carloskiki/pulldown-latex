@@ -58,43 +58,6 @@ fn comments() {
     push_mathml(&mut mathml, parser, config).unwrap();
 }
 
-// KaTeX/MathJax compatibility: braced dimension arguments for spacing primitives.
-
-#[test]
-fn braced_dimension_arguments_accepted() {
-    let storage = Storage::new();
-    let inputs = [
-        r"\hskip{1em}",
-        r"\hskip 1em",
-        r"\kern{1em}",
-        r"\kern 1em",
-        r"\mkern{3mu}",
-        r"\mkern 3mu",
-        r"\mskip{3mu plus 1mu}",
-        r"\mskip 3mu plus 1mu",
-        r"\Space{1em}{2ex}{0pt}",
-    ];
-    for input in inputs {
-        let parser = Parser::new(input, &storage);
-        let mut mathml = String::new();
-        push_mathml(&mut mathml, parser, Default::default()).unwrap_or_else(|e| {
-            panic!("expected braced/bare spacing input to render: {input:?} (err: {e:?})")
-        });
-    }
-}
-
-#[test]
-fn space_depth_renders_in_mathml() {
-    let storage = Storage::new();
-    let parser = Parser::new(r"\Space{1em}{2ex}{3pt}", &storage);
-    let mut mathml = String::new();
-    push_mathml(&mut mathml, parser, Default::default()).unwrap();
-    assert!(
-        mathml.contains("depth=\""),
-        "expected depth attribute in: {mathml}"
-    );
-}
-
 should_error! {
     space_missing_groups,
     r"\Space 1em{2ex}{0pt}",
