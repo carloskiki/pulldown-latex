@@ -463,7 +463,11 @@ where
                 self.writer.write_all(b">")
             }
 
-            Ok(Event::Space { width, height }) => {
+            Ok(Event::Space {
+                width,
+                height,
+                depth,
+            }) => {
                 if let Some(width) = width {
                     write!(self.writer, "<mspace width=\"{}\"", width)?;
                     if width.value < 0. {
@@ -472,6 +476,9 @@ where
                 }
                 if let Some(height) = height {
                     write!(self.writer, " height=\"{}\"", height)?;
+                }
+                if let Some(depth) = depth {
+                    write!(self.writer, " depth=\"{}\"", depth)?;
                 }
                 self.writer.write_all(b" />")
             }
@@ -610,7 +617,21 @@ where
                 if text.starts_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
-                write_escaped(&mut self.writer, trimmed)?;
+                match self.state().font {
+                    None => write_escaped(&mut self.writer, trimmed)?,
+                    Some(font) => {
+                        for c in trimmed.chars() {
+                            match font.map_char(c) {
+                                '&' => self.writer.write_all(b"&amp;")?,
+                                '<' => self.writer.write_all(b"&lt;")?,
+                                '>' => self.writer.write_all(b"&gt;")?,
+                                mapped => self
+                                    .writer
+                                    .write_all(mapped.encode_utf8(&mut buf).as_bytes())?,
+                            }
+                        }
+                    }
+                }
                 if text.ends_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
