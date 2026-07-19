@@ -233,6 +233,10 @@ pub enum Font {
     BoldItalic,
     /// The bold font-face.
     Bold,
+    /// The `\boldsymbol` font-face: bold italic for characters that are italic
+    /// by default (Latin letters, lowercase Greek), bold upright for characters
+    /// that are upright by default (capital Greek, digits).
+    BoldSymbol,
     /// The fraktur font-face.
     Fraktur,
     /// The calligraphic font-face.
@@ -243,6 +247,9 @@ pub enum Font {
     SansSerif,
     /// The double-struck font-face.
     DoubleStruck,
+    /// The double-struck italic font-face. Covers the 5 letters at U+2145–U+2149
+    /// (ⅅ, ⅆ, ⅇ, ⅈ, ⅉ); no other characters have double-struck italic forms in Unicode.
+    DoubleStruckItalic,
     /// The italic font-face.
     Italic,
     /// The bold fraktur font-face.

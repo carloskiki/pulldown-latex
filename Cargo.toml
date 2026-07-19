@@ -38,6 +38,11 @@ path = "tests/wikipedia.rs"
 harness = false
 
 [[test]]
+name = "fonts"
+path = "tests/fonts.rs"
+harness = false
+
+[[test]]
 name = "mozilla"
 path = "tests/mozilla.rs"
 harness = false
@@ -45,6 +50,11 @@ harness = false
 [[test]]
 name = "latexml"
 path = "tests/latexml.rs"
+harness = false
+
+[[test]]
+name = "miscellaneous"
+path = "tests/miscellaneous.rs"
 harness = false
 
 [[test]]

@@ -86,15 +86,20 @@ impl<'b, 'store> InnerParser<'b, 'store> {
 
             '0'..='9' => {
                 let content = token.as_str();
-                let mut len = content
-                    .chars()
-                    .skip(1)
-                    .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
-                    .count()
-                    + 1;
-                if matches!(content.as_bytes()[len - 1], b'.' | b',') {
-                    len -= 1;
-                }
+                let len = if self.state.handling_argument {
+                    1
+                } else {
+                    let mut len = content
+                        .chars()
+                        .skip(1)
+                        .take_while(|&c| matches!(c, '.' | ',' | '0'..='9'))
+                        .count()
+                        + 1;
+                    if matches!(content.as_bytes()[len - 1], b'.' | b',') {
+                        len -= 1;
+                    }
+                    len
+                };
                 let (number, rest) = content.split_at(len);
                 self.content = rest;
                 self.buffer
@@ -190,6 +195,24 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             }
 
             // TODO: Operators with '*', for operatorname* and friends
+
+            ////////////////////////////////
+            // Atom-type (\math*) commands //
+            ////////////////////////////////
+            // These commands set the math class of their argument, which
+            // influences spacing in MathML output.
+            "mathord" => return self.atom_group(AtomClass::Ord),
+            "mathop" => {
+                self.state.allow_script_modifiers = true;
+                self.state.script_position = SP::Movable;
+                return self.atom_group(AtomClass::Op);
+            }
+            "mathbin" => return self.atom_group(AtomClass::Bin),
+            "mathrel" => return self.atom_group(AtomClass::Rel),
+            "mathopen" => return self.atom_group(AtomClass::Open),
+            "mathclose" => return self.atom_group(AtomClass::Close),
+            "mathpunct" => return self.atom_group(AtomClass::Punct),
+            "mathinner" => return self.atom_group(AtomClass::Inner),
 
             /////////////////////////
             // Non-Latin Alphabets //
@@ -396,19 +419,19 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             // unicode-math font changes (old behavior a.k.a NFSS 1)
             // changes, as described in https://mirror.csclub.uwaterloo.ca/CTAN/macros/unicodetex/latex/unicode-math/unicode-math.pdf
             // (section. 3.1)
-            "mathbf" | "symbf" | "mathbfup" | "symbfup" | "boldsymbol" => {
+            "mathbf" | "symbf" | "mathbfup" | "symbfup" => {
                 return self.font_group(Some(Font::Bold))
             }
-            "mathcal" | "symcal" | "mathup" | "symup" => {
-                return self.font_group(Some(Font::Script))
-            }
+            "boldsymbol" => return self.font_group(Some(Font::BoldSymbol)),
+            "mathcal" | "symcal" => return self.font_group(Some(Font::Script)),
             "mathit" | "symit" => return self.font_group(Some(Font::Italic)),
-            "mathrm" | "symrm" => return self.font_group(Some(Font::UpRight)),
+            "mathrm" | "symrm" | "mathup" | "symup" => return self.font_group(Some(Font::UpRight)),
             "mathsf" | "symsf" | "mathsfup" | "symsfup" => {
                 return self.font_group(Some(Font::SansSerif))
             }
             "mathtt" | "symtt" => return self.font_group(Some(Font::Monospace)),
             "mathbb" | "symbb" => return self.font_group(Some(Font::DoubleStruck)),
+            "mathbbit" | "symbbit" => return self.font_group(Some(Font::DoubleStruckItalic)),
             "mathfrak" | "symfrak" => return self.font_group(Some(Font::Fraktur)),
             "mathbfcal" | "symbfcal" => return self.font_group(Some(Font::BoldScript)),
             "mathsfit" | "symsfit" => return self.font_group(Some(Font::SansSerifItalic)),
@@ -659,6 +682,14 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.state.script_position = SP::AboveBelow;
                 return self.underscript('⏝');
             }
+            "overbracket" => {
+                self.state.script_position = SP::AboveBelow;
+                return self.accent('⎴', true);
+            }
+            "underbracket" => {
+                self.state.script_position = SP::AboveBelow;
+                return self.underscript('⎵');
+            }
 
             // Primes
             "prime" => ordinary('′'),
@@ -699,6 +730,10 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             "mathstrut" => E::Space {
                 width: None,
                 height: Some(Dimension::new(0.7, DimensionUnit::Em)),
+            },
+            "strut" => E::Space {
+                width: None,
+                height: Some(Dimension::new(1.0, DimensionUnit::Em)),
             },
             "~" | "nobreakspace" => E::Content(C::Text("&nbsp;")),
             // Variable spacing
@@ -1352,6 +1387,40 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                 self.buffer.extend(under_events);
                 return Ok(());
             }
+            "buildrel" => {
+                let mut over_content = lex::content_with_suffix(&mut self.content, r"\over")?;
+                self.buffer.push(I::Event(E::Script {
+                    ty: ST::Superscript,
+                    position: SP::AboveBelow,
+                }));
+                let before_over_index = self.buffer.len();
+                let over = lex::argument(&mut over_content)?;
+                self.handle_argument(over)?;
+                let over_events = self.buffer.split_off(before_over_index);
+                let base = lex::argument(&mut self.content)?;
+                self.handle_argument(base)?;
+                self.buffer.extend(over_events);
+                return Ok(());
+            }
+            "substack" => {
+                let content = lex::brace_argument(&mut self.content)?;
+                self.buffer.push(I::Event(E::Begin(G::SubArray {
+                    alignment: ColumnAlignment::Center,
+                })));
+                self.buffer.push(I::SubGroup {
+                    content,
+                    allowed_alignment_count: Some(AlignmentCount::new(0)),
+                });
+                self.buffer.push(I::Event(E::End));
+                return Ok(());
+            }
+            "sideset" => {
+                let _left = lex::argument(&mut self.content)?;
+                let _right = lex::argument(&mut self.content)?;
+                let base = lex::argument(&mut self.content)?;
+                self.handle_argument(base)?;
+                return Ok(());
+            }
 
             //////////////
             // Radicals //
@@ -1861,6 +1930,87 @@ impl<'b, 'store> InnerParser<'b, 'store> {
         Ok(())
     }
 
+    /// Implementation of the `\math<class>` atom-type commands (e.g. `\mathord`,
+    /// `\mathrel`, `\mathbin`, `\mathop`, `\mathopen`, `\mathclose`, `\mathpunct`,
+    /// `\mathinner`).
+    ///
+    /// These commands set the math class of their argument, which determines
+    /// spacing in the rendered MathML output. When the argument is a single
+    /// character, it is emitted as the matching [`Content`] variant. When the
+    /// argument is a group, its contents are parsed normally and wrapped in
+    /// an [`Event::Begin`]/[`Event::End`] pair so that the surrounding
+    /// spacing is governed by the requested atom class.
+    ///
+    /// [`Content`]: crate::event::Content
+    /// [`Event::Begin`]: crate::event::Event::Begin
+    /// [`Event::End`]: crate::event::Event::End
+    fn atom_group(&mut self, class: AtomClass) -> InnerResult<()> {
+        let argument = lex::argument(&mut self.content)?;
+
+        // Try to extract a single ASCII/Unicode character so we can emit a
+        // directly-classified Content variant. This gives the most faithful
+        // spacing for the common case (e.g. `\mathbin{+}`).
+        let single_char: Option<char> = match argument {
+            Argument::Token(Token::Character(char_)) => Some(char_.into()),
+            Argument::Group(s) => {
+                let s = s.trim();
+                let mut chars = s.chars();
+                let first = chars.next();
+                match (first, chars.next()) {
+                    (Some(c), None) => Some(c),
+                    _ => None,
+                }
+            }
+            Argument::Token(Token::ControlSequence(_)) => None,
+        };
+
+        if let Some(c) = single_char {
+            let event = match class {
+                AtomClass::Ord => ordinary(c),
+                AtomClass::Op => E::Content(C::LargeOp {
+                    content: c,
+                    small: false,
+                }),
+                AtomClass::Bin => binary(c),
+                AtomClass::Rel => relation(c),
+                AtomClass::Open => E::Content(C::Delimiter {
+                    content: c,
+                    size: None,
+                    ty: DelimiterType::Open,
+                }),
+                AtomClass::Close => E::Content(C::Delimiter {
+                    content: c,
+                    size: None,
+                    ty: DelimiterType::Close,
+                }),
+                AtomClass::Punct => E::Content(C::Punctuation(c)),
+                AtomClass::Inner => ordinary(c),
+            };
+            self.buffer.push(I::Event(event));
+            return Ok(());
+        }
+
+        // Multi-character group (or a control sequence). For \mathop with a
+        // textual group, emit it as a `Function` so it renders as a
+        // multi-letter operator (mirroring `\operatorname`). Otherwise wrap
+        // the parsed argument in a normal group; the inner content keeps its
+        // own atom classes, but the whole construct presents as an
+        // `Atom::Inner` for spacing purposes — which is what TeX does for
+        // `\mathinner`, and is a reasonable approximation for the other
+        // classes when given multi-token arguments.
+        if matches!(class, AtomClass::Op) {
+            if let Argument::Group(content) = argument {
+                self.buffer.push(I::Event(E::Content(C::Function(content))));
+                return Ok(());
+            }
+        }
+
+        self.buffer.push(I::Event(E::Begin(G::Normal)));
+        self.handle_argument(argument)?;
+        self.buffer.push(I::Event(E::End));
+        Ok(())
+    }
+
     /// Override the `font_state` for the argument to the command.
     fn font_group(&mut self, font: Option<Font>) -> InnerResult<()> {
         let argument = lex::argument(&mut self.content)?;
@@ -2115,12 +2265,30 @@ fn is_alphabetic_identifier(s: &str) -> bool {
     second.is_ascii_alphabetic() && chars.all(|c| c.is_ascii_alphabetic())
 }
 
+/// Math atom classes used by the `\math<class>` family of commands.
+///
+/// These mirror the TeXbook's eight atom classes and are used by
+/// [`InnerParser::atom_group`] to pick an appropriate [`Content`] variant
+/// for the argument.
+///
+/// [`Content`]: crate::event::Content
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum AtomClass {
+    Ord,
+    Op,
+    Bin,
+    Rel,
+    Open,
+    Close,
+    Punct,
+    Inner,
+}
+
 // TODO implementations:
 // - `raise`, `lower`
 // - `hbox`, `mbox`?
 // - `vcenter`
 // - `rule`
-// - `math_` atoms
 // - `mathchoice` (TeXbook p. 151)
 
 // Unimplemented primitives:

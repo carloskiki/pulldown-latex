@@ -592,7 +592,7 @@ where
                 if text.starts_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
-                self.writer.write_all(trimmed.as_bytes())?;
+                write_escaped(&mut self.writer, trimmed)?;
                 if text.ends_with(char::is_whitespace) {
                     self.writer.write_all(b"&nbsp;")?;
                 }
@@ -604,7 +604,13 @@ where
                 self.writer.write_all(b">")?;
                 let buf = &mut [0u8; 4];
                 number.chars().try_for_each(|c| {
-                    let content = self.state().font.map_or(c, |v| v.map_char(c));
+                    // `BoldSymbol` collapses to `Bold` for digits, since no italic
+                    // Unicode math variant exists for digits.
+                    let font = match self.state().font {
+                        Some(Font::BoldSymbol) => Some(Font::Bold),
+                        other => other,
+                    };
+                    let content = font.map_or(c, |v| v.map_char(c));
                     let bytes = content.encode_utf8(buf);
                     self.writer.write_all(bytes.as_bytes())
                 })?;
@@ -647,9 +653,24 @@ where
                 self.open_tag("mi", None)?;
                 self.writer.write_all(b">")?;
                 let font = self.state().font;
+                let math_style = self.config.math_style;
                 let buf = &mut [0u8; 4];
                 s.chars().try_for_each(|c| {
-                    let mapped = font.map_or(c, |v| v.map_char(c));
+                    let mapped = match font {
+                        // `BoldSymbol` resolves per-character to `Bold` for
+                        // upright glyphs and to `BoldItalic` otherwise, matching
+                        // the dispatch performed on the `Ordinary` path.
+                        Some(Font::BoldSymbol) => {
+                            let resolved = if math_style.should_be_upright(c) {
+                                Font::Bold
+                            } else {
+                                Font::BoldItalic
+                            };
+                            resolved.map_char(c)
+                        }
+                        Some(font) => font.map_char(c),
+                        None => c,
+                    };
                     self.writer.write_all(mapped.encode_utf8(buf).as_bytes())
                 })?;
                 self.set_previous_atom(Atom::Ord);
@@ -672,8 +693,17 @@ where
                             self.writer.write_all(b" mathvariant=\"normal\">")?;
                             content
                         }
-                        (Some(font), _) => {
+                        (Some(font), should_be_upright) => {
                             self.writer.write_all(b">")?;
+                            let font = if font == Font::BoldSymbol {
+                                if should_be_upright {
+                                    Font::Bold
+                                } else {
+                                    Font::BoldItalic
+                                }
+                            } else {
+                                font
+                            };
                             font.map_char(content)
                         }
                         _ => {
@@ -1390,6 +1420,11 @@ impl Font {
             (Font::DoubleStruck, 'a'..='z') => c as u32 + 0x1D4F1,
             (Font::DoubleStruck, '0'..='9') => c as u32 + 0x1D7A8,
 
+            // Double Struck Italic mappings (U+2145–U+2149): only D, d, e, i, j exist.
+            (Font::DoubleStruckItalic, 'D') => c as u32 + 0x2101,
+            (Font::DoubleStruckItalic, 'd' | 'e') => c as u32 + 0x20E2,
+            (Font::DoubleStruckItalic, 'i' | 'j') => c as u32 + 0x20DF,
+
             // Italic mappings
             (Font::Italic, 'A'..='Z') => c as u32 + 0x1D3F3,
             (Font::Italic, 'a'..='g' | 'i'..='z') => c as u32 + 0x1D3ED,
@@ -1484,4 +1519,26 @@ where
     E: std::error::Error,
 {
     MathmlWriter::new(parser, writer, config).write()
+}
+
+fn write_escaped<W: io::Write>(writer: &mut W, s: &str) -> io::Result<()> {
+    let bytes = s.as_bytes();
+    let mut start = 0;
+    for (i, &b) in bytes.iter().enumerate() {
+        let replacement: &[u8] = match b {
+            b'&' => b"&amp;",
+            b'<' => b"&lt;",
+            b'>' => b"&gt;",
+            _ => continue,
+        };
+        if start < i {
+            writer.write_all(&bytes[start..i])?;
+        }
+        writer.write_all(replacement)?;
+        start = i + 1;
+    }
+    if start < bytes.len() {
+        writer.write_all(&bytes[start..])?;
+    }
+    Ok(())
 }
