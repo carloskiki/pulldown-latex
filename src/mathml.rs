@@ -12,8 +12,8 @@ use crate::{
     config::{DisplayMode, RenderConfig},
     event::{
         ArrayColumn, ColorChange, ColorTarget, ColumnAlignment, Content, DelimiterType,
-        EnvironmentFlow, Event, Font, Grouping, Line, ScriptPosition, ScriptType, StateChange,
-        Style, Visual,
+        EnvironmentFlow, Event, Font, Grouping, Line, ScriptPosition, ScriptType, SmashMode,
+        StateChange, Style, Visual,
     },
 };
 
@@ -423,6 +423,24 @@ where
                 self.open_tag(visual_tag(visual), None)?;
                 if let Visual::Fraction(Some(dim)) = visual {
                     write!(self.writer, " linethickness=\"{}\"", dim)?;
+                }
+                match visual {
+                    Visual::Smash(SmashMode::Both) => {
+                        self.writer.write_all(b" height=\"0\" depth=\"0\"")?;
+                    }
+                    Visual::Smash(SmashMode::Top) => {
+                        self.writer.write_all(b" height=\"0\"")?;
+                    }
+                    Visual::Smash(SmashMode::Bottom) => {
+                        self.writer.write_all(b" depth=\"0\"")?;
+                    }
+                    Visual::Clap => {
+                        // Width-0, content rendered starting half-width to the left so it
+                        // appears centered at the insertion point.
+                        self.writer
+                            .write_all(b" width=\"0\" lspace=\"-0.5width\"")?;
+                    }
+                    _ => {}
                 }
 
                 self.writer.write_all(b">")
@@ -1252,6 +1270,8 @@ impl From<Visual> for Environment {
             Visual::Root => 2,
             Visual::Fraction(_) => 2,
             Visual::Negation => 1,
+            Visual::Smash(_) => 1,
+            Visual::Clap => 1,
         };
         Self::Visual { ty: v, count }
     }
@@ -1274,6 +1294,7 @@ fn visual_tag(visual: Visual) -> &'static str {
         Visual::Fraction(_) => "mfrac",
         Visual::SquareRoot => "msqrt",
         Visual::Negation => "mrow",
+        Visual::Smash(_) | Visual::Clap => "mpadded",
     }
 }
 

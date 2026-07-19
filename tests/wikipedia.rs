@@ -695,3 +695,18 @@ round_trip_display!(
     v & = \tfrac{1}{\sqrt{2}}(x-y) \qquad & y &= \tfrac{1}{\sqrt{2}}(u-v)
     \end{align}"
 );
+
+round_trip_display!(
+    smash,
+    r"\sqrt{\smash{y}}",
+    r"\sqrt{\smash[t]{a}}",
+    r"\sqrt{\smash[b]{b}}",
+    r"x \smash[tb]{=} y"
+);
+
+round_trip_display!(
+    clap,
+    r"a \mathclap{=} b",
+    r"\clap{x}",
+    r"\sum_{\mathclap{1 \le i \le j \le n}} P(i, j)"
+);
