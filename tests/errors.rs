@@ -158,3 +158,56 @@ fn escapes_html_special_chars() {
         );
     }
 }
+
+#[test]
+fn escapes_operatorname_argument() {
+    // Issue #71: `\operatorname` wrote its argument into the `<mi>` without escaping
+    // it. A browser parses the inside of `<math>` as foreign content, so a literal
+    // `</math>` in that argument closes the math element early, and the rest of the
+    // argument is then parsed as ordinary HTML. The argument must come out with `<`,
+    // `>` and `&` escaped, the way `\text` has since #33.
+    for (input, expected) in [
+        (r"\operatorname{a<b}", "<mi>a&lt;b</mi>"),
+        (r"\operatorname{a>b}", "<mi>a&gt;b</mi>"),
+        (r"\operatorname{a&b}", "<mi>a&amp;b</mi>"),
+        (
+            r"\operatorname{</math><script>alert(1)</script>}",
+            "<mi>&lt;/math&gt;&lt;script&gt;alert(1)&lt;/script&gt;</mi>",
+        ),
+    ] {
+        let storage = Storage::new();
+        let parser = Parser::new(input, &storage);
+        let mut out = String::new();
+        push_mathml(&mut out, parser, Default::default()).unwrap();
+        assert!(
+            out.contains(expected),
+            "expected {expected:?} in output for {input:?}, got {out}"
+        );
+    }
+}
+
+#[test]
+fn escapes_parse_error_message() {
+    // Issue #71: the `<merror>` fallback wrote the error message without escaping it,
+    // and that message quotes the source that failed to parse. That is the same early
+    // `</math>` close as the test above, reached through text the caller never wrote.
+    // The quoted source must come out escaped.
+    //
+    // The assertion reads only the `<mtext>` span, because the parser recovers after
+    // the error and renders the rest of the input into the same document.
+    let input = r"\begin{x}</math><img src=q onerror=alert(1)>";
+    let storage = Storage::new();
+    let parser = Parser::new(input, &storage);
+    let mut out = String::new();
+    push_mathml(&mut out, parser, Default::default()).unwrap();
+
+    let error = &out[out.find("<mtext>").unwrap()..out.find("</mtext>").unwrap()];
+    assert!(
+        error.contains("&lt;/math&gt;&lt;img"),
+        "error message is not escaped: {error}"
+    );
+    assert!(
+        !error.contains("<img"),
+        "error message still carries raw markup: {error}"
+    );
+}
