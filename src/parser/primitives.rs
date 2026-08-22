@@ -1467,10 +1467,13 @@ impl<'b, 'store> InnerParser<'b, 'store> {
                     self.buffer.push(I::Event(E::Visual(V::Root)));
                     let arg = lex::argument(&mut self.content)?;
                     self.handle_argument(arg)?;
-                    self.buffer.push(I::SubGroup {
-                        content: index,
-                        allowed_alignment_count: None,
-                    });
+                    // The index must be emitted as a group, like every other
+                    // argument. Pushed as a bare subgroup its events are
+                    // indistinguishable from what follows the radical, so
+                    // `\sqrt[n+1]{x}` renders as the index `n` next to a
+                    // stray `+ 1`, and `\sqrt[]{x}` emits a `Root` with only
+                    // one child.
+                    self.handle_argument(Argument::Group(index))?;
                 } else {
                     self.buffer.push(I::Event(E::Visual(V::SquareRoot)));
                     let arg = lex::argument(&mut self.content)?;

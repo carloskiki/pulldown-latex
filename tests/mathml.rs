@@ -121,3 +121,58 @@ fn boldsymbol_with_upright_style_forces_bold_upright() {
         "bold upright lowercase",
     );
 }
+
+#[test]
+fn radical_index_is_a_group() {
+    // The index of `\sqrt[..]{..}` used to be emitted as bare events, so an
+    // index of more than one token spilled out of the radical: `\sqrt[n+1]{x}`
+    // rendered as the n-th root of x followed by a stray `+ 1`. The index must
+    // be one group, exactly like the radicand and like the optional argument
+    // of `\xrightarrow`.
+    for (input, expected) in [
+        (
+            r"\sqrt[n+1]{x}",
+            "<mroot><mrow><mi>x</mi></mrow><mrow><mi>n</mi><mo>+</mo><mn>1</mn></mrow></mroot>",
+        ),
+        (
+            r"\sqrt[n]{x}",
+            "<mroot><mrow><mi>x</mi></mrow><mrow><mi>n</mi></mrow></mroot>",
+        ),
+        // an index made of several pieces, one of them a group
+        (
+            r"\sqrt[a{bc}d]{x}",
+            "<mroot><mrow><mi>x</mi></mrow><mrow><mi>a</mi><mrow><mi>b</mi><mi>c</mi></mrow>\
+             <mi>d</mi></mrow></mroot>",
+        ),
+        // `mroot` takes exactly two children, so an empty index must still
+        // produce one
+        (
+            r"\sqrt[]{x}",
+            "<mroot><mrow><mi>x</mi></mrow><mrow></mrow></mroot>",
+        ),
+    ] {
+        let out = render(input);
+        assert!(
+            out.contains(expected),
+            "expected {expected} in output for {input}, got {out}"
+        );
+    }
+}
+
+#[test]
+fn radical_index_does_not_escape_the_radical() {
+    // The symptom: part of the index was rendered as a sibling of the radical
+    // rather than inside it.
+    for input in [
+        r"\sqrt[n+1]{x}",
+        r"\sqrt[a{bc}d]{x}",
+        r"\sqrt[\frac{1}{2}]{x}",
+        r"\sqrt[n^2]{x}",
+    ] {
+        let out = render(input);
+        assert!(
+            out.ends_with("</mroot></math>"),
+            "index escaped the radical for {input}, got {out}"
+        );
+    }
+}
