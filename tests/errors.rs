@@ -133,6 +133,37 @@ fn macro_recursion_limit() {
 }
 
 #[test]
+fn long_run_of_event_less_tokens() {
+    // A token that produces no event - a definition, `\relax`, a comment - used
+    // to cost one stack frame, because `Parser::next` and `lex::token` called
+    // themselves instead of looping. A run of a few thousand overflowed the
+    // stack and aborted the process; on a 2 MiB test thread a debug build died
+    // at 1456 definitions, 1457 `\relax`es and 5930 comments. The counts below
+    // are an order of magnitude past that, so this test aborts rather than
+    // fails if the recursion ever comes back.
+    const RUN: usize = 20_000;
+
+    let mut definitions = String::new();
+    for i in 0..RUN {
+        // Letters only, and enough of them that no name repeats: `\def\m0{x}`
+        // would define a delimited macro `\m` with parameter text `0`.
+        definitions.push_str(&format!(
+            "\\def\\m{}{}{}{}{{x}}",
+            (b'a' + (i / 17576 % 26) as u8) as char,
+            (b'a' + (i / 676 % 26) as u8) as char,
+            (b'a' + (i / 26 % 26) as u8) as char,
+            (b'a' + (i % 26) as u8) as char,
+        ));
+    }
+
+    for input in [definitions, r"\relax ".repeat(RUN), "%c\n".repeat(RUN)] {
+        let storage = Storage::new();
+        let result = Parser::new(&input, &storage).collect::<Result<Vec<_>, _>>();
+        assert!(result.is_ok(), "expected success for a run of {RUN} tokens");
+    }
+}
+
+#[test]
 fn suffix_bounds_check() {
     // content_with_suffix must check bounds before accessing the slice.
     let storage = Storage::new();

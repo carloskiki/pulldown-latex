@@ -467,25 +467,29 @@ pub fn one_optional_space(input: &mut &str) -> bool {
 ///
 /// A token will never be whitespace, and will never be inside of a comment.
 pub fn token<'a>(input: &mut &'a str) -> InnerResult<Token<'a>> {
-    *input = input.trim_start();
-    match input.chars().next() {
-        Some('\\') => {
-            *input = &input[1..];
-            Ok(Token::ControlSequence(rhs_control_sequence(input)?))
+    // Skipping a comment continues this loop instead of calling `token` again.
+    // Recursing cost one stack frame per comment, which a run of a few thousand
+    // of them overflowed in a debug build.
+    loop {
+        *input = input.trim_start();
+        match input.chars().next() {
+            Some('\\') => {
+                *input = &input[1..];
+                return Ok(Token::ControlSequence(rhs_control_sequence(input)?));
+            }
+            Some('%') => {
+                let (_, rest) = input
+                    .split_once('\n')
+                    .unwrap_or(("", &input[input.len()..]));
+                *input = rest;
+            }
+            Some(c) => {
+                let context = *input;
+                *input = input.split_at(c.len_utf8()).1;
+                return Ok(Token::Character(CharToken::from_str(context)));
+            }
+            None => return Err(ErrorKind::Token),
         }
-        Some('%') => {
-            let (_, rest) = input
-                .split_once('\n')
-                .unwrap_or(("", &input[input.len()..]));
-            *input = rest;
-            token(input)
-        }
-        Some(c) => {
-            let context = *input;
-            *input = input.split_at(c.len_utf8()).1;
-            Ok(Token::Character(CharToken::from_str(context)))
-        }
-        None => Err(ErrorKind::Token),
     }
 }
 

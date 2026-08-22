@@ -93,91 +93,98 @@ impl<'store> Iterator for Parser<'store> {
     type Item = Result<Event<'store>, ParserError>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.instruction_stack.last_mut() {
-            Some(Instruction::Event(_)) => Some(Ok(self
-                .instruction_stack
-                .pop()
-                .and_then(|i| match i {
-                    Instruction::Event(e) => Some(e),
-                    _ => None,
-                })
-                .expect("there is something in the stack"))),
-            Some(Instruction::SubGroup { content, .. }) if content.trim_start().is_empty() => {
-                self.instruction_stack.pop();
-                self.next()
-            }
-            Some(Instruction::SubGroup {
-                content,
-                allowed_alignment_count,
-                ..
-            }) => {
-                let state = ParserState {
-                    allowed_alignment_count: allowed_alignment_count.as_mut(),
-                    ..Default::default()
-                };
-
-                let inner = InnerParser {
-                    content,
-                    buffer: &mut self.buffer,
-                    state,
-                    macro_context: &mut self.macro_context,
-                    storage: self.storage,
-                    span_stack: &mut self.span_stack,
-                };
-
-                let (desc, rest) = inner.parse_next();
-                *content = rest;
-
-                let script_event = match desc {
-                    Err(e) => {
-                        let content_str = *content;
-                        return Some(Err(ParserError::new(
-                            e,
-                            content_str.as_ptr(),
-                            &mut self.span_stack,
-                        )));
-                    }
-                    Ok(Some((e, desc))) => {
-                        if desc.subscript_start > desc.superscript_start {
-                            let content = self.buffer.drain(desc.superscript_start..).rev();
-                            let added_len = content.len();
-
-                            self.instruction_stack.reserve(added_len);
-                            let spare =
-                                &mut self.instruction_stack.spare_capacity_mut()[..added_len];
-                            let mut idx = desc.subscript_start - desc.superscript_start;
-
-                            for e in content {
-                                if idx == added_len {
-                                    idx = 0;
-                                }
-                                spare[idx].write(e);
-                                idx += 1;
-                            }
-
-                            // Safety: The new length is less than the vector's capacity because we
-                            // reserved `added_len` previously. Every element in the vector up to
-                            // that new length is also initialized by the loop.
-                            unsafe {
-                                self.instruction_stack
-                                    .set_len(self.instruction_stack.len() + added_len)
-                            };
-                        } else {
-                            self.instruction_stack
-                                .extend(self.buffer.drain(desc.subscript_start..).rev());
-                        }
-                        Some(e)
-                    }
-                    Ok(None) => None,
-                };
-
-                self.instruction_stack.extend(self.buffer.drain(..).rev());
-                if let Some(e) = script_event {
-                    self.instruction_stack.push(Instruction::Event(e));
+        // Instructions that produce no event - a macro definition, a comment,
+        // `\relax`, an exhausted subgroup - continue this loop instead of
+        // calling `next` again. Recursing here cost one stack frame per such
+        // instruction and overflowed the stack, aborting the process, on a run
+        // of a few thousand of them.
+        loop {
+            match self.instruction_stack.last_mut() {
+                Some(Instruction::Event(_)) => {
+                    return Some(Ok(self
+                        .instruction_stack
+                        .pop()
+                        .and_then(|i| match i {
+                            Instruction::Event(e) => Some(e),
+                            _ => None,
+                        })
+                        .expect("there is something in the stack")))
                 }
-                self.next()
+                Some(Instruction::SubGroup { content, .. }) if content.trim_start().is_empty() => {
+                    self.instruction_stack.pop();
+                }
+                Some(Instruction::SubGroup {
+                    content,
+                    allowed_alignment_count,
+                    ..
+                }) => {
+                    let state = ParserState {
+                        allowed_alignment_count: allowed_alignment_count.as_mut(),
+                        ..Default::default()
+                    };
+
+                    let inner = InnerParser {
+                        content,
+                        buffer: &mut self.buffer,
+                        state,
+                        macro_context: &mut self.macro_context,
+                        storage: self.storage,
+                        span_stack: &mut self.span_stack,
+                    };
+
+                    let (desc, rest) = inner.parse_next();
+                    *content = rest;
+
+                    let script_event = match desc {
+                        Err(e) => {
+                            let content_str = *content;
+                            return Some(Err(ParserError::new(
+                                e,
+                                content_str.as_ptr(),
+                                &mut self.span_stack,
+                            )));
+                        }
+                        Ok(Some((e, desc))) => {
+                            if desc.subscript_start > desc.superscript_start {
+                                let content = self.buffer.drain(desc.superscript_start..).rev();
+                                let added_len = content.len();
+
+                                self.instruction_stack.reserve(added_len);
+                                let spare =
+                                    &mut self.instruction_stack.spare_capacity_mut()[..added_len];
+                                let mut idx = desc.subscript_start - desc.superscript_start;
+
+                                for e in content {
+                                    if idx == added_len {
+                                        idx = 0;
+                                    }
+                                    spare[idx].write(e);
+                                    idx += 1;
+                                }
+
+                                // Safety: The new length is less than the vector's capacity because we
+                                // reserved `added_len` previously. Every element in the vector up to
+                                // that new length is also initialized by the loop.
+                                unsafe {
+                                    self.instruction_stack
+                                        .set_len(self.instruction_stack.len() + added_len)
+                                };
+                            } else {
+                                self.instruction_stack
+                                    .extend(self.buffer.drain(desc.subscript_start..).rev());
+                            }
+                            Some(e)
+                        }
+                        Ok(None) => None,
+                    };
+
+                    self.instruction_stack.extend(self.buffer.drain(..).rev());
+                    if let Some(e) = script_event {
+                        self.instruction_stack.push(Instruction::Event(e));
+                    }
+                }
+                None => return None,
             }
-            None => None,
         }
     }
 }
