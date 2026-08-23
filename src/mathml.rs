@@ -583,7 +583,9 @@ where
                     "<merror style=\"border-color: #{:x}{:x}{:x}\"><mtext>",
                     error_color.0, error_color.1, error_color.2
                 )?;
-                self.writer.write_all(e.to_string().as_bytes())?;
+                // The message quotes the source that failed to parse, so it carries
+                // input and has to be escaped like any other content.
+                write_escaped(&mut self.writer, &e.to_string())?;
                 self.writer.write_all(b"</mtext></merror>")
             }
         }
@@ -653,7 +655,9 @@ where
                 } else {
                     b">"
                 })?;
-                self.writer.write_all(str.as_bytes())?;
+                // `str` is the argument as the author wrote it, escaped here for
+                // the same reason `Content::Text` above escapes its own.
+                write_escaped(&mut self.writer, str)?;
                 self.set_previous_atom(Atom::Op);
                 self.writer.write_all(b"</mi>")?;
 
