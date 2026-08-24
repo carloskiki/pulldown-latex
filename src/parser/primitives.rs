@@ -2250,9 +2250,12 @@ impl<'b, 'store> InnerParser<'b, 'store> {
             });
         }
 
-        let arg_count = (lex::optional_argument(&mut self.content).ok_or(ErrorKind::Argument)?)
-            .parse::<u8>()
-            .map_err(|_| ErrorKind::Number)?;
+        // The parameter count is optional; `\newcommand{\R}{\mathbb{R}}` defines a macro
+        // that takes no arguments. A count that is present must still be a number.
+        let arg_count = match lex::optional_argument(&mut self.content) {
+            Some(count) => count.parse::<u8>().map_err(|_| ErrorKind::Number)?,
+            None => 0,
+        };
         let first_arg_default = lex::optional_argument(&mut self.content);
         if arg_count > 9 && arg_count >= first_arg_default.is_some() as u8 {
             return Err(ErrorKind::TooManyParams);

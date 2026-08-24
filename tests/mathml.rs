@@ -121,3 +121,59 @@ fn boldsymbol_with_upright_style_forces_bold_upright() {
         "bold upright lowercase",
     );
 }
+
+/// Assert that `input` parsed without error and rendered `expected`.
+///
+/// `push_mathml` turns a parse error into an inline `<merror>` and carries on,
+/// so a failed definition still leaves its replacement text in the output as
+/// ordinary content. Checking for the content alone would not see the failure.
+fn assert_renders(input: &str, expected: &str) {
+    let out = render(input);
+    assert!(
+        !out.contains("<merror"),
+        "expected {input} to parse, got {out}"
+    );
+    assert!(
+        out.contains(expected),
+        "expected {expected} in output for {input}, got {out}"
+    );
+}
+
+#[test]
+fn newcommand_parameter_count_is_optional() {
+    // `\newcommand{\R}{\mathbb{R}}` is valid LaTeX: the `[n]` parameter count
+    // may be left out, and the macro then takes no arguments. It used to be
+    // mandatory here, so the definition failed with "expected an argument".
+    for (input, expected) in [
+        // no count given
+        (r"\newcommand{\R}{\mathbb{R}}\R", "<mi>\u{211D}</mi>"),
+        // an explicit zero means the same thing
+        (r"\newcommand{\R}[0]{\mathbb{R}}\R", "<mi>\u{211D}</mi>"),
+        // `\renewcommand` and `\providecommand` share the same code path
+        (
+            r"\newcommand{\R}{\mathbb{R}}\renewcommand{\R}{\mathbb{C}}\R",
+            "<mi>\u{2102}</mi>",
+        ),
+        (r"\providecommand{\Q}{\mathbb{Q}}\Q", "<mi>\u{211A}</mi>"),
+        // a count that is given is still honoured
+        (r"\newcommand{\f}[1]{f(#1)}\f{x}", "<mi>x</mi>"),
+        // as is a default for the first argument
+        (r"\newcommand{\g}[1][d]{g(#1)}\g", "<mi>d</mi>"),
+        (r"\newcommand{\g}[1][d]{g(#1)}\g[z]", "<mi>z</mi>"),
+    ] {
+        assert_renders(input, expected);
+    }
+}
+
+#[test]
+fn newcommand_without_a_count_does_not_swallow_a_later_bracket() {
+    // Two optional arguments are read in a row: the parameter count and the
+    // default for `#1`. With no count present the parser sits on the opening
+    // brace of the replacement text, so the second read comes up empty as
+    // well; a `[..]` that follows the definition stays in the document.
+    assert_renders(
+        r"\newcommand{\R}{\mathbb{R}}[z]\R",
+        "<mo symmetric=\"false\" stretchy=\"false\">[</mo><mi>z</mi>",
+    );
+    assert_renders(r"\newcommand{\R}{\mathbb{R}}[z]\R", "<mi>\u{211D}</mi>");
+}

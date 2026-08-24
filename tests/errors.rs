@@ -158,3 +158,35 @@ fn escapes_html_special_chars() {
         );
     }
 }
+
+// The `[n]` parameter count of `\newcommand` is optional, but what stands in
+// its place must still be a parameter count.
+should_error! {
+    newcommand_malformed_parameter_count,
+    // not a number at all
+    r"\newcommand{\bad}[x]{y}",
+    // a default for `#1` cannot stand in for the count
+    r"\newcommand{\bad}[d]{y}",
+    // out of range for a `u8`
+    r"\newcommand{\bad}[300]{y}",
+}
+
+should_error! {
+    newcommand_too_many_parameters,
+    r"\newcommand{\bad}[10]{y}",
+    r"\newcommand{\bad}[10][d]{y}",
+}
+
+should_error! {
+    newcommand_without_a_count_takes_no_parameters,
+    // no count means zero parameters, so `#1` in the replacement has nothing
+    // to refer to
+    r"\newcommand{\bad}{#1}",
+}
+
+should_error! {
+    newcommand_still_needs_a_replacement_text,
+    // dropping the count must not make the replacement optional too
+    r"\newcommand{\bad}",
+    r"\newcommand{\bad}[1]",
+}
